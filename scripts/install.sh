@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Thin installer for Claude Code: symlink the skills and hooks into ~/.claude (so the live files
 # ARE the repo files — edits here are immediately live, nothing to re-copy), then idempotently
-# register the three guards in ~/.claude/settings.json (merged in only if missing; every other
+# register the four guards in ~/.claude/settings.json (merged in only if missing; every other
 # setting preserved — settings.json carries machine/preference bits, so it is never symlinked).
 #
 # Usage:
@@ -44,7 +44,7 @@ done
 
 # --- hooks ----------------------------------------------------------------
 mkdir -p "$HOOKS_DIR"
-for hook in guard-default-branch.py guard-loop-vc.py guard-one-unit.py; do
+for hook in guard-default-branch.py guard-loop-vc.py guard-one-unit.py guard-self-integrity.py; do
   link "$REPO/hooks/$hook" "$HOOKS_DIR/$hook"
 done
 
@@ -67,6 +67,7 @@ WANTED = [
     ("guard-default-branch.py", "Edit|Write|NotebookEdit"),
     ("guard-loop-vc.py", "Bash"),
     ("guard-one-unit.py", "*"),
+    ("guard-self-integrity.py", "Bash|Edit|Write|NotebookEdit"),
 ]
 for script, matcher in WANTED:
     if any(script in h.get("command", "") for e in pre for h in e.get("hooks", [])):

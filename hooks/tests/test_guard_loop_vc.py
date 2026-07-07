@@ -70,6 +70,11 @@ class TestGuardLoopVC(unittest.TestCase):
         "git add -A && git commit -m x && git merge topic",   # compound (&&)
         "sleep 1 & git push",                                  # background (&) must still segment
         "echo hi; git merge x",                                # semicolon
+        "(git push)",                                          # subshell glue must not hide the push
+        "(git merge topic)",
+        "echo $(git push)",                                    # command substitution
+        "`git push`",                                          # backtick substitution
+        "(git remote set-head origin develop)",                # trust-anchor rewrite inside a subshell
         "FOO=bar GIT_PAGER=cat git push",                      # env-assignment prefix
         "/usr/bin/git merge x",                                # absolute path → basename
         "git clean -fd",                                       # delete untracked files (no reflog)
@@ -87,6 +92,15 @@ class TestGuardLoopVC(unittest.TestCase):
         "git clean -fdx secret -- --dry-run",                  # ditto: force-delete with post-`--` decoy
         "git clean -fd --end-of-options -n",                   # `--end-of-options` is the other terminator
         "git clean -fd --end-of-options --dry-run secret",     # ditto, --dry-run decoy after it
+        # trust-anchor rewrites: both verbs can repoint refs/remotes/origin/HEAD, which the guards
+        # read for default-branch detection — a loop may not re-aim its own judge
+        "git remote set-head origin develop",
+        "git remote set-head origin -a",
+        "git -C /repo remote set-head origin main",
+        "git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/develop",
+        "git symbolic-ref -m reason refs/remotes/origin/HEAD refs/remotes/origin/develop",
+        "git symbolic-ref -d refs/remotes/origin/HEAD",
+        "git symbolic-ref --delete refs/remotes/origin/HEAD",
     ]
 
     # --- allow set (guard active): safe reads / non-irreversible writes ---
@@ -111,6 +125,20 @@ class TestGuardLoopVC(unittest.TestCase):
         "gh pr list --label merge",           # `merge` is a flag value, not the subcommand
         "gh pr checkout some-merge-branch",   # branch name contains 'merge'
         "git status && git diff",
+        # read forms of the trust-anchor verbs stay allowed (the guards themselves use them)
+        "git symbolic-ref HEAD",
+        "git symbolic-ref --quiet refs/remotes/origin/HEAD",
+        "git symbolic-ref --short HEAD",
+        "git remote -v",
+        "git remote show origin",
+        "git remote get-url origin",
+        # a dangerous verb QUOTED in an argument is literal text, not a command — must not false-deny
+        # (this repo's own commit messages are full of these strings)
+        'git commit -m "document the (git push) bypass"',
+        'git commit -m "pin the (git merge) case"',
+        'echo "to release run (git push origin main)"',
+        "echo 'inside single quotes: git push is literal'",
+        'git commit -m "see guard-loop-vc.py `git push` handling"',
     ]
 
     def test_deny_set(self):
@@ -123,6 +151,55 @@ class TestGuardLoopVC(unittest.TestCase):
         for cmd in self.ALLOW:
             rc, out = _run(cmd)
             self.assertEqual((rc, out.strip()), (0, ""), f"should DEFER (no decision) but didn't: {cmd}")
+
+    def test_trust_anchor_rewrite_denied_read_allowed(self):
+        # TELOS-009 witness: the verbs that repoint refs/remotes/origin/HEAD (the default-branch
+        # trust anchor BOTH guards read) are denied in write/delete form, while the read form —
+        # which the guards themselves rely on — stays allowed.
+        for cmd in (
+            "git remote set-head origin develop",
+            "git remote set-head origin -a",
+            "git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/develop",
+            "git symbolic-ref -m why refs/remotes/origin/HEAD refs/remotes/origin/develop",
+            "git symbolic-ref -d refs/remotes/origin/HEAD",
+            "git symbolic-ref --delete refs/remotes/origin/HEAD",
+            "(git remote set-head origin develop)",             # grouped inside a subshell
+            "echo $(git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/develop)",
+        ):
+            rc, out = _run(cmd)
+            self.assertEqual(rc, 0, f"must exit 0 (fail-open contract): {cmd}")
+            self.assertTrue(_denied(out), f"trust-anchor rewrite must be DENIED: {cmd}")
+        for cmd in (
+            "git symbolic-ref HEAD",
+            "git symbolic-ref --quiet refs/remotes/origin/HEAD",
+            "git symbolic-ref --short HEAD",
+            "git remote -v",
+            "git remote show origin",
+        ):
+            rc, out = _run(cmd)
+            self.assertEqual((rc, out.strip()), (0, ""), f"read form must stay allowed: {cmd}")
+
+    # Documented bypasses this seatbelt deliberately does NOT catch (the guard matches LITERAL
+    # subcommand tokens; it does not expand the shell). Pinned BIDIRECTIONALLY: each asserts the
+    # bypass currently ALLOWS, so if a change starts catching one, this fails and forces an honest
+    # SCOPE / LIMITS + KNOWN-BYPASSES.md update rather than a silent scope change. Closing these means
+    # reimplementing shell expansion — the deny-set-completeness creep the honest-limits brand resists.
+    ACCEPTED_RESIDUALS = [
+        "git pus{h,} origin main",           # brace expansion → a real `git push`
+        "git merge{,} --no-ff topic",        # brace expansion → a real `git merge`
+        "git pus*h origin main",             # glob (matches nothing, but token != 'push' either way)
+        "G=push; git $G origin main",         # subcommand hidden in a shell variable
+        'git commit -m "$(git push)"',       # LIVE substitution inside double quotes (bash WOULD run it)
+    ]
+
+    def test_accepted_residuals_still_allow(self):
+        for cmd in self.ACCEPTED_RESIDUALS:
+            rc, out = _run(cmd)
+            self.assertEqual(
+                (rc, out.strip()), (0, ""),
+                f"ACCEPTED-RESIDUAL CHANGED: this bypass used to slip past (documented in SCOPE / "
+                f"LIMITS); it is now caught. Update SCOPE / LIMITS + KNOWN-BYPASSES.md and move it "
+                f"out of ACCEPTED_RESIDUALS: {cmd}")
 
     def test_inactive_without_marker(self):
         # The same dangerous commands must be ALLOWED (deferred) when CLAUDE_LOOP_GUARD is unset.
@@ -240,6 +317,8 @@ class TestGuardYoloMode(unittest.TestCase):
             f"git -C {d} branch -D feature",
             f"git -C {d} worktree remove ../wt",
             "gh pr merge 5",
+            f"git -C {d} remote set-head origin develop",       # trust-anchor rewrite
+            f"git -C {d} symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/develop",
         ):
             self.assertTrue(self._denied(cmd), f"YOLO must still deny: {cmd}")
 

@@ -1,7 +1,8 @@
 # Architecture
 
 Four layers, one trust story: **the model's judgment is never load-bearing for an irreversible
-act.** Every arrow below that crosses toward "irreversible" passes through something the model
+act** — and the guards enforcing that are themselves fenced against the loop that would disarm
+them. Every arrow below that crosses toward "irreversible" passes through something the model
 cannot forge — a strict parser, an exit code, a denied tool call, or a human.
 
 ```
@@ -23,7 +24,9 @@ cannot forge — a strict parser, an exit code, a denied tool call, or a human.
    agent session ──tool calls──► PreToolUse guards ──deny/defer──► runtime
                                  ├─ guard-default-branch.py   (Edit|Write|NotebookEdit)
                                  ├─ guard-loop-vc.py          (Bash: git/gh VC mutations)
-                                 └─ guard-one-unit.py         (*: post-commit cap)
+                                 ├─ guard-one-unit.py         (*: post-commit cap)
+                                 └─ guard-self-integrity.py   (armed loop: no writes to the
+                                                               guards' own kill-switches)
                                                         ▲
                                                         │ armed by env markers
    unattended loop (skills/ralph-loop, skills/telos-loop)
@@ -44,10 +47,13 @@ cannot forge — a strict parser, an exit code, a denied tool call, or a human.
    `state: DISCHARGED` is contradicted, and one with no `verified-by:` witness is demoted to
    SUSPECT rather than trusted.
 
-2. **Model ↔ VC irreversibility.** The three hooks run *outside* the model, in the runtime's
-   PreToolUse interception. Deny decisions are emitted as JSON on stdout with exit 0 (the process
-   contract is fail-open — a guard bug must never wedge the tool — while the YOLO merge *decision*
-   fails deny: an undeterminable branch blocks the merge).
+2. **Model ↔ VC irreversibility.** The hooks run *outside* the model, in the runtime's PreToolUse
+   interception. Deny decisions are emitted as JSON on stdout with exit 0 (the process contract is
+   fail-open — a guard bug must never wedge the tool — while the YOLO merge *decision* fails deny:
+   an undeterminable branch blocks the merge). `guard-self-integrity.py` closes the reflexive hole:
+   while a loop guard is armed, the loop may not write the guards' own kill-switches (the
+   allow-default-branch marker, the hook scripts, the settings.json hooks block) — a judge the
+   model can rewrite is not a judge.
 
 3. **Loop ↔ its own oracle.** YOLO mode's permit-to-act is only sound if the loop cannot edit the
    oracle that gates it. `check_oracle_frozen.py` verifies, from git history, that the oracle file
@@ -62,7 +68,7 @@ cannot forge — a strict parser, an exit code, a denied tool call, or a human.
 hooks/                    # the guards + tests/ (stdlib only; no imports across components)
 skills/<name>/SKILL.md    # open Agent Skills format: frontmatter trigger + instructions
 skills/<name>/scripts/    # executable helpers (ralph-loop's oracle/suite/suspend checks)
-skills/<name>/tests/      # per-component pytest suites (130 total)
+skills/<name>/tests/      # per-component pytest suites (151 total)
 docs/design/              # the deliberation records behind each mechanism
 docs/telos/               # this repo's own claims, audited by its own audit-telos
 scripts/install.sh        # symlinks + idempotent settings.json hook registration

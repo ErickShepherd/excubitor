@@ -8,7 +8,7 @@ falsifiable intent-record system for letting an LLM agent work unattended withou
 bless its own work. The watcher that stays awake while the loop runs and nobody else is looking.
 
 Stdlib-only Python hooks + [Agent Skills](https://code.claude.com/docs/en/skills)-format capability
-packets, with 130 tests and the design rationale that produced them. Built for and battle-tested
+packets, with 151 tests and the design rationale that produced them. Built for and battle-tested
 with Claude Code; the concepts (PreToolUse guards, frozen oracles, evidence tiers) port to any
 agent runtime that can intercept tool calls.
 
@@ -41,7 +41,7 @@ policy, implemented as code you can read, test, and install.
 |---|---|---|
 | 1. Declare intent | [`skills/telos/`](skills/telos/SKILL.md) | A repo's purpose as *falsifiable claims* — each with a decidable one-line `contract:`, a single `discharged-by: path::symbol`, and optionally an executable `verified-by:` witness whose exit code is trusted over the LLM. |
 | 2. Audit against intent | [`skills/audit-telos/`](skills/audit-telos/SKILL.md) + [`telos_check.py`](skills/audit-telos/telos_check.py) | Read-only conformance audit with **evidence tiers**: a claim marked DISCHARGED without a backing witness is mechanically demoted to SUSPECT. The auditor deliberately has no write access to the record it audits. |
-| 3. Fence the loop | [`hooks/`](hooks/) — three PreToolUse guards | `guard-default-branch.py`: no file mutations on `main`/`master` — branch first. `guard-loop-vc.py`: while `CLAUDE_LOOP_GUARD` is set, block the irreversible VC set (merge/push/branch-delete/hard-reset/`git clean`/worktree-remove/`gh pr merge`); in `=yolo` mode, additionally *allow* a `--no-ff` merge into a confirmed non-default branch (fail-deny on ambiguity). `guard-one-unit.py`: cap a headless loop worker at one unit of work per session, forcing a fresh-context re-read between units. |
+| 3. Fence the loop | [`hooks/`](hooks/) — four PreToolUse guards | `guard-default-branch.py`: no file mutations on `main`/`master` — branch first. `guard-loop-vc.py`: while `CLAUDE_LOOP_GUARD` is set, block the irreversible VC set (merge/push/branch-delete/hard-reset/`git clean`/worktree-remove/`gh pr merge`, plus the `origin/HEAD` trust-anchor rewrites `remote set-head`/`symbolic-ref`); in `=yolo` mode, additionally *allow* a `--no-ff` merge into a confirmed non-default branch (fail-deny on ambiguity). `guard-one-unit.py`: cap a headless loop worker at one unit of work per session, forcing a fresh-context re-read between units. `guard-self-integrity.py`: while armed, deny writes to the guards' own kill-switches (the `.claude/allow-default-branch` marker, the hook scripts, the `settings.json` hooks block) — a judge the model can rewrite is not a judge. |
 | 4. Loop discipline + boundary | [`skills/ralph-loop/`](skills/ralph-loop/SKILL.md), [`skills/telos-loop/`](skills/telos-loop/SKILL.md), [`skills/leak-guard/`](skills/leak-guard/SKILL.md) | The unattended-loop recipes that use layers 1–3: charter-driven iteration, frozen-oracle verification (`check_oracle_frozen.py` proves the loop never edited the oracle that gates it), session-limit suspend, and a fail-closed guard for content crossing a private→public boundary. |
 
 The design docs under [`docs/design/`](docs/design/) are not an afterthought — they are the
@@ -54,10 +54,10 @@ must never discharge its own claims).
 ## What's in the box
 
 ```
-hooks/                     # 3 stdlib-only PreToolUse guards + 30 tests
+hooks/                     # 4 stdlib-only PreToolUse guards + 44 tests
 skills/
   telos/                   # intent-record authoring (write side)
-  audit-telos/             # conformance audit (read side) + strict parser + 62 tests
+  audit-telos/             # conformance audit (read side) + strict parser + 69 tests
   telos-loop/              # telos-anchored unattended loop recipe
   ralph-loop/              # charter-driven loop + oracle-freeze/suspend scripts + 38 tests
   leak-guard/              # private→public boundary guard
@@ -73,7 +73,7 @@ Requires Python 3.11+ and `git`. For Claude Code:
 ```bash
 git clone <this-repo> && cd excubitor
 scripts/install.sh          # symlinks skills/* and hooks/* into ~/.claude, and idempotently
-                            # registers the three guards in ~/.claude/settings.json
+                            # registers the four guards in ~/.claude/settings.json
 ```
 
 Or register the hooks by hand in `~/.claude/settings.json`:
@@ -87,30 +87,32 @@ Or register the hooks by hand in `~/.claude/settings.json`:
       {"matcher": "Bash",
        "hooks": [{"type": "command", "command": "python3 ~/.claude/hooks/guard-loop-vc.py", "timeout": 10}]},
       {"matcher": "*",
-       "hooks": [{"type": "command", "command": "python3 ~/.claude/hooks/guard-one-unit.py", "timeout": 10}]}
+       "hooks": [{"type": "command", "command": "python3 ~/.claude/hooks/guard-one-unit.py", "timeout": 10}]},
+      {"matcher": "Bash|Edit|Write|NotebookEdit",
+       "hooks": [{"type": "command", "command": "python3 ~/.claude/hooks/guard-self-integrity.py", "timeout": 10}]}
     ]
   }
 }
 ```
 
-All three guards are **opt-in or inert by default**: `guard-loop-vc.py` does nothing unless
-`CLAUDE_LOOP_GUARD` is set in the loop's environment; `guard-one-unit.py` does nothing unless a
-loop driver arms `ONE_UNIT_CAP_SCOPE` + `ONE_UNIT_CAP_BASELINE`; `guard-default-branch.py` can be
-disabled per-repo with a `.claude/allow-default-branch` marker file or globally with
-`CLAUDE_ALLOW_DEFAULT_BRANCH=1`. Interactive work is unaffected until you explicitly say "I'm
-looping."
+All four guards are **opt-in or inert by default**: `guard-loop-vc.py` and
+`guard-self-integrity.py` do nothing unless `CLAUDE_LOOP_GUARD` is set in the loop's environment;
+`guard-one-unit.py` does nothing unless a loop driver arms `ONE_UNIT_CAP_SCOPE` +
+`ONE_UNIT_CAP_BASELINE`; `guard-default-branch.py` can be disabled per-repo with a
+`.claude/allow-default-branch` marker file or globally with `CLAUDE_ALLOW_DEFAULT_BRANCH=1`.
+Interactive work is unaffected until you explicitly say "I'm looping."
 
 ## Tests
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install pytest
-.venv/bin/pytest -q        # 130 tests: 30 hooks, 62 audit-telos, 38 ralph-loop
-                           # (127 pass; 3 audit-telos ledger round-trip tests skip — they
+.venv/bin/pytest -q        # 151 tests: 44 hooks, 69 audit-telos, 38 ralph-loop
+                           # (148 pass; 3 audit-telos ledger round-trip tests skip — they
                            #  need a private sibling module that did not ship, see the extraction notes)
 ```
 
 CI runs the same suite on a stock GitHub runner (`.github/workflows/ci.yml`), plus this repo's
-own telos audit — the six claims in [`docs/telos/app.md`](docs/telos/app.md) must all resolve
+own telos audit — the nine claims in [`docs/telos/app.md`](docs/telos/app.md) must all resolve
 DISCHARGED at the `witness` evidence tier, i.e. every safety claim this README makes about the
 guards is re-proven by an executed test on every CI run.
 
@@ -139,6 +141,11 @@ and mean it:
 - The evidence-tier demotion (layer 2) catches *unbacked* claims of completion. A loop that
   authors its own witnesses produces *backed* claims — which is exactly why layers 3–4 sever the
   loop's ability to act, rather than trusting any audit of its output.
+
+Every bypass we know about is enumerated in [`KNOWN-BYPASSES.md`](KNOWN-BYPASSES.md) — classed
+ACCEPTED (a residual we won't chase, pinned by a bidirectional test so it can't silently change) or
+CLOSED (fixed because it let a loop rewrite a guard's own judge). A hidden limit would itself be the
+kind of forged safety claim this repo exists to refuse.
 
 ## Glossary — referenced but not included
 
