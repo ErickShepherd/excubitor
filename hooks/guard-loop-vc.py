@@ -67,10 +67,14 @@ import shlex
 import subprocess
 import sys
 
-# Shell operators that separate independent commands within one Bash invocation. `&&` and `||`
-# are matched before the single-char class, so a bare `&` (background) still segments
-# (`sleep 1 & git push` must not hide the push behind the leading `sleep`).
-_SEGMENT_SPLIT = re.compile(r"&&|\|\||[|;&\n]")
+# Shell operators AND grouping/substitution boundaries that separate independent commands within one
+# Bash invocation. `&&` and `||` are matched before the single-char class, so a bare `&` (background)
+# still segments (`sleep 1 & git push` must not hide the push behind the leading `sleep`). The `()` and
+# backtick segment a subshell / command substitution so a dangerous verb glued inside `(git push)` /
+# `$(git push)` / `` `git push` `` is not hidden behind the `(`/backtick in one shlex token. Safe to
+# over-split: we only DENY on recognizing a dangerous subcommand, so fragmenting an innocent command
+# (e.g. a `(` inside a quoted arg) merely fails to recognize a verb → defer, never a false deny.
+_SEGMENT_SPLIT = re.compile(r"&&|\|\||[|;&\n()`]")
 # git global options that consume the *following* token as their value (so the real subcommand is
 # one token further on): e.g. `git -C /path merge`, `git --config-env sec.key=ENV merge`. Verified
 # against git 2.47.3 with a subcommand-shift discriminator (`git <opt> <val> zzzcmd` => git reports

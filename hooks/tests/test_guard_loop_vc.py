@@ -70,6 +70,11 @@ class TestGuardLoopVC(unittest.TestCase):
         "git add -A && git commit -m x && git merge topic",   # compound (&&)
         "sleep 1 & git push",                                  # background (&) must still segment
         "echo hi; git merge x",                                # semicolon
+        "(git push)",                                          # subshell glue must not hide the push
+        "(git merge topic)",
+        "echo $(git push)",                                    # command substitution
+        "`git push`",                                          # backtick substitution
+        "(git remote set-head origin develop)",                # trust-anchor rewrite inside a subshell
         "FOO=bar GIT_PAGER=cat git push",                      # env-assignment prefix
         "/usr/bin/git merge x",                                # absolute path → basename
         "git clean -fd",                                       # delete untracked files (no reflog)
@@ -151,6 +156,8 @@ class TestGuardLoopVC(unittest.TestCase):
             "git symbolic-ref -m why refs/remotes/origin/HEAD refs/remotes/origin/develop",
             "git symbolic-ref -d refs/remotes/origin/HEAD",
             "git symbolic-ref --delete refs/remotes/origin/HEAD",
+            "(git remote set-head origin develop)",             # grouped inside a subshell
+            "echo $(git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/develop)",
         ):
             rc, out = _run(cmd)
             self.assertEqual(rc, 0, f"must exit 0 (fail-open contract): {cmd}")

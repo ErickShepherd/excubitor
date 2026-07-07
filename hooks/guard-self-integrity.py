@@ -23,10 +23,12 @@ Kill-switch paths (matched by basename, so the fence holds wherever the file liv
   * `settings.json` / `settings.local.json` under a `.claude` directory (where hooks are
     registered).
 
-The Bash rule is deliberately blunt: any *mention* of a kill-switch path denies, reads included.
-Distinguishing a read from a write in arbitrary shell is a losing race, and the cost is low — the
-Read tool (not matched here) still reads anything, so the seatbelt stays wearable. Fail direction
-on ambiguity is DENY, matching the posture of the set it protects.
+The Bash rule is deliberately blunt: any *mention* of a kill-switch path in a command segment denies,
+reads included. Distinguishing a read from a write in arbitrary shell is a losing race, and the cost
+is low — the Read tool (not matched here) still reads anything, so the seatbelt stays wearable. Fail
+direction on ambiguity is DENY, matching the posture of the set it protects. Segments are split on the
+shell command separators AND on subshell/command-substitution boundaries (`()` and backticks), so a
+mention glued inside `(rm PATH)` / `$(rm PATH)` / `` `rm PATH` `` is still seen.
 
 SCOPE / LIMITS (honest). Same seatbelt-not-sandbox contract as the sibling guards: this parses
 tool-call payloads. A path reached through a shell variable (`rm $F`), a rename of a parent
@@ -48,9 +50,14 @@ import re
 import shlex
 import sys
 
-# Shell operators that separate independent commands within one Bash invocation (same split as
-# guard-loop-vc.py, so compound commands can't hide a mention behind a leading innocuous segment).
-_SEGMENT_SPLIT = re.compile(r"&&|\|\||[|;&\n]")
+# Shell operators AND grouping/substitution boundaries that separate independent commands within one
+# Bash invocation (same split as guard-loop-vc.py, so a compound command can't hide a mention behind a
+# leading innocuous segment). The `()` and backtick are load-bearing: a subshell or command
+# substitution glued to the path (`(rm PATH)`, `$(rm PATH)`, `` `rm PATH` ``) would otherwise leave the
+# path stuck to a `)`/backtick inside one shlex token, so its basename never matches. Splitting on them
+# is safe here because we only ever DENY on a positive kill-switch match — fragmenting an innocent
+# command that merely contains these chars just yields no match (→ defer), never a false deny.
+_SEGMENT_SPLIT = re.compile(r"&&|\|\||[|;&\n()`]")
 # Leading redirection/fd noise on a token (`>file`, `2>>file`, `<file`) so the path inside is seen.
 _REDIR_PREFIX = re.compile(r"^[\d<>&]+")
 
