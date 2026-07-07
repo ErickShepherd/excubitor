@@ -5,9 +5,9 @@ The telos evidence tier exists so a completion claim is only as good as its back
 feed telos_check.py records crafted the way a lazy or adversarial author (human or loop) would
 craft them, and pin the outcome — including the outcomes where the attack SUCCEEDS. A residual
 that silently starts being caught is an undocumented behavior change, so the successful attacks
-are pinned bidirectionally, exactly like hooks/tests/test_known_bypasses.py.
+are pinned bidirectionally (the pin fails if the state changes in EITHER direction).
 
-The honest boundary these tests draw (see also KNOWN-BYPASSES.md):
+The honest boundary these tests draw:
   * telos_check verifies claim↔witness LINKAGE and the witness's EXIT CODE — it does not judge
     witness QUALITY. A witness that always passes (`true`, an assert-nothing test) yields a
     DISCHARGED at the witness tier. Catching that requires an out-of-loop reviewer or a frozen
@@ -90,12 +90,12 @@ class TestForgedBacking(unittest.TestCase):
         # THE PINNED RESIDUAL: a witness of `true` exits 0, so the claim lands DISCHARGED at the
         # witness tier. telos_check trusts the exit code; it does not judge witness quality. If this
         # test ever fails because the state is no longer DISCHARGED, telos_check has started
-        # catching it — update this pin AND the boundary statement in KNOWN-BYPASSES.md together.
+        # catching it — update this pin AND this module's boundary docstring together.
         result = self._audit(_record(verified_by="true"))
         c = result["claims"][0]
         self.assertEqual((c["state"], c["tier"]), ("DISCHARGED", "witness"),
                          "pinned residual changed: an always-pass witness used to sail through — "
-                         "if telos_check now catches it, update KNOWN-BYPASSES.md with this test")
+                         "if telos_check now catches it, update this module's boundary docstring")
 
     def test_witness_naming_a_nonexistent_test_fails_the_claim(self):
         # A witness pointing at a test that does not exist must fail (pytest exits non-zero on an

@@ -107,7 +107,7 @@ Interactive work is unaffected until you explicitly say "I'm looping."
 ```bash
 python3 -m venv .venv && .venv/bin/pip install pytest
 .venv/bin/pytest -q        # 149 tests: 42 hooks, 69 audit-telos, 38 ralph-loop
-                           # (127 pass; 3 audit-telos ledger round-trip tests skip — they
+                           # (146 pass; 3 audit-telos ledger round-trip tests skip — they
                            #  need a private sibling module that did not ship, see the extraction notes)
 ```
 
