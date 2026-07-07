@@ -83,3 +83,30 @@ claims as proven.
 - verified-by: hooks/tests/test_guard_default_branch.py::TestGuardDefaultBranch::test_custom_default_also_protected
 - last-grilled: 2026-07-07
 - anchor: none
+
+### TELOS-007 — an armed loop cannot write its guards' kill-switches with the file tools
+- state: DISCHARGED
+- intent: a judge the model can rewrite is not a judge; the allow-default-branch marker, the guard scripts, and the settings.json hook registration are each one ordinary file write away from disarming the whole fence, so while a loop guard is armed those writes must be denied
+- discharged-by: hooks/guard-self-integrity.py::main
+- contract: with CLAUDE_LOOP_GUARD set, main denies Edit, Write, and NotebookEdit calls whose target resolves (including through a symlink) to an allow-default-branch marker, a guard hook script, or a settings.json or settings.local.json under a .claude directory
+- verified-by: hooks/tests/test_guard_self_integrity.py::TestFileToolDenials::test_deny_targets
+- last-grilled: 2026-07-07
+- anchor: none
+
+### TELOS-008 — an armed loop cannot reach a kill-switch through the shell either
+- state: DISCHARGED
+- intent: denying the file tools alone leaves touch, rm, mv, tee, and sed as equivalent disarm paths through Bash; distinguishing shell reads from writes is a losing race, so any command segment naming a kill-switch path is denied while armed (the Read tool keeps reads wearable)
+- discharged-by: hooks/guard-self-integrity.py::main
+- contract: with CLAUDE_LOOP_GUARD set, main denies a Bash call when any token of any command segment, redirect targets included, resolves to an allow-default-branch marker, a guard hook script, or a settings.json or settings.local.json under a .claude directory
+- verified-by: hooks/tests/test_guard_self_integrity.py::TestBashDenials::test_deny_set
+- last-grilled: 2026-07-07
+- anchor: none
+
+### TELOS-009 — the default-branch trust anchor cannot be repointed by the loop
+- state: DISCHARGED
+- intent: both guards read refs/remotes/origin/HEAD to decide which branch is protected; a loop that can repoint that ref re-aims its own judge, so the rewriting verbs must be denied while the read form the guards themselves depend on stays usable
+- discharged-by: hooks/guard-loop-vc.py::_classify
+- contract: with CLAUDE_LOOP_GUARD set in either mode, _classify returns a deny reason for git remote set-head and for the write and delete forms of git symbolic-ref, and returns none for the single-positional read form of git symbolic-ref
+- verified-by: hooks/tests/test_guard_loop_vc.py::TestGuardLoopVC::test_trust_anchor_rewrite_denied_read_allowed
+- last-grilled: 2026-07-07
+- anchor: none
