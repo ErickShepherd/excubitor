@@ -8,8 +8,9 @@ does not, and how to report one.
 ## Threat model in one paragraph
 
 The adversary is an **autonomous agent loop** — at worst a capable model optimizing to finish a task,
-which may route around a check that stands between it and "done". The design docs under
-`docs/design/` carry the full reasoning (start with `loop-yolo-verifiable-autonomy.md`). The guards are
+which may route around a check that stands between it and "done". [`THREAT-MODEL.md`](THREAT-MODEL.md)
+has the full version (three attacker tiers, the host-runtime enforcement gaps, controls matched to
+each tier); the design docs under `docs/design/` carry the deeper reasoning. The guards are
 **seatbelts for the default path, not a sandbox**: they intercept tool calls and parse command
 strings, which is not an airtight boundary. That limit is stated openly, and the known ways past each
 guard are enumerated in [`KNOWN-BYPASSES.md`](KNOWN-BYPASSES.md). This policy is about the gap between

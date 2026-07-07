@@ -129,7 +129,10 @@ model — says the work is done.
 ## Honest limits
 
 These are **seatbelts for the default path, not a sandbox** — the hooks' own docstrings say so,
-and mean it:
+and mean it. [`THREAT-MODEL.md`](THREAT-MODEL.md) lays out the full picture: three attacker tiers
+(sloppy loop → optimizing loop → adversarial model), the controls matched to each, and the
+host-runtime enforcement gaps a hook layer inherits (e.g. PreToolUse hooks not firing on subagent
+tool calls). In short:
 
 - `guard-loop-vc.py` parses Bash command strings. A script that calls git indirectly, a shell
   alias, or a `post-commit` hook firing an external side effect can slip past. Where possible,
