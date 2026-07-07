@@ -31,8 +31,8 @@ on ambiguity is DENY, matching the posture of the set it protects.
 SCOPE / LIMITS (honest). Same seatbelt-not-sandbox contract as the sibling guards: this parses
 tool-call payloads. A path reached through a shell variable (`rm $F`), a rename of a parent
 directory, a `find -delete` over `~/.claude`, or an interpreter one-liner that builds the path at
-runtime can slip past — see KNOWN-BYPASSES.md. It protects the *default path* by which an agent
-would disarm the guards, not every path.
+runtime can slip past (see the enumerated limits below). It protects the *default path* by which
+an agent would disarm the guards, not every path.
 
 Registered in settings.json for the Bash|Edit|Write|NotebookEdit tools.
 
@@ -159,7 +159,8 @@ def main() -> None:
             f"that path can disarm the loop's own guards, and a judge the model can rewrite "
             f"is not a judge. Reads still work through the Read tool. If a kill-switch file "
             f"genuinely needs changing, that is stop-and-surface work for a human outside the "
-            f"loop. See KNOWN-BYPASSES.md for the honest limits of this fence."
+            f"loop. This is a seatbelt for the default path, not a sandbox — see this hook's "
+            f"SCOPE / LIMITS docstring for what it does not catch."
         )
     _allow()
 

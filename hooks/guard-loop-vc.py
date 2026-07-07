@@ -32,8 +32,11 @@ reflog, strictly worse than `reset --hard`.
 Also denied in BOTH modes: `git remote set-head` and the write/delete forms of `git symbolic-ref`.
 They repoint refs/remotes/origin/HEAD — the trust anchor this guard (and guard-default-branch.py)
 reads for default-branch detection — so denying them protects the guard's OWN integrity. The read
-form of `symbolic-ref` stays allowed. (main/master are hardcode-protected regardless; see
-KNOWN-BYPASSES.md for the git verbs deliberately left open.)
+form of `symbolic-ref` stays allowed. (main/master are hardcode-protected regardless, so this only
+ever mattered for a non-standard trunk. This is deliberately NOT a complete deny-set over the git
+surface — other rarely-dangerous verbs like `update-ref -d` / `reflog expire` are left open by
+design; chasing full git-verb completeness is a losing race the SCOPE / LIMITS section documents
+rather than pretends to win.)
 
 ACTIVATION (opt-in). Does nothing unless CLAUDE_LOOP_GUARD is set. `/loop` is a built-in skill that
 sets no marker of its own and there is no reliable way to auto-detect loop context, so the guard is
@@ -330,9 +333,9 @@ def _classify(tokens: list[str], yolo: bool, cwd: str | None) -> str | None:
     # Both `remote set-head` and the write form of `symbolic-ref` rewrite refs/remotes/origin/HEAD —
     # the trust anchor _default_branch() (and guard-default-branch.py) reads for default-branch
     # detection. A loop that can repoint it can re-aim what "default branch" means, so denying these
-    # protects the guard's OWN integrity (not deny-set completeness — see KNOWN-BYPASSES.md for the
-    # verbs deliberately left open). Residual: main/master stay hardcode-protected regardless, so
-    # this only ever mattered for a non-standard trunk.
+    # protects the guard's OWN integrity (not deny-set completeness — other rarely-dangerous verbs
+    # are left open by design; see the module docstring's SCOPE / LIMITS). Residual: main/master
+    # stay hardcode-protected regardless, so this only ever mattered for a non-standard trunk.
     if sub == "remote" and _subcommand_path(rest, set(), 1) == ["set-head"]:
         return "repoint a remote's HEAD (git remote set-head)"
     if sub == "symbolic-ref":
