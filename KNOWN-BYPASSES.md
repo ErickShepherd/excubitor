@@ -91,6 +91,32 @@ Both guards run as `PreToolUse` hooks on specific tools. They see nothing outsid
 - A rename of a **parent directory** of a kill-switch, or a `find ~/.claude -delete`, reaches the file
   without ever naming its basename as a token.
 
+## ACCEPTED — dangerous git verbs outside the fenced set
+
+`guard-loop-vc.py` fences the irreversible VC set an unattended loop actually reaches on the
+stop-and-surface / YOLO paths: `merge`, `push`, `branch -d/-D`, `reset --hard`, non-dry-run `clean`,
+`worktree remove`, `gh pr merge`, and (because they repoint the default-branch trust anchor)
+`remote set-head` / `symbolic-ref` writes. It is **not** a complete deny-set over the git surface, and
+does not try to be — that is the deny-set-completeness race the crux refuses. The following verbs are
+destructive-or-history-rewriting and **left open by design**, documented here and pinned ALLOW in
+`hooks/tests/test_guard_loop_vc.py::TestUnhandledGitVerbs`:
+
+| Verb | What it can do | Why it's left open |
+|---|---|---|
+| `git update-ref -d <ref>` | delete a ref (incl. a branch) via plumbing | plumbing; not on the loop's normal path; parking it invites chasing every plumbing verb |
+| `git reflog expire --expire=now --all` | drop the reflog (the recovery net others rely on) | rare; only matters combined with another destructive act |
+| `git stash drop` / `git stash clear` | discard stashed work | stashes are not the loop's committed line of work |
+| `git tag -d <tag>` | delete a tag | local tag; recreatable; not an integration act |
+| `git filter-branch …` / `git rebase …` | rewrite history on the current branch | rewrites the *current* branch only — like `reset`, within the "own branch" seatbelt scope until a push (which IS denied) would publish it |
+| `git gc --prune=now` | prune unreachable objects | housekeeping; only destructive after something already unlinked the objects |
+| `git checkout -- <path>` / `git restore <path>` | discard *uncommitted* changes to tracked files | discards only un-committed work, like `reset --soft`'s neighbor; the loop's *committed* line stays intact |
+
+The honest framing: these lose *local, mostly-recoverable, not-yet-integrated* state. The acts the
+harness exists to prevent — an unattended **integration** or **publication** (merge into a shared
+branch, push, branch delete) — are the ones fenced. If a specific loop genuinely needs one of these
+verbs fenced, add it to `_classify`; the general posture is *don't hand the loop a capability it
+doesn't need*, not *enumerate every git verb*.
+
 ## ACCEPTED — default-branch detection on a local-only, non-standard trunk
 
 On a local-only repo with a trunk that is neither `main` nor `master` and no `origin/HEAD`, the
@@ -113,7 +139,7 @@ loop rewrite the judge that constrains it.
 ## Reporting a bypass
 
 Finding a bypass **not** listed here is a genuine contribution — it is the difference between an honest
-limit and a hidden one. Treat it as a security report (see `SECURITY.md` once published): if it lets a
-loop **disarm a guard's own integrity** it is a bug we will close; if it is one more instance of the
-enumerated seatbelt limits above, we will add it here (and pin it) rather than pretend to have closed
-the class.
+limit and a hidden one. Treat it as a security report (see [`SECURITY.md`](SECURITY.md) for what counts
+and how to report): if it lets a loop **disarm a guard's own integrity** it is a bug we will close; if
+it is one more instance of the enumerated seatbelt limits above, we will add it here (and pin it)
+rather than pretend to have closed the class.
