@@ -1,8 +1,11 @@
-# agent-harness
+# excubitor
+
+*Excubitor* — Latin, "one who stands out of bed": the night watch. The Byzantine **excubitores**
+guarded the emperor's chambers precisely so that no one else had to stay awake.
 
 **Safety fences for autonomous coding agents** — mechanical guards, loop discipline, and a
 falsifiable intent-record system for letting an LLM agent work unattended without trusting it to
-bless its own work.
+bless its own work. The watcher that stays awake while the loop runs and nobody else is looking.
 
 Stdlib-only Python hooks + [Agent Skills](https://code.claude.com/docs/en/skills)-format capability
 packets, with 130 tests and the design rationale that produced them. Built for and battle-tested
@@ -68,7 +71,7 @@ scripts/install.sh         # symlink skills+hooks into ~/.claude, register the h
 Requires Python 3.11+ and `git`. For Claude Code:
 
 ```bash
-git clone <this-repo> && cd agent-harness
+git clone <this-repo> && cd excubitor
 scripts/install.sh          # symlinks skills/* and hooks/* into ~/.claude, and idempotently
                             # registers the three guards in ~/.claude/settings.json
 ```
@@ -166,4 +169,4 @@ as of the recorded commit — a claim that stays true — rather than pretending
 
 ## License
 
-To be finalized before first publish (tracked as an open decision in the extraction design doc).
+MIT — see [LICENSE](LICENSE).

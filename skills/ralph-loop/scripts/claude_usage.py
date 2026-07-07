@@ -37,7 +37,7 @@ def get_usage(creds_path: str = DEFAULT_CREDS, *, timeout: float = 20.0) -> dict
     req = urllib.request.Request(USAGE_URL, headers={
         "Authorization": f"Bearer {token}",
         "anthropic-version": "2023-06-01",
-        "User-Agent": "agent-harness-usage/1.0",
+        "User-Agent": "excubitor-usage/1.0",
     })
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
