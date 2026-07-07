@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="695" height="740" viewBox="0 0 695 740" font-family="ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,'Liberation Mono',monospace" font-size="14">
+<rect width="695" height="740" rx="8" fill="#0b0f14"/>
+<circle cx="20" cy="20" r="6" fill="#ff5f56"/>
+<circle cx="40" cy="20" r="6" fill="#ffbd2e"/>
+<circle cx="60" cy="20" r="6" fill="#27c93f"/>
+<text x="347.5" y="24" fill="#6e7681" text-anchor="middle" font-size="12">excubitor — crash test</text>
+<text x="16" y="58" fill="#f0f6fc" font-weight="700" xml:space="preserve">excubitor — crash test  (60s, zero-install; deletes nothing outside a temp dir)</text>
+<text x="16" y="78" fill="#6e7681" xml:space="preserve">────────────────────────────────────────────────────────────</text>
+<text x="16" y="98" fill="#c9d1d9" xml:space="preserve">An unattended loop has decided it is done and reaches for a cleanup:</text>
+<text x="16" y="118" fill="#d29922" xml:space="preserve">    $ git clean -fd</text>
+<text x="16" y="138" fill="#c9d1d9" xml:space="preserve">In its working tree sits an untracked file it never committed:</text>
+<text x="16" y="158" fill="#39c5cf" xml:space="preserve">    /tmp/excubitor-demo/UNSAVED_WORK.txt   ← no commit, no reflog, no undo</text>
+<text x="16" y="178" fill="#6e7681" xml:space="preserve">────────────────────────────────────────────────────────────</text>
+<text x="16" y="198" fill="#d29922" xml:space="preserve">① With the loop guard armed  (CLAUDE_LOOP_GUARD=1)</text>
+<text x="16" y="218" fill="#3fb950" font-weight="700" xml:space="preserve">   DENIED — the tool call never runs. The guard says:</text>
+<text x="16" y="238" fill="#3fb950" xml:space="preserve">   ❯ Blocked: an autonomous loop (CLAUDE_LOOP_GUARD set) may not delete </text>
+<text x="16" y="258" fill="#d29922" xml:space="preserve">     untracked files (git clean). Loops are stop-and-surface, never </text>
+<text x="16" y="278" fill="#c9d1d9" xml:space="preserve">     stop-and-act: keep working and committing on your own branch, then </text>
+<text x="16" y="298" fill="#c9d1d9" xml:space="preserve">     STOP and surface the branch for an out-of-loop reviewer (e.g. </text>
+<text x="16" y="318" fill="#c9d1d9" xml:space="preserve">     pre-merge-review) or a human to merge. A self-paced loop cannot </text>
+<text x="16" y="338" fill="#c9d1d9" xml:space="preserve">     bless its own completion — telos discharge is </text>
+<text x="16" y="358" fill="#c9d1d9" xml:space="preserve">     surface-not-correctness and a loop that writes its own witnesses </text>
+<text x="16" y="378" fill="#c9d1d9" xml:space="preserve">     routes around the SUSPECT guard. To allow autonomous integration of </text>
+<text x="16" y="398" fill="#c9d1d9" xml:space="preserve">     verifiable work, set CLAUDE_LOOP_GUARD=yolo instead </text>
+<text x="16" y="418" fill="#c9d1d9" xml:space="preserve">     (reversible/internal acts only); to lift the guard entirely, unset </text>
+<text x="16" y="438" fill="#c9d1d9" xml:space="preserve">     it (accepting unattended irreversible VC actions).</text>
+<text x="16" y="458" fill="#6e7681" xml:space="preserve">────────────────────────────────────────────────────────────</text>
+<text x="16" y="478" fill="#d29922" xml:space="preserve">② The same act with the guard off  (CLAUDE_LOOP_GUARD unset)</text>
+<text x="16" y="498" fill="#c9d1d9" xml:space="preserve">   guard defers → the runtime runs the command:</text>
+<text x="16" y="518" fill="#d29922" xml:space="preserve">   $ git clean -fd</text>
+<text x="16" y="538" fill="#39c5cf" xml:space="preserve">   Removing UNSAVED_WORK.txt</text>
+<text x="16" y="558" fill="#f85149" font-weight="700" xml:space="preserve">   ✗ UNSAVED_WORK.txt is gone. No reflog, no undo. Three hours, unattended.</text>
+<text x="16" y="578" fill="#6e7681" xml:space="preserve">────────────────────────────────────────────────────────────</text>
+<text x="16" y="598" fill="#3fb950" xml:space="preserve">That is the whole idea. A loop cannot bless its own &quot;done&quot; and then act on it:</text>
+<text x="16" y="618" fill="#c9d1d9" xml:space="preserve">the irreversible tail is fenced outside the model, in a PreToolUse hook.</text>
+<text x="16" y="658" fill="#39c5cf" xml:space="preserve">  Install ...... scripts/install.sh   (symlinks the guards into ~/.claude)</text>
+<text x="16" y="678" fill="#39c5cf" xml:space="preserve">  How it decides  hooks/guard-loop-vc.py   ·  the full model: THREAT-MODEL.md</text>
+<text x="16" y="698" fill="#39c5cf" xml:space="preserve">  Honest limits   KNOWN-BYPASSES.md   (this is a seatbelt, not a sandbox)</text>
+<text x="16" y="718" fill="#6e7681" xml:space="preserve">────────────────────────────────────────────────────────────</text>
+</svg>
