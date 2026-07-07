@@ -105,6 +105,9 @@ class TestBashDenials(unittest.TestCase):
         "touch /repo/.claude/allow-default-branch",
         "touch .claude/allow-default-branch",
         "mkdir -p .claude && touch .claude/allow-default-branch",   # compound: second segment names it
+        "(rm hooks/guard-loop-vc.py)",                              # subshell glue must not hide it
+        "echo $(rm hooks/guard-default-branch.py)",                 # command substitution
+        "`rm hooks/guard-one-unit.py`",                             # backtick substitution
         "echo disarm > /repo/.claude/allow-default-branch",         # redirect target
         "echo disarm >.claude/allow-default-branch",                # attached redirect
         "rm -f ~/.claude/hooks/guard-loop-vc.py",
