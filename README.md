@@ -8,7 +8,7 @@ falsifiable intent-record system for letting an LLM agent work unattended withou
 bless its own work. The watcher that stays awake while the loop runs and nobody else is looking.
 
 Stdlib-only Python hooks + [Agent Skills](https://code.claude.com/docs/en/skills)-format capability
-packets, with 151 tests and the design rationale that produced them. Built for and battle-tested
+packets, with 152 tests and the design rationale that produced them. Built for and battle-tested
 with Claude Code; the concepts (PreToolUse guards, frozen oracles, evidence tiers) port to any
 agent runtime that can intercept tool calls.
 
@@ -54,7 +54,7 @@ must never discharge its own claims).
 ## What's in the box
 
 ```
-hooks/                     # 4 stdlib-only PreToolUse guards + 44 tests
+hooks/                     # 4 stdlib-only PreToolUse guards + 45 tests
 skills/
   telos/                   # intent-record authoring (write side)
   audit-telos/             # conformance audit (read side) + strict parser + 69 tests
@@ -106,8 +106,8 @@ Interactive work is unaffected until you explicitly say "I'm looping."
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install pytest
-.venv/bin/pytest -q        # 151 tests: 44 hooks, 69 audit-telos, 38 ralph-loop
-                           # (148 pass; 3 audit-telos ledger round-trip tests skip — they
+.venv/bin/pytest -q        # 152 tests: 45 hooks, 69 audit-telos, 38 ralph-loop
+                           # (149 pass; 3 audit-telos ledger round-trip tests skip — they
                            #  need a private sibling module that did not ship, see the extraction notes)
 ```
 
@@ -145,7 +145,9 @@ and mean it:
 Every bypass we know about is enumerated in [`KNOWN-BYPASSES.md`](KNOWN-BYPASSES.md) — classed
 ACCEPTED (a residual we won't chase, pinned by a bidirectional test so it can't silently change) or
 CLOSED (fixed because it let a loop rewrite a guard's own judge). A hidden limit would itself be the
-kind of forged safety claim this repo exists to refuse.
+kind of forged safety claim this repo exists to refuse. In this project a **guard bypass is a
+security bug**, and so is an overstated safety claim — [`SECURITY.md`](SECURITY.md) says what counts
+and how to report it.
 
 ## Glossary — referenced but not included
 
