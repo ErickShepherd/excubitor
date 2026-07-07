@@ -1,0 +1,35 @@
+# CI floor: the full test suite on a stock runner — the portability proof that the harness
+# runs outside the machine it was extracted on. Dormant until the repo has a remote.
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install test runner (the code itself is stdlib-only)
+        run: python -m pip install --upgrade pip pytest
+      - name: Test suite
+        run: python -m pytest -q
+      - name: Telos record parses, resolves, and every claim's witness passes
+        run: |
+          python3 skills/audit-telos/telos_check.py parse . > /dev/null
+          python3 skills/audit-telos/telos_check.py audit . > telos-audit.json
+          python3 - <<'EOF'
+          import json
+          claims = json.load(open("telos-audit.json"))["claims"]
+          bad = [c for c in claims if c["state"] != "DISCHARGED" or c["tier"] != "witness"]
+          for c in bad:
+              print(f'{c["id"]}: state={c["state"]} tier={c["tier"]} — {c["rationale"]}')
+          raise SystemExit(1 if bad else 0)
+          EOF
