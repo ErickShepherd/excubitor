@@ -29,6 +29,12 @@ TWO MODES, selected by the value of CLAUDE_LOOP_GUARD (see docs/design/loop-yolo
 `git clean` (without a dry-run flag) is denied in BOTH modes — it deletes untracked files with no
 reflog, strictly worse than `reset --hard`.
 
+Also denied in BOTH modes: `git remote set-head` and the write/delete forms of `git symbolic-ref`.
+They repoint refs/remotes/origin/HEAD — the trust anchor this guard (and guard-default-branch.py)
+reads for default-branch detection — so denying them protects the guard's OWN integrity. The read
+form of `symbolic-ref` stays allowed. (main/master are hardcode-protected regardless; see
+KNOWN-BYPASSES.md for the git verbs deliberately left open.)
+
 ACTIVATION (opt-in). Does nothing unless CLAUDE_LOOP_GUARD is set. `/loop` is a built-in skill that
 sets no marker of its own and there is no reliable way to auto-detect loop context, so the guard is
 deliberately opt-in: zero friction for ordinary interactive work, protection when you explicitly
@@ -230,6 +236,34 @@ def _clean_is_dry_run(rest: list[str]) -> bool:
     return False
 
 
+def _symbolic_ref_write_reason(rest: list[str]) -> str | None:
+    """Deny reason for a WRITE-form `git symbolic-ref`, or None for the read form.
+
+    The read form (one positional: `git symbolic-ref [--quiet|--short] <name>`) is how scripts —
+    including this guard itself — *query* refs, and must stay allowed. The write form
+    (`git symbolic-ref <name> <ref>`, two positionals) and the delete form (`-d`/`--delete`)
+    mutate the ref — that is how refs/remotes/origin/HEAD gets repointed. `-m <reason>` consumes
+    the following token as its value, so a reason string is never counted as a positional.
+    """
+    if any(d in rest for d in ("-d", "--delete")):
+        return "delete a symbolic ref (git symbolic-ref -d)"
+    positionals = 0
+    j = 0
+    while j < len(rest):
+        t = rest[j]
+        if t == "-m":
+            j += 2  # -m <reason>: the value is the next token, never a positional
+            continue
+        if t.startswith("-"):
+            j += 1
+            continue
+        positionals += 1
+        j += 1
+    if positionals >= 2:
+        return "rewrite a symbolic ref (git symbolic-ref <name> <ref>)"
+    return None
+
+
 def _classify(tokens: list[str], yolo: bool, cwd: str | None) -> str | None:
     """Return a short reason if `tokens` (one command segment) is a forbidden VC mutation.
 
@@ -293,6 +327,16 @@ def _classify(tokens: list[str], yolo: bool, cwd: str | None) -> str | None:
         return "delete a branch (git branch -d/-D)"
     if sub == "worktree" and "remove" in rest:
         return "remove a worktree (git worktree remove)"
+    # Both `remote set-head` and the write form of `symbolic-ref` rewrite refs/remotes/origin/HEAD —
+    # the trust anchor _default_branch() (and guard-default-branch.py) reads for default-branch
+    # detection. A loop that can repoint it can re-aim what "default branch" means, so denying these
+    # protects the guard's OWN integrity (not deny-set completeness — see KNOWN-BYPASSES.md for the
+    # verbs deliberately left open). Residual: main/master stay hardcode-protected regardless, so
+    # this only ever mattered for a non-standard trunk.
+    if sub == "remote" and _subcommand_path(rest, set(), 1) == ["set-head"]:
+        return "repoint a remote's HEAD (git remote set-head)"
+    if sub == "symbolic-ref":
+        return _symbolic_ref_write_reason(rest)
     # `git pull` is deliberately NOT denied: it advances the *current* branch from upstream
     # (reflog-recoverable, no push / branch-delete / remote mutation) — within the seatbelt scope.
     return None

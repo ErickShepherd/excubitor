@@ -87,6 +87,15 @@ class TestGuardLoopVC(unittest.TestCase):
         "git clean -fdx secret -- --dry-run",                  # ditto: force-delete with post-`--` decoy
         "git clean -fd --end-of-options -n",                   # `--end-of-options` is the other terminator
         "git clean -fd --end-of-options --dry-run secret",     # ditto, --dry-run decoy after it
+        # trust-anchor rewrites: both verbs can repoint refs/remotes/origin/HEAD, which the guards
+        # read for default-branch detection — a loop may not re-aim its own judge
+        "git remote set-head origin develop",
+        "git remote set-head origin -a",
+        "git -C /repo remote set-head origin main",
+        "git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/develop",
+        "git symbolic-ref -m reason refs/remotes/origin/HEAD refs/remotes/origin/develop",
+        "git symbolic-ref -d refs/remotes/origin/HEAD",
+        "git symbolic-ref --delete refs/remotes/origin/HEAD",
     ]
 
     # --- allow set (guard active): safe reads / non-irreversible writes ---
@@ -111,6 +120,13 @@ class TestGuardLoopVC(unittest.TestCase):
         "gh pr list --label merge",           # `merge` is a flag value, not the subcommand
         "gh pr checkout some-merge-branch",   # branch name contains 'merge'
         "git status && git diff",
+        # read forms of the trust-anchor verbs stay allowed (the guards themselves use them)
+        "git symbolic-ref HEAD",
+        "git symbolic-ref --quiet refs/remotes/origin/HEAD",
+        "git symbolic-ref --short HEAD",
+        "git remote -v",
+        "git remote show origin",
+        "git remote get-url origin",
     ]
 
     def test_deny_set(self):
@@ -123,6 +139,31 @@ class TestGuardLoopVC(unittest.TestCase):
         for cmd in self.ALLOW:
             rc, out = _run(cmd)
             self.assertEqual((rc, out.strip()), (0, ""), f"should DEFER (no decision) but didn't: {cmd}")
+
+    def test_trust_anchor_rewrite_denied_read_allowed(self):
+        # TELOS-009 witness: the verbs that repoint refs/remotes/origin/HEAD (the default-branch
+        # trust anchor BOTH guards read) are denied in write/delete form, while the read form —
+        # which the guards themselves rely on — stays allowed.
+        for cmd in (
+            "git remote set-head origin develop",
+            "git remote set-head origin -a",
+            "git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/develop",
+            "git symbolic-ref -m why refs/remotes/origin/HEAD refs/remotes/origin/develop",
+            "git symbolic-ref -d refs/remotes/origin/HEAD",
+            "git symbolic-ref --delete refs/remotes/origin/HEAD",
+        ):
+            rc, out = _run(cmd)
+            self.assertEqual(rc, 0, f"must exit 0 (fail-open contract): {cmd}")
+            self.assertTrue(_denied(out), f"trust-anchor rewrite must be DENIED: {cmd}")
+        for cmd in (
+            "git symbolic-ref HEAD",
+            "git symbolic-ref --quiet refs/remotes/origin/HEAD",
+            "git symbolic-ref --short HEAD",
+            "git remote -v",
+            "git remote show origin",
+        ):
+            rc, out = _run(cmd)
+            self.assertEqual((rc, out.strip()), (0, ""), f"read form must stay allowed: {cmd}")
 
     def test_inactive_without_marker(self):
         # The same dangerous commands must be ALLOWED (deferred) when CLAUDE_LOOP_GUARD is unset.
@@ -240,6 +281,8 @@ class TestGuardYoloMode(unittest.TestCase):
             f"git -C {d} branch -D feature",
             f"git -C {d} worktree remove ../wt",
             "gh pr merge 5",
+            f"git -C {d} remote set-head origin develop",       # trust-anchor rewrite
+            f"git -C {d} symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/develop",
         ):
             self.assertTrue(self._denied(cmd), f"YOLO must still deny: {cmd}")
 
