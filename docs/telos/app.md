@@ -1,4 +1,4 @@
-# agent-harness — telos record
+# excubitor — telos record
 
 The living intent record for this repo: the **motive** (why it exists), the **telos** (the purpose
 it must keep fulfilling), and the falsifiable **claims** the `audit-telos` audit checks the code
