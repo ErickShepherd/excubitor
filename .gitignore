@@ -2,3 +2,6 @@ __pycache__/
 *.pyc
 .venv/
 .pytest_cache/
+
+# optional animated demo, regenerated from scripts/demo.tape via vhs (static frame demo.svg IS committed)
+scripts/demo.gif
