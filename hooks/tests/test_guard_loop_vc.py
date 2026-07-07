@@ -201,6 +201,32 @@ class TestGuardLoopVC(unittest.TestCase):
                 f"LIMITS); it is now caught. Update SCOPE / LIMITS + KNOWN-BYPASSES.md and move it "
                 f"out of ACCEPTED_RESIDUALS: {cmd}")
 
+    # Dangerous-but-out-of-scope git verbs the fence deliberately does NOT cover (KNOWN-BYPASSES.md
+    # "dangerous git verbs outside the fenced set"). Pinned ALLOW bidirectionally: if one starts
+    # being denied, this fails and forces an honest update rather than a silent scope expansion —
+    # the guard's deny-set is a deliberate choice, not an accident, and this documents its edges.
+    UNHANDLED_GIT_VERBS = [
+        "git update-ref -d refs/heads/main",       # ref delete via plumbing
+        "git reflog expire --expire=now --all",    # drop the reflog
+        "git stash drop",
+        "git stash clear",
+        "git tag -d v1.0",
+        "git filter-branch --force HEAD",          # history rewrite (current branch)
+        "git rebase -i HEAD~3",
+        "git gc --prune=now",
+        "git checkout -- .",                        # discard uncommitted tracked changes
+        "git restore .",
+    ]
+
+    def test_unhandled_git_verbs_still_allow(self):
+        for cmd in self.UNHANDLED_GIT_VERBS:
+            rc, out = _run(cmd)
+            self.assertEqual(
+                (rc, out.strip()), (0, ""),
+                f"DENY-SET CHANGED: this verb is documented as an out-of-scope known bypass "
+                f"(KNOWN-BYPASSES.md) and used to ALLOW; it is now denied. If that is intended, "
+                f"update KNOWN-BYPASSES.md and move it out of UNHANDLED_GIT_VERBS: {cmd}")
+
     def test_inactive_without_marker(self):
         # The same dangerous commands must be ALLOWED (deferred) when CLAUDE_LOOP_GUARD is unset.
         for cmd in ("git merge x", "git push", "git branch -D x"):
