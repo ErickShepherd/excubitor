@@ -23,18 +23,28 @@ Kill-switch paths (matched by basename, so the fence holds wherever the file liv
   * `settings.json` / `settings.local.json` under a `.claude` directory (where hooks are
     registered).
 
-The Bash rule is deliberately blunt: any *mention* of a kill-switch path in a command segment denies,
-reads included. Distinguishing a read from a write in arbitrary shell is a losing race, and the cost
-is low — the Read tool (not matched here) still reads anything, so the seatbelt stays wearable. Fail
-direction on ambiguity is DENY, matching the posture of the set it protects. Segments are split on the
-shell command separators AND on subshell/command-substitution boundaries (`()` and backticks), so a
-mention glued inside `(rm PATH)` / `$(rm PATH)` / `` `rm PATH` `` is still seen.
+The Bash rule is deliberately blunt: a command segment that names a kill-switch path as a *literal
+token* denies, reads included. Distinguishing a read from a write in arbitrary shell is a losing
+race, and the cost is low — the Read tool (not matched here) still reads anything, so the seatbelt
+stays wearable. Fail direction on ambiguity is DENY, matching the posture of the set it protects.
+Segments are split on the shell command separators AND on subshell/command-substitution boundaries
+(`()` and backticks), so a token glued inside `(rm PATH)` / `$(rm PATH)` / `` `rm PATH` `` is still
+seen.
 
-SCOPE / LIMITS (honest). Same seatbelt-not-sandbox contract as the sibling guards: this parses
-tool-call payloads. A path reached through a shell variable (`rm $F`), a rename of a parent
-directory, a `find -delete` over `~/.claude`, or an interpreter one-liner that builds the path at
-runtime can slip past (see the enumerated limits below). It protects the *default path* by which
-an agent would disarm the guards, not every path.
+SCOPE / LIMITS (honest — this is a seatbelt for the default path, not a sandbox). It matches a
+*literal* path token; it does NOT expand the shell. Anything that produces the kill-switch path
+through an expansion the guard doesn't perform slips past — and these are ACCEPTED residuals,
+documented not chased (closing them means reimplementing the shell or denying every metacharacter,
+which would break ordinary globbing and lose more than it gains):
+  * **word expansions that mutate the token before bash resolves it** — a glob
+    (`rm hooks/guard-loop-vc.p*`, `...p?`), a brace (`rm .claude/settings.jso{n,}`,
+    `...allow-default-branch{,}`), a `$VAR` / `${VAR}` / tilde reference, or a
+    command-substitution *result* — the token the guard sees (`...p*`, `...jso{n,}`, `$F`) is not
+    the kill-switch basename, so it does not match. Pinned as accepted-residual fixtures in
+    hooks/tests/test_guard_self_integrity.py::TestAcceptedResiduals.
+  * a rename of a parent directory, a `find ~/.claude -delete`, or an interpreter one-liner that
+    builds the path at runtime (`python3 -c '...'`).
+It protects the *default path* by which an agent would disarm the guards, not every path.
 
 Registered in settings.json for the Bash|Edit|Write|NotebookEdit tools.
 
