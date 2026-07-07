@@ -153,7 +153,7 @@ reference siblings that did not ship. One line each, so nothing dangles:
   it for how hard to guard.
 - **`automated-testing`, `logging`, `handoff`** — testing, no-secrets-in-logs, and
   session-handoff conventions referenced in passing.
-- **`check-usage`** — subscription usage reader; its 88-line `claude_usage.py` module is vendored
+- **`check-usage`** — subscription usage reader; its 87-line `claude_usage.py` module is vendored
   at `skills/ralph-loop/scripts/` so the session-limit suspend gate works standalone.
 
 ## Provenance
