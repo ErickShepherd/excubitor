@@ -43,12 +43,19 @@ sets no marker of its own and there is no reliable way to auto-detect loop conte
 deliberately opt-in: zero friction for ordinary interactive work, protection when you explicitly
 say "I'm looping."
 
-SCOPE / LIMITS (honest). It parses the dangerous git/gh subcommands out of the Bash command string.
-String-parsing is NOT airtight — a script that calls git indirectly, a shell alias, or an unusual
-spelling can slip past, and a `post-commit`/`post-merge` git hook or a filesystem watcher can fire an
-external side effect the guard never sees (YOLO presumes a hook-clean working copy). This is a
-seatbelt for the default path, not a sandbox; where possible, also simply don't hand the loop a merge
-capability.
+SCOPE / LIMITS (honest). It parses the dangerous git/gh subcommands out of the Bash command string
+as *literal* tokens — it does not expand the shell. String-parsing is NOT airtight, and these are
+ACCEPTED residuals (documented, not chased — closing them would mean reimplementing the shell):
+  * a script that calls git indirectly, or a shell alias;
+  * a **word expansion that mutates the subcommand token** before bash resolves it — a brace
+    (`git pus{h,} origin main` runs a real push; `git merge{,} --no-ff topic` a real merge), a glob,
+    or a `$VAR` — the token the guard sees (`pus{h,}`, `$G`) is not `push`/`merge`, so `_classify`
+    does not recognize it. Pinned as accepted-residual fixtures in
+    hooks/tests/test_guard_loop_vc.py::TestAcceptedResiduals;
+  * a `post-commit`/`post-merge` git hook or a filesystem watcher firing an external side effect the
+    guard never sees (YOLO presumes a hook-clean working copy).
+This is a seatbelt for the default path, not a sandbox; where possible, also simply don't hand the
+loop a merge capability.
 
 Registered in settings.json for the Bash tool.
 

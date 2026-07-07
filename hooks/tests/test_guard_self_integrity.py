@@ -149,6 +149,39 @@ class TestBashDenials(unittest.TestCase):
         self.assertTrue(_denied(out))
 
 
+class TestAcceptedResiduals(unittest.TestCase):
+    """Documented bypasses that this seatbelt deliberately does NOT catch (see the hook's SCOPE /
+    LIMITS). Pinned BIDIRECTIONALLY: each asserts the bypass currently ALLOWS (defers), so if a
+    future change starts catching one, this test fails and forces an honest update to the SCOPE /
+    LIMITS wording + KNOWN-BYPASSES.md rather than a silent scope change. Closing these would mean
+    reimplementing shell expansion or denying every metacharacter (breaking ordinary globbing) — the
+    deny-set-completeness creep the repo's honest-limits brand exists to resist."""
+
+    # word expansions that mutate the path token before bash resolves it → the guard never sees the
+    # kill-switch basename, so it defers. These are REAL disarms at the shell but out of scope here.
+    RESIDUAL_ALLOW = [
+        "rm hooks/guard-loop-vc.p*",                     # glob
+        "rm hooks/guard-loop-vc.p?",                     # single-char glob
+        "rm .claude/settings.jso{n,}",                   # brace expansion → settings.json
+        "rm .claude/allow-default-branch{,}",            # brace expansion → the marker
+        "B=allow-default-branch; rm .claude/$B",         # basename hidden in a shell variable
+        "python3 -c \"open('.claude/allow-default-branch','w')\"",  # interpreter builds the path
+    ]
+    # NB the near-miss `F=.claude/allow-default-branch; rm $F` is DENIED, not allowed: the assignment
+    # token's own basename is `allow-default-branch`, so the guard catches the literal path in the
+    # assignment even though `rm $F` alone would slip. Only hiding the BASENAME in the variable
+    # (`B=allow-default-branch`) evades it — hence the specific form above.
+
+    def test_documented_bypasses_still_allow(self):
+        for cmd in self.RESIDUAL_ALLOW:
+            rc, out = _run(_bash(cmd, cwd="/repo"))
+            self.assertEqual(
+                (rc, out.strip()), (0, ""),
+                f"ACCEPTED-RESIDUAL CHANGED: this bypass used to slip past (documented in the hook's "
+                f"SCOPE / LIMITS); it is now being caught. Update the SCOPE / LIMITS + KNOWN-BYPASSES.md "
+                f"to match, then move it out of TestAcceptedResiduals: {cmd}")
+
+
 class TestActivationAndContract(unittest.TestCase):
     def test_inactive_without_marker(self):
         for payload in (

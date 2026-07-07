@@ -95,9 +95,9 @@ claims as proven.
 
 ### TELOS-008 — an armed loop cannot reach a kill-switch through the shell either
 - state: DISCHARGED
-- intent: denying the file tools alone leaves touch, rm, mv, tee, and sed as equivalent disarm paths through Bash; distinguishing shell reads from writes is a losing race, so any command segment naming a kill-switch path is denied while armed (the Read tool keeps reads wearable)
+- intent: denying the file tools alone leaves touch, rm, mv, tee, and sed as equivalent disarm paths through Bash; distinguishing shell reads from writes is a losing race, so any command segment naming a kill-switch path as a LITERAL token is denied while armed (the Read tool keeps reads wearable). Word expansions that mutate the token before bash resolves it (glob/brace/$VAR) are accepted, documented residuals, not chased — see the hook's SCOPE / LIMITS and the TestAcceptedResiduals fixtures
 - discharged-by: hooks/guard-self-integrity.py::main
-- contract: with CLAUDE_LOOP_GUARD set, main denies a Bash call when any token of any command segment, redirect targets included, resolves to an allow-default-branch marker, a guard hook script, or a settings.json or settings.local.json under a .claude directory
+- contract: with CLAUDE_LOOP_GUARD set, main denies a Bash call when any literal token of any command segment, redirect targets and subshell/command-substitution boundaries included, resolves to an allow-default-branch marker, a guard hook script, or a settings.json or settings.local.json under a .claude directory
 - verified-by: hooks/tests/test_guard_self_integrity.py::TestBashDenials::test_deny_set
 - last-grilled: 2026-07-07
 - anchor: none

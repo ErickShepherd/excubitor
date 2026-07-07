@@ -172,6 +172,27 @@ class TestGuardLoopVC(unittest.TestCase):
             rc, out = _run(cmd)
             self.assertEqual((rc, out.strip()), (0, ""), f"read form must stay allowed: {cmd}")
 
+    # Documented bypasses this seatbelt deliberately does NOT catch (the guard matches LITERAL
+    # subcommand tokens; it does not expand the shell). Pinned BIDIRECTIONALLY: each asserts the
+    # bypass currently ALLOWS, so if a change starts catching one, this fails and forces an honest
+    # SCOPE / LIMITS + KNOWN-BYPASSES.md update rather than a silent scope change. Closing these means
+    # reimplementing shell expansion — the deny-set-completeness creep the honest-limits brand resists.
+    ACCEPTED_RESIDUALS = [
+        "git pus{h,} origin main",           # brace expansion → a real `git push`
+        "git merge{,} --no-ff topic",        # brace expansion → a real `git merge`
+        "git pus*h origin main",             # glob (matches nothing, but token != 'push' either way)
+        "G=push; git $G origin main",         # subcommand hidden in a shell variable
+    ]
+
+    def test_accepted_residuals_still_allow(self):
+        for cmd in self.ACCEPTED_RESIDUALS:
+            rc, out = _run(cmd)
+            self.assertEqual(
+                (rc, out.strip()), (0, ""),
+                f"ACCEPTED-RESIDUAL CHANGED: this bypass used to slip past (documented in SCOPE / "
+                f"LIMITS); it is now caught. Update SCOPE / LIMITS + KNOWN-BYPASSES.md and move it "
+                f"out of ACCEPTED_RESIDUALS: {cmd}")
+
     def test_inactive_without_marker(self):
         # The same dangerous commands must be ALLOWED (deferred) when CLAUDE_LOOP_GUARD is unset.
         for cmd in ("git merge x", "git push", "git branch -D x"):
