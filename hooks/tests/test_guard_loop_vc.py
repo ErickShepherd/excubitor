@@ -132,6 +132,13 @@ class TestGuardLoopVC(unittest.TestCase):
         "git remote -v",
         "git remote show origin",
         "git remote get-url origin",
+        # a dangerous verb QUOTED in an argument is literal text, not a command — must not false-deny
+        # (this repo's own commit messages are full of these strings)
+        'git commit -m "document the (git push) bypass"',
+        'git commit -m "pin the (git merge) case"',
+        'echo "to release run (git push origin main)"',
+        "echo 'inside single quotes: git push is literal'",
+        'git commit -m "see guard-loop-vc.py `git push` handling"',
     ]
 
     def test_deny_set(self):
@@ -182,6 +189,7 @@ class TestGuardLoopVC(unittest.TestCase):
         "git merge{,} --no-ff topic",        # brace expansion → a real `git merge`
         "git pus*h origin main",             # glob (matches nothing, but token != 'push' either way)
         "G=push; git $G origin main",         # subcommand hidden in a shell variable
+        'git commit -m "$(git push)"',       # LIVE substitution inside double quotes (bash WOULD run it)
     ]
 
     def test_accepted_residuals_still_allow(self):

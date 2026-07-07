@@ -22,11 +22,12 @@ Each bypass is classed:
 ## How the guards parse (why these exist)
 
 `guard-loop-vc.py` and `guard-self-integrity.py` both read the `Bash` tool's command **string**. They
-split it into segments on shell separators (`;`, `|`, `&`, `&&`, `||`, newline) **and** on
-subshell / command-substitution boundaries (`(`, `)`, backtick), then `shlex.split` each segment and
-inspect the resulting **literal tokens** — a git subcommand, or a path's basename. They do **not**
-run a shell, so any construct that only resolves to the dangerous token *after* bash expands it is
-invisible to them.
+split it into segments on shell separators (`;`, `|`, `&`, newline) **and** on subshell /
+command-substitution boundaries (`(`, `)`, backtick) — honoring those boundaries **only outside
+quotes** (a separator inside single/double quotes is literal text, so a dangerous token quoted in an
+argument is not falsely promoted to its own command) — then `shlex.split` each segment and inspect the
+resulting **literal tokens** — a git subcommand, or a path's basename. They do **not** run a shell, so
+any construct that only resolves to the dangerous token *after* bash expands it is invisible to them.
 
 ## ACCEPTED — shell word-expansion evades literal-token matching
 
@@ -44,6 +45,7 @@ break ordinary globbing and lose more than it gains).
 | `git merge{,} --no-ff topic` | `git merge merge --no-ff topic` | brace expansion; token seen is `merge{,}` |
 | `git pus*h origin main` | (glob) | token seen is `pus*h`, never `push` |
 | `G=push; git $G origin main` | `git push origin main` | subcommand in a variable; token seen is `$G` |
+| `git commit -m "$(git push)"` | `git push` | live command substitution **inside double quotes** (see below) |
 
 `guard-self-integrity.py` — the kill-switch **basename** is hidden from the matcher
 (pinned: `hooks/tests/test_guard_self_integrity.py::TestAcceptedResiduals::test_documented_bypasses_still_allow`):
@@ -56,10 +58,24 @@ break ordinary globbing and lose more than it gains).
 | `rm .claude/allow-default-branch{,}` | the disarm marker | brace expansion |
 | `B=allow-default-branch; rm .claude/$B` | the disarm marker | **basename** in a variable |
 | `python3 -c "open('.claude/allow-default-branch','w')"` | the disarm marker | interpreter builds the path at runtime |
+| `echo "$(rm hooks/guard-loop-vc.py)"` | the real guard script | live command substitution **inside double quotes** (segments split only outside quotes — see below) |
 
 > **Near-miss, for the record:** `F=.claude/allow-default-branch; rm $F` is **DENIED**, not allowed —
 > the *assignment* token's own basename is `allow-default-branch`, which the guard catches even though
 > `rm $F` alone would slip. Only hiding the **basename** in the variable evades it.
+
+### A note on the quote-aware split (why the two "inside double quotes" rows exist)
+
+The segment splitter honors `(`, `)`, and backtick **only outside quotes**. That is a deliberate
+trade: it eliminates a *false deny* (a dangerous verb or a kill-switch path quoted in an ordinary
+commit message — `git commit -m "document the (git push) bypass"` — must not be blocked, and this
+repo's own history is full of such strings), at the cost of *under-blocking* a live command
+substitution that sits **inside double quotes** (`"$(git push)"`), which bash would actually execute.
+The unquoted forms — `(git push)`, `$(git push)`, `` `git push` `` — stay caught. We took the
+under-block over the false deny: a false deny trips ordinary work and gets the guard uninstalled,
+while the quoted-substitution under-block is one more instance of the "resolves only after the shell
+runs" residual this whole file documents. Pinned in both suites' `TestAcceptedResiduals` /
+`ACCEPTED_RESIDUALS`.
 
 ## ACCEPTED — the guards see only what the runtime hands them
 
@@ -92,7 +108,7 @@ loop rewrite the judge that constrains it.
 |---|---|---|
 | An armed loop could `touch .claude/allow-default-branch`, or edit/delete the guard scripts or the `.claude/settings.json` hooks block, to disarm the fence | Denied while `CLAUDE_LOOP_GUARD` is set (file tools **and** Bash) | `guard-self-integrity.py` (TELOS-007/008) |
 | `git remote set-head` / `git symbolic-ref <name> <ref>` / `-d` could repoint `refs/remotes/origin/HEAD`, the trust anchor both guards read | Denied in both modes; the read form of `symbolic-ref` stays allowed | `guard-loop-vc.py::_classify` (TELOS-009) |
-| A dangerous verb or kill-switch glued inside a subshell / command substitution — `(git push)`, `$(rm PATH)`, `` `rm PATH` `` — slipped past the segment splitter | Denied; segments now split on `(`, `)`, and backtick | both guards' `_SEGMENT_SPLIT` |
+| A dangerous verb or kill-switch glued inside an *unquoted* subshell / command substitution — `(git push)`, `$(rm PATH)`, `` `rm PATH` `` — slipped past the segment splitter | Denied; segments now split (quote-aware) on `(`, `)`, and backtick | both guards' `split_segments()` |
 
 ## Reporting a bypass
 

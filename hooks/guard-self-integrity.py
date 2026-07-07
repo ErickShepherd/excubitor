@@ -28,8 +28,9 @@ token* denies, reads included. Distinguishing a read from a write in arbitrary s
 race, and the cost is low — the Read tool (not matched here) still reads anything, so the seatbelt
 stays wearable. Fail direction on ambiguity is DENY, matching the posture of the set it protects.
 Segments are split on the shell command separators AND on subshell/command-substitution boundaries
-(`()` and backticks), so a token glued inside `(rm PATH)` / `$(rm PATH)` / `` `rm PATH` `` is still
-seen.
+(`()` and backticks) — but only OUTSIDE quotes, so a token glued inside an unquoted `(rm PATH)` /
+`$(rm PATH)` / `` `rm PATH` `` is still seen, while a kill-switch name quoted in an argument (a commit
+message, an `echo`) is literal text and NOT a false deny.
 
 SCOPE / LIMITS (honest — this is a seatbelt for the default path, not a sandbox). It matches a
 *literal* path token; it does NOT expand the shell. Anything that produces the kill-switch path
@@ -42,6 +43,10 @@ which would break ordinary globbing and lose more than it gains):
     command-substitution *result* — the token the guard sees (`...p*`, `...jso{n,}`, `$F`) is not
     the kill-switch basename, so it does not match. Pinned as accepted-residual fixtures in
     hooks/tests/test_guard_self_integrity.py::TestAcceptedResiduals.
+  * a **live command substitution inside double quotes** (`echo "$(rm PATH)"`) — segments are split
+    only outside quotes (to avoid false-denying a literally-quoted path), so a substitution bash
+    WOULD run inside double quotes is not seen. The unquoted forms stay caught; this narrow quoted
+    case is the accepted cost of eliminating the false deny.
   * a rename of a parent directory, a `find ~/.claude -delete`, or an interpreter one-liner that
     builds the path at runtime (`python3 -c '...'`).
 It protects the *default path* by which an agent would disarm the guards, not every path.
@@ -60,16 +65,54 @@ import re
 import shlex
 import sys
 
-# Shell operators AND grouping/substitution boundaries that separate independent commands within one
-# Bash invocation (same split as guard-loop-vc.py, so a compound command can't hide a mention behind a
-# leading innocuous segment). The `()` and backtick are load-bearing: a subshell or command
-# substitution glued to the path (`(rm PATH)`, `$(rm PATH)`, `` `rm PATH` ``) would otherwise leave the
-# path stuck to a `)`/backtick inside one shlex token, so its basename never matches. Splitting on them
-# is safe here because we only ever DENY on a positive kill-switch match — fragmenting an innocent
-# command that merely contains these chars just yields no match (→ defer), never a false deny.
-_SEGMENT_SPLIT = re.compile(r"&&|\|\||[|;&\n()`]")
+# Characters that, OUTSIDE quotes, separate independent commands within one Bash invocation: the
+# command separators `;` `|` `&` newline, and the subshell / command-substitution boundaries `(` `)`
+# backtick (so a mention glued inside `(rm PATH)` / `$(rm PATH)` / `` `rm PATH` `` becomes its own
+# segment instead of staying stuck to a `)`/backtick in one shlex token). Honored only outside quotes
+# by split_segments(), so a kill-switch name quoted in an argument is NOT a false deny.
+_SEPARATORS = frozenset(";|&\n()`")
 # Leading redirection/fd noise on a token (`>file`, `2>>file`, `<file`) so the path inside is seen.
 _REDIR_PREFIX = re.compile(r"^[\d<>&]+")
+
+
+def split_segments(command: str) -> list[str]:
+    """Split a Bash command into segments at _SEPARATORS, honoring them ONLY outside quotes.
+
+    A separator inside single or double quotes is literal text, not a command boundary — so a
+    kill-switch name quoted in an argument (`git commit -m "refactor (see guard-loop-vc.py)"`) stays
+    inside its segment and is NOT promoted to its own command (which would be a false deny). The
+    tradeoff is that a LIVE command substitution inside double quotes is likewise not segmented — an
+    accepted under-block residual (see SCOPE / LIMITS). Backslash escapes the next char (outside
+    single quotes). Quote characters are preserved for the downstream shlex.split."""
+    segments: list[str] = []
+    buf: list[str] = []
+    in_single = in_double = False
+    i, n = 0, len(command)
+    while i < n:
+        ch = command[i]
+        if in_single:
+            buf.append(ch)
+            if ch == "'":
+                in_single = False
+        elif in_double:
+            if ch == "\\" and i + 1 < n:
+                buf.append(ch); buf.append(command[i + 1]); i += 2; continue
+            buf.append(ch)
+            if ch == '"':
+                in_double = False
+        elif ch == "'":
+            in_single = True; buf.append(ch)
+        elif ch == '"':
+            in_double = True; buf.append(ch)
+        elif ch == "\\" and i + 1 < n:
+            buf.append(ch); buf.append(command[i + 1]); i += 2; continue
+        elif ch in _SEPARATORS:
+            segments.append("".join(buf)); buf = []
+        else:
+            buf.append(ch)
+        i += 1
+    segments.append("".join(buf))
+    return [s for s in (seg.strip() for seg in segments) if s]
 
 _GUARD_SCRIPTS = {
     "guard-default-branch.py",
@@ -129,10 +172,7 @@ def _target_kill_switch(target: str, cwd: str) -> str | None:
 
 def _bash_kill_switch(command: str, cwd: str) -> str | None:
     """Best-effort scan of a Bash command for any token naming a kill-switch path."""
-    for segment in _SEGMENT_SPLIT.split(command):
-        segment = segment.strip()
-        if not segment:
-            continue
+    for segment in split_segments(command):
         try:
             tokens = shlex.split(segment)
         except ValueError:
