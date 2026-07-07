@@ -7,8 +7,9 @@ script turns a REAL run of demo.sh into a static, faithful, regenerable image (s
 network, no fonts to embed — a monospace stack the viewer already has). For an ANIMATED gif, use
 `scripts/demo.tape` with charmbracelet/vhs instead; this static frame is the always-available path.
 
-Usage:
-  NO_COLOR=1 DEMO_PAUSE=0 bash scripts/demo.sh | scripts/render_demo_svg.py > scripts/demo.svg
+Usage (DEMO_STABLE_PATH=1 prints a fixed temp path instead of the random mktemp one, so the
+committed scripts/demo.svg is byte-reproducible — without it every run differs by that path):
+  NO_COLOR=1 DEMO_PAUSE=0 DEMO_STABLE_PATH=1 bash scripts/demo.sh | scripts/render_demo_svg.py > scripts/demo.svg
 
 It reads the plain-text (NO_COLOR) transcript on stdin and re-applies a small, fixed highlight
 palette by matching the demo's own line markers, so the SVG stays in sync with the script's wording
