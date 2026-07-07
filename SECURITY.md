@@ -37,8 +37,10 @@ Report it if you find any of these:
 
 ## What is NOT a vulnerability (already-documented limits)
 
-These are **known, accepted residuals** — please don't file them as new; they are catalogued, with the
-reasoning, in [`KNOWN-BYPASSES.md`](KNOWN-BYPASSES.md):
+These are **known, accepted residuals** — please don't file them as new; the shell/git ones are
+catalogued, with the reasoning, in [`KNOWN-BYPASSES.md`](KNOWN-BYPASSES.md), and the telos-witness one
+is pinned in the audit's adversarial tests
+(`skills/audit-telos/tests/test_adversarial_records.py`):
 
 - **Shell-expansion evasions** of the command parsers — glob (`git pus{h,}`, `rm x.p*`), brace
   expansion, `$VAR` indirection, a live command substitution inside double quotes, an interpreter
