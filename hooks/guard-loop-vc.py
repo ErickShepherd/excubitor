@@ -29,17 +29,36 @@ TWO MODES, selected by the value of CLAUDE_LOOP_GUARD (see docs/design/loop-yolo
 `git clean` (without a dry-run flag) is denied in BOTH modes — it deletes untracked files with no
 reflog, strictly worse than `reset --hard`.
 
+Also denied in BOTH modes: `git remote set-head` and the write/delete forms of `git symbolic-ref`.
+They repoint refs/remotes/origin/HEAD — the trust anchor this guard (and guard-default-branch.py)
+reads for default-branch detection — so denying them protects the guard's OWN integrity. The read
+form of `symbolic-ref` stays allowed. (main/master are hardcode-protected regardless, so this only
+ever mattered for a non-standard trunk. This is deliberately NOT a complete deny-set over the git
+surface — other rarely-dangerous verbs like `update-ref -d` / `reflog expire` are left open by
+design; chasing full git-verb completeness is a losing race the SCOPE / LIMITS section documents
+rather than pretends to win.)
+
 ACTIVATION (opt-in). Does nothing unless CLAUDE_LOOP_GUARD is set. `/loop` is a built-in skill that
 sets no marker of its own and there is no reliable way to auto-detect loop context, so the guard is
 deliberately opt-in: zero friction for ordinary interactive work, protection when you explicitly
 say "I'm looping."
 
-SCOPE / LIMITS (honest). It parses the dangerous git/gh subcommands out of the Bash command string.
-String-parsing is NOT airtight — a script that calls git indirectly, a shell alias, or an unusual
-spelling can slip past, and a `post-commit`/`post-merge` git hook or a filesystem watcher can fire an
-external side effect the guard never sees (YOLO presumes a hook-clean working copy). This is a
-seatbelt for the default path, not a sandbox; where possible, also simply don't hand the loop a merge
-capability.
+SCOPE / LIMITS (honest). It parses the dangerous git/gh subcommands out of the Bash command string
+as *literal* tokens — it does not expand the shell. String-parsing is NOT airtight, and these are
+ACCEPTED residuals (documented, not chased — closing them would mean reimplementing the shell):
+  * a script that calls git indirectly, or a shell alias;
+  * a **word expansion that mutates the subcommand token** before bash resolves it — a brace
+    (`git pus{h,} origin main` runs a real push; `git merge{,} --no-ff topic` a real merge), a glob,
+    or a `$VAR` — the token the guard sees (`pus{h,}`, `$G`) is not `push`/`merge`, so `_classify`
+    does not recognize it. Pinned as accepted-residual fixtures in
+    hooks/tests/test_guard_loop_vc.py::TestAcceptedResiduals;
+  * a **live command substitution inside double quotes** (`git commit -m "$(git push)"`) — segments
+    split only outside quotes (so a verb literally quoted in a commit message is not a false deny);
+    the unquoted `$(git push)` / `` `git push` `` forms stay caught;
+  * a `post-commit`/`post-merge` git hook or a filesystem watcher firing an external side effect the
+    guard never sees (YOLO presumes a hook-clean working copy).
+This is a seatbelt for the default path, not a sandbox; where possible, also simply don't hand the
+loop a merge capability.
 
 Registered in settings.json for the Bash tool.
 
@@ -58,10 +77,12 @@ import shlex
 import subprocess
 import sys
 
-# Shell operators that separate independent commands within one Bash invocation. `&&` and `||`
-# are matched before the single-char class, so a bare `&` (background) still segments
-# (`sleep 1 & git push` must not hide the push behind the leading `sleep`).
-_SEGMENT_SPLIT = re.compile(r"&&|\|\||[|;&\n]")
+# Characters that, OUTSIDE quotes, separate independent commands within one Bash invocation:
+# the command separators `;` `|` `&` newline, and the subshell / command-substitution boundaries
+# `(` `)` backtick (so a dangerous verb glued inside `(git push)` / `$(git push)` / `` `git push` ``
+# becomes its own segment instead of hiding behind the `(`/backtick in one shlex token). `&&`/`||`
+# fall out of the single-char `&`/`|` split (an empty middle segment is harmless).
+_SEPARATORS = frozenset(";|&\n()`")
 # git global options that consume the *following* token as their value (so the real subcommand is
 # one token further on): e.g. `git -C /path merge`, `git --config-env sec.key=ENV merge`. Verified
 # against git 2.47.3 with a subcommand-shift discriminator (`git <opt> <val> zzzcmd` => git reports
@@ -230,6 +251,34 @@ def _clean_is_dry_run(rest: list[str]) -> bool:
     return False
 
 
+def _symbolic_ref_write_reason(rest: list[str]) -> str | None:
+    """Deny reason for a WRITE-form `git symbolic-ref`, or None for the read form.
+
+    The read form (one positional: `git symbolic-ref [--quiet|--short] <name>`) is how scripts —
+    including this guard itself — *query* refs, and must stay allowed. The write form
+    (`git symbolic-ref <name> <ref>`, two positionals) and the delete form (`-d`/`--delete`)
+    mutate the ref — that is how refs/remotes/origin/HEAD gets repointed. `-m <reason>` consumes
+    the following token as its value, so a reason string is never counted as a positional.
+    """
+    if any(d in rest for d in ("-d", "--delete")):
+        return "delete a symbolic ref (git symbolic-ref -d)"
+    positionals = 0
+    j = 0
+    while j < len(rest):
+        t = rest[j]
+        if t == "-m":
+            j += 2  # -m <reason>: the value is the next token, never a positional
+            continue
+        if t.startswith("-"):
+            j += 1
+            continue
+        positionals += 1
+        j += 1
+    if positionals >= 2:
+        return "rewrite a symbolic ref (git symbolic-ref <name> <ref>)"
+    return None
+
+
 def _classify(tokens: list[str], yolo: bool, cwd: str | None) -> str | None:
     """Return a short reason if `tokens` (one command segment) is a forbidden VC mutation.
 
@@ -293,17 +342,66 @@ def _classify(tokens: list[str], yolo: bool, cwd: str | None) -> str | None:
         return "delete a branch (git branch -d/-D)"
     if sub == "worktree" and "remove" in rest:
         return "remove a worktree (git worktree remove)"
+    # Both `remote set-head` and the write form of `symbolic-ref` rewrite refs/remotes/origin/HEAD —
+    # the trust anchor _default_branch() (and guard-default-branch.py) reads for default-branch
+    # detection. A loop that can repoint it can re-aim what "default branch" means, so denying these
+    # protects the guard's OWN integrity (not deny-set completeness — other rarely-dangerous verbs
+    # are left open by design; see the module docstring's SCOPE / LIMITS). Residual: main/master
+    # stay hardcode-protected regardless, so this only ever mattered for a non-standard trunk.
+    if sub == "remote" and _subcommand_path(rest, set(), 1) == ["set-head"]:
+        return "repoint a remote's HEAD (git remote set-head)"
+    if sub == "symbolic-ref":
+        return _symbolic_ref_write_reason(rest)
     # `git pull` is deliberately NOT denied: it advances the *current* branch from upstream
     # (reflog-recoverable, no push / branch-delete / remote mutation) — within the seatbelt scope.
     return None
 
 
+def split_segments(command: str) -> list[str]:
+    """Split a Bash command into segments at _SEPARATORS, honoring them ONLY outside quotes.
+
+    A separator inside single or double quotes is literal text, not a command boundary — so a
+    dangerous verb quoted in an argument (`git commit -m "document the (git push) bypass"`) stays
+    inside its segment and is NOT promoted to its own command (which would be a false deny; this
+    repo's own commit messages are full of such strings). The tradeoff is that a LIVE command
+    substitution inside double quotes (`"... $(git push)"`, which bash WOULD execute) is likewise
+    not segmented — an accepted under-block residual, consistent with the word-expansion limits in
+    SCOPE / LIMITS. Backslash escapes the next char (outside single quotes) so an escaped separator
+    is literal too. Quote characters are preserved in the segment for the downstream shlex.split."""
+    segments: list[str] = []
+    buf: list[str] = []
+    in_single = in_double = False
+    i, n = 0, len(command)
+    while i < n:
+        ch = command[i]
+        if in_single:
+            buf.append(ch)
+            if ch == "'":
+                in_single = False
+        elif in_double:
+            if ch == "\\" and i + 1 < n:
+                buf.append(ch); buf.append(command[i + 1]); i += 2; continue
+            buf.append(ch)
+            if ch == '"':
+                in_double = False
+        elif ch == "'":
+            in_single = True; buf.append(ch)
+        elif ch == '"':
+            in_double = True; buf.append(ch)
+        elif ch == "\\" and i + 1 < n:
+            buf.append(ch); buf.append(command[i + 1]); i += 2; continue
+        elif ch in _SEPARATORS:
+            segments.append("".join(buf)); buf = []
+        else:
+            buf.append(ch)
+        i += 1
+    segments.append("".join(buf))
+    return [s for s in (seg.strip() for seg in segments) if s]
+
+
 def _dangerous(command: str, yolo: bool, cwd: str | None) -> str | None:
     """Scan a full Bash command (possibly compound) for a forbidden VC mutation."""
-    for segment in _SEGMENT_SPLIT.split(command):
-        segment = segment.strip()
-        if not segment:
-            continue
+    for segment in split_segments(command):
         try:
             tokens = shlex.split(segment)
         except ValueError:
