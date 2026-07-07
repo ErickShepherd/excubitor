@@ -130,6 +130,10 @@ class TestBashDenials(unittest.TestCase):
         "cat docs/telos/app.md",
         "code --list-extensions > .vscode/settings.json",   # settings.json outside .claude
         "git -C /repo status",
+        # a guard name QUOTED mid-sentence (no path tail) is not promoted to a command → allow; the
+        # round-2 segmentation false-deny (a `(...)` in a commit message) is what this pins as fixed
+        'git commit -m "refactor (see guard-loop-vc.py) later"',
+        "echo 'the fourth guard is guard-self-integrity in spirit'",
     ]
 
     def test_deny_set(self):
@@ -166,6 +170,7 @@ class TestAcceptedResiduals(unittest.TestCase):
         "rm .claude/allow-default-branch{,}",            # brace expansion → the marker
         "B=allow-default-branch; rm .claude/$B",         # basename hidden in a shell variable
         "python3 -c \"open('.claude/allow-default-branch','w')\"",  # interpreter builds the path
+        'echo "$(rm hooks/guard-loop-vc.py)"',           # LIVE substitution inside double quotes
     ]
     # NB the near-miss `F=.claude/allow-default-branch; rm $F` is DENIED, not allowed: the assignment
     # token's own basename is `allow-default-branch`, so the guard catches the literal path in the
