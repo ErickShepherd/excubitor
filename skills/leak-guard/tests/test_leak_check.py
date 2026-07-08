@@ -30,7 +30,10 @@ def _run(argv: list[str]) -> "tuple[int, str, str]":
         try:
             rc = lc.main(argv)
         except SystemExit as e:  # argparse / loud regex failures
-            rc = e.code if isinstance(e.code, int) else 2
+            # Mirror real interpreter semantics so the test verifies the TRUE exit code:
+            # SystemExit(None)→0, SystemExit(int)→int, SystemExit(str/other)→1 (Python prints it, exits 1).
+            code = e.code
+            rc = 0 if code is None else code if isinstance(code, int) else 1
     return rc, out.getvalue(), err.getvalue()
 
 
