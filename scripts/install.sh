@@ -31,7 +31,9 @@ if [[ $# -gt 0 ]]; then
   names=("$@")
 else
   names=()
+  shopt -s nullglob  # an empty skills/ must yield no iterations, not the literal '*/'
   for d in "$REPO"/skills/*/; do names+=("$(basename "$d")"); done
+  shopt -u nullglob
 fi
 for name in "${names[@]}"; do
   src="$REPO/skills/$name"
@@ -61,6 +63,15 @@ except (OSError, ValueError):
     print("settings.json unreadable — skipping hook registration", file=sys.stderr)
     raise SystemExit(0)
 
+# An existing settings.json can carry an unexpected shape (`"hooks": null`, a non-list PreToolUse).
+# setdefault only fills an ABSENT key, so a present-but-wrong-typed one would crash .setdefault/.append
+# with a confusing "python3 unavailable?" message. Validate the shape and skip cleanly instead — never
+# corrupt or crash on someone else's config.
+if not isinstance(data, dict) or not isinstance(data.get("hooks", {}), dict) \
+        or not isinstance(data.get("hooks", {}).get("PreToolUse", []), list):
+    print("settings.json has an unexpected hooks shape — skipping hook registration (resolve by hand)",
+          file=sys.stderr)
+    raise SystemExit(0)
 pre = data.setdefault("hooks", {}).setdefault("PreToolUse", [])
 changed = False
 WANTED = [
