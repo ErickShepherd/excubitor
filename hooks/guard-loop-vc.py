@@ -340,7 +340,10 @@ def _classify(tokens: list[str], yolo: bool, cwd: str | None) -> str | None:
         return "delete untracked files (git clean)"
     if sub == "branch" and any(d in rest for d in ("-d", "-D", "--delete")):
         return "delete a branch (git branch -d/-D)"
-    if sub == "worktree" and "remove" in rest:
+    # position-aware (like `remote set-head` / `gh pr merge` below), NOT a bare `"remove" in rest`
+    # membership — else `git worktree add ../wt remove` (a branch/path literally named `remove`) would
+    # be a false deny. Only the `remove` SUBCOMMAND (first positional) is the destructive one.
+    if sub == "worktree" and _subcommand_path(rest, set(), 1) == ["remove"]:
         return "remove a worktree (git worktree remove)"
     # Both `remote set-head` and the write form of `symbolic-ref` rewrite refs/remotes/origin/HEAD —
     # the trust anchor _default_branch() (and guard-default-branch.py) reads for default-branch
