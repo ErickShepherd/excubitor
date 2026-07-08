@@ -37,6 +37,14 @@ LIMITS (honest): pattern/literal matching, not semantic understanding. It will m
 shape it has no pattern for, a private token you did not supply, a secret split across lines or
 base64-wrapped, or one only present in a binary/rendered asset it skips. It is a deterministic gate for
 the known-shape and known-token cases — a seatbelt at the boundary, not a proof of cleanliness.
+
+The `--private-tokens` file is TRUSTED input — you author it, it is as trusted as the code it guards.
+A `re:` rule there is run against the (untrusted) scanned content, so a PATHOLOGICAL regex (catastrophic
+backtracking, e.g. `re:(a+)+$`) can be driven to hang by crafted content — a self-inflicted ReDoS. The
+built-in patterns are all linear and ReDoS-safe; keep your own `re:` rules linear too (avoid nested
+quantifiers). A stdlib scanner cannot interrupt a Python regex mid-backtrack without a per-match
+subprocess sandbox, which would be out of proportion for owner-authored input — so this is a documented,
+accepted residual (see KNOWN-BYPASSES.md), not a silently-hoped-away one.
 """
 from __future__ import annotations
 
@@ -183,7 +191,9 @@ def scan(paths: list[Path], patterns: list[tuple[str, "re.Pattern[str]"]],
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description="Deterministic private→public leak scanner (leak-guard).")
     ap.add_argument("paths", nargs="+", help="files or directories to scan")
-    ap.add_argument("--private-tokens", help="file of must-never-ship patterns (literal or re:<regex>)")
+    ap.add_argument("--private-tokens", help="file of must-never-ship patterns (literal or re:<regex>); "
+                                             "TRUSTED input — keep re: rules linear (a pathological one "
+                                             "can ReDoS on crafted content; see the module LIMITS)")
     ap.add_argument("--allow", action="append", default=[], help="exact matched text to whitelist (repeatable)")
     ap.add_argument("--allow-file", help="file of whitelist strings, one per line")
     ap.add_argument("--no-builtin", action="store_true", help="skip built-in secret patterns")

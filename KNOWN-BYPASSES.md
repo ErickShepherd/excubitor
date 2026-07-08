@@ -117,6 +117,17 @@ branch, push, branch delete) — are the ones fenced. If a specific loop genuine
 verbs fenced, add it to `_classify`; the general posture is *don't hand the loop a capability it
 doesn't need*, not *enumerate every git verb*.
 
+## ACCEPTED — leak_check trusts its owner-authored `--private-tokens` regexes
+
+`skills/leak-guard/leak_check.py` runs each `re:` rule from the `--private-tokens` file against the
+(untrusted) scanned content. That file is **owner-authored, trusted input** — as trusted as the code it
+guards. A *pathological* caller regex (catastrophic backtracking, e.g. `re:(a+)+$`) can therefore be
+driven to hang by crafted content — a **self-inflicted ReDoS**. The built-in secret patterns are all
+linear and ReDoS-safe; the residual is solely the owner's own `re:` rules. A stdlib scanner cannot
+interrupt a Python regex mid-backtrack without a per-match subprocess sandbox — out of proportion for
+trusted input — so the boundary is *documented* (keep your `re:` rules linear; see the module LIMITS)
+rather than sandboxed. See `skills/leak-guard/leak_check.py::load_private_patterns`.
+
 ## ACCEPTED — default-branch detection on a local-only, non-standard trunk
 
 On a local-only repo with a trunk that is neither `main` nor `master` and no `origin/HEAD`, the
