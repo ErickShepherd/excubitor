@@ -111,6 +111,7 @@ class TestBashDenials(unittest.TestCase):
         "echo disarm > /repo/.claude/allow-default-branch",         # redirect target
         "echo disarm >.claude/allow-default-branch",                # attached redirect
         "rm -f ~/.claude/hooks/guard-loop-vc.py",
+        "rm -f hooks/guard-loop-vc.py # with a trailing comment",  # real path BEFORE # → still caught
         "mv hooks/guard-default-branch.py /tmp/parked.py",
         "cp /dev/null hooks/guard-one-unit.py",
         "sed -i 's/PreToolUse/Disabled/' /home/u/.claude/settings.json",
@@ -134,6 +135,8 @@ class TestBashDenials(unittest.TestCase):
         # round-2 segmentation false-deny (a `(...)` in a commit message) is what this pins as fixed
         'git commit -m "refactor (see guard-loop-vc.py) later"',
         "echo 'the fourth guard is guard-self-integrity in spirit'",
+        "rm nothing.txt # then edit guard-loop-vc.py by hand",  # name only in a comment → bash never acts
+        "ls -la # guard-one-unit.py notes",
     ]
 
     def test_deny_set(self):
