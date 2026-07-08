@@ -10,8 +10,8 @@ bless its own work. The watcher that stays awake while the loop runs and nobody 
 Stdlib-only Python hooks + [Agent Skills](https://code.claude.com/docs/en/skills)-format capability
 packets, with 175 tests and the design rationale that produced them. Built for and battle-tested
 with Claude Code; the VC-guard's decision core is runtime-neutral — a second, non-Claude-Code adapter
-drives the *same* code with an equivalence test to prove it ([`SPEC.md`](SPEC.md)), so the port to any
-runtime that can intercept tool calls is demonstrated, not just asserted.
+drives the *same* code with an equivalence test to prove it ([`SPEC.md`](SPEC.md)), so its portability
+to any runtime that can intercept tool calls is demonstrated, not just asserted.
 
 ## 60-second crash test
 
