@@ -776,34 +776,34 @@ def emit_ledger(result: dict, judgments: dict | None, audit_date: str) -> str:
     cov = result["coverage"]
     cov_str = f"{cov*100:.0f}%" if cov is not None else "n/a (non-Python)"
     low_cov = cov is not None and cov < 0.5 and result["significant_surface"] >= 20
-    verdict = ("SUSPECT (whole record): coverage implausibly low — under-claiming likely"
-               if low_cov else f"{len(rows)+len(orphan_rows)} telos finding(s)")
+    cov_verdict = ("SUSPECT (whole record): coverage implausibly low — under-claiming likely"
+                   if low_cov else f"{len(rows)+len(orphan_rows)} telos finding(s)")
 
-    L = [f"# audit-telos — {repo} — {audit_date}", "",
-         f"**Verdict:** {verdict}  ·  **Coverage:** {cov_str} "
-         f"({result['accounted_for']}/{result['significant_surface']} significant surface accounted-for) "
-         f"·  **Claims:** {len(result['claims'])}  ·  "
-         f"**Telos:** {textwrap.shorten(result['telos'], width=80, placeholder=' …')}", ""]
+    out = [f"# audit-telos — {repo} — {audit_date}", "",
+           f"**Verdict:** {cov_verdict}  ·  **Coverage:** {cov_str} "
+           f"({result['accounted_for']}/{result['significant_surface']} significant surface accounted-for) "
+           f"·  **Claims:** {len(result['claims'])}  ·  "
+           f"**Telos:** {textwrap.shorten(result['telos'], width=80, placeholder=' …')}", ""]
     if low_cov:
-        L += ["> ⚠ Coverage is advisory in v1, but this is low enough to refuse a clean verdict: the record "
-              "likely under-claims (a Goodhart trap). Add claims for the unclaimed significant surface.", ""]
+        out += ["> ⚠ Coverage is advisory in v1, but this is low enough to refuse a clean verdict: the record "
+                "likely under-claims (a Goodhart trap). Add claims for the unclaimed significant surface.", ""]
     # NB: placeholders for empty sections must NOT be bullets — a bullet under `## Clean` would be
     # miscounted as a target-level TN by audit_accuracy.py (it credits every bullet in that section).
-    L += ["## Open findings — worklist (ranked; work top-down, one isolated change each)",
-          "<!-- each item ends with (disp: pending); triage flips it to (disp: TP)/(disp: FP)/(disp: AMENDED) -->"]
-    L += rows or ["_no claim drift/unmet findings_"]
-    L += ["", "## Orphans (code with no stated purpose)"]
-    L += orphan_rows or ["_no candidate orphans_"]
-    L += ["", "## Clean (credited)  — each discharged claim is a target-level TN (a clean bill)"]
-    L += [f"- {c['id']} — {c['title']}: discharged [{tier or '?'}]." for c, tier in discharged] or \
-         ["_none discharged this run_"]
-    L += ["", "## Per-claim verdict  (hash = claim fingerprint: symbol source + contract + intent; "
-          "tier = audit-computed evidence tier; judged = tool-written LLM-verdict date — all for --prior)",
-          "| claim | hash | state | tier | judged |", "|-------|------|-------|------|--------|"]
-    L += [f"| {cid} | {h or '-'} | {st} | {ti or '-'} | {jd or '-'} |"
-          for cid, h, st, ti, jd in verdict_table]
-    L += ["", "## False negatives (misses — fill when a re-audit/human/incident finds a missed drift)", ""]
-    return "\n".join(L) + "\n"
+    out += ["## Open findings — worklist (ranked; work top-down, one isolated change each)",
+            "<!-- each item ends with (disp: pending); triage flips it to (disp: TP)/(disp: FP)/(disp: AMENDED) -->"]
+    out += rows or ["_no claim drift/unmet findings_"]
+    out += ["", "## Orphans (code with no stated purpose)"]
+    out += orphan_rows or ["_no candidate orphans_"]
+    out += ["", "## Clean (credited)  — each discharged claim is a target-level TN (a clean bill)"]
+    out += [f"- {c['id']} — {c['title']}: discharged [{tier or '?'}]." for c, tier in discharged] or \
+           ["_none discharged this run_"]
+    out += ["", "## Per-claim verdict  (hash = claim fingerprint: symbol source + contract + intent; "
+            "tier = audit-computed evidence tier; judged = tool-written LLM-verdict date — all for --prior)",
+            "| claim | hash | state | tier | judged |", "|-------|------|-------|------|--------|"]
+    out += [f"| {cid} | {h or '-'} | {st} | {ti or '-'} | {jd or '-'} |"
+            for cid, h, st, ti, jd in verdict_table]
+    out += ["", "## False negatives (misses — fill when a re-audit/human/incident finds a missed drift)", ""]
+    return "\n".join(out) + "\n"
 
 
 _VERDICT_ROW_RE = re.compile(
