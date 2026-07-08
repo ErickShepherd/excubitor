@@ -64,13 +64,6 @@ _BUILTIN: list[tuple[str, "re.Pattern[str]"]] = [
     ("url-credentials", re.compile(r"\b[a-zA-Z][a-zA-Z0-9+.-]*://[^\s:/@]+:[^\s:/@]+@[^\s/]+")),
 ]
 
-# Text-file heuristic: skip obvious binaries by extension AND by a NUL-byte probe (so an unknown-ext
-# binary doesn't crash the scan or hide a finding in mojibake).
-_BINARY_EXT = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".pdf", ".zip", ".gz", ".tar",
-               ".woff", ".woff2", ".ttf", ".eot", ".mp4", ".mov", ".mp3", ".wasm", ".so", ".dylib",
-               ".o", ".a", ".class", ".pyc", ".bin", ".exe", ".dll"}
-
-
 @dataclass(frozen=True)
 class Finding:
     location: str   # path:line
@@ -137,8 +130,11 @@ def scan_text(text: str, patterns: list[tuple[str, "re.Pattern[str]"]], allow: s
 
 
 def _looks_binary(path: Path) -> bool:
-    if path.suffix.lower() in _BINARY_EXT:
-        return True
+    """True iff the file's CONTENT looks binary (a NUL byte in the first 8 KiB). Keyed on CONTENT, not
+    extension: a text file with a binary-ish name (notes.pdf, config.bin, a text foo.so) must still be
+    scanned — skipping it by extension would silently miss a secret pasted into it, the dangerous
+    fail-open direction for a gate. A genuinely binary file has a NUL early and is skipped (and the skip
+    is reported by scan(), never silent)."""
     try:
         with path.open("rb") as f:
             return b"\x00" in f.read(8192)
@@ -161,14 +157,17 @@ def iter_files(paths: list[Path]) -> "tuple[list[Path], list[str]]":
 
 
 def scan(paths: list[Path], patterns: list[tuple[str, "re.Pattern[str]"]],
-         allow: set[str]) -> tuple[list[Finding], int, list[str]]:
-    """Scan all paths. Returns (findings, suppressed_count, errors). Unreadable files become errors
-    (fail-closed: an un-scannable path is treated as not-verified, contributing a non-zero exit)."""
+         allow: set[str]) -> tuple[list[Finding], int, list[str], list[str]]:
+    """Scan all paths. Returns (findings, suppressed_count, errors, skipped_binary). Unreadable files
+    become errors (fail-closed: an un-scannable path is treated as not-verified → non-zero exit);
+    content-detected binary files are skipped but REPORTED (a skip is visible, never silent)."""
     files, errors = iter_files(paths)
     findings: list[Finding] = []
     suppressed = 0
+    skipped: list[str] = []
     for f in files:
         if _looks_binary(f):
+            skipped.append(str(f))
             continue
         try:
             text = f.read_text(encoding="utf-8", errors="strict")
@@ -178,7 +177,7 @@ def scan(paths: list[Path], patterns: list[tuple[str, "re.Pattern[str]"]],
         fnd, sup = scan_text(text, patterns, allow, str(f))
         findings.extend(fnd)
         suppressed += sup
-    return findings, suppressed, errors
+    return findings, suppressed, errors, skipped
 
 
 def main(argv: list[str]) -> int:
@@ -210,12 +209,14 @@ def main(argv: list[str]) -> int:
         allow |= {ln.strip() for ln in af.read_text(encoding="utf-8", errors="replace").splitlines()
                   if ln.strip() and not ln.startswith("#")}
 
-    findings, suppressed, errors = scan([Path(p) for p in args.paths], patterns, allow)
+    findings, suppressed, errors, skipped = scan([Path(p) for p in args.paths], patterns, allow)
 
     for e in errors:
         print(f"ERROR  {e}", file=sys.stderr)
     for f in findings:
         print(f"LEAK   {f.location} — {f.category}: {f.masked}")
+    for s in skipped:
+        print(f"note: skipped (binary content, not scanned): {s}", file=sys.stderr)  # a skip is visible
     if suppressed:
         print(f"note: {suppressed} match(es) suppressed by explicit whitelist", file=sys.stderr)
 

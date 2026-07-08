@@ -194,12 +194,23 @@ class TestFailClosed(unittest.TestCase):
         rc, _, _ = _run([str(art), "--no-builtin"])
         self.assertEqual(rc, 2)  # nothing to scan for → refuse, don't claim clean
 
-    def test_binary_file_skipped_not_crash(self):
+    def test_binary_content_skipped_and_reported(self):
+        # genuinely binary CONTENT (a NUL byte) → skipped, but the skip is REPORTED (not silent).
         p = self.dir / "img.png"
-        p.write_bytes(b"\x89PNG\x00\x00" + AWS_KEY.encode() + b"\x00")  # secret-shaped bytes in a binary
+        p.write_bytes(b"\x89PNG\x00\x00" + AWS_KEY.encode() + b"\x00")
         rc, out, err = _run([str(p)])
-        self.assertEqual(rc, 0)  # skipped by ext + NUL probe; not a crash, not a finding
+        self.assertEqual(rc, 0)  # binary content → skipped, not a crash, not a finding
         self.assertNotIn("aws", out.lower())
+        self.assertIn("skipped (binary content", err)  # visible, not silent
+
+    def test_text_file_with_binary_name_is_scanned(self):
+        # THE MISS: a TEXT file with a binary-ish extension must still be scanned (extension alone must
+        # not skip it), or a secret pasted into notes.pdf / config.bin would be silently missed.
+        for name in ("notes.pdf", "config.bin", "lib.so"):
+            p = _file(self.dir, name, f"pasted secret {AWS_KEY} here\n")  # plain text, no NUL
+            rc, out, _ = _run([str(p)])
+            self.assertEqual(rc, 1, f"{name}: a text file with a binary name must be scanned")
+            self.assertIn("aws-access-key-id", out)
 
 
 class TestContractWitness(unittest.TestCase):
