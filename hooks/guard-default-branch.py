@@ -72,7 +72,7 @@ def _nearest_existing_dir(path: str, fallback: str) -> str:
 def main() -> None:
     try:
         payload = json.load(sys.stdin)
-    except (json.JSONDecodeError, ValueError):
+    except ValueError:  # JSONDecodeError is a ValueError subclass — one catch suffices
         _allow()  # unparseable input → fail open, never wedge the tool
     if not isinstance(payload, dict):
         _allow()  # valid-JSON-but-not-an-object → fail open; payload.get(...) must never raise AttributeError
