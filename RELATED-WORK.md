@@ -21,9 +21,10 @@ is representative — a "verify-before-commit" protocol against **tool-stream in
 Contracts ([arXiv:2602.22302](https://arxiv.org/html/2602.22302v1)) formalizes expected behavior as
 preconditions/invariants/recovery and enforces it as **(p, δ, k)-satisfaction** — a contract holds with
 probability *p*, within tolerance *δ*, recovering within *k* steps. It **detects and recovers** from
-behavioral drift and, by its own statement, "assumes the monitor, contract specification, and recovery
-mechanisms operate in a separate privileged enforcement layer" — it targets *drift in honest agents
-under LLM non-determinism, not adversarial agents attempting to circumvent their own contracts*.
+behavioral drift; its evaluated setting is *drift in honest agents under LLM non-determinism*, and it
+does not take up whether the agent might tamper with its own monitor/contract — the integrity of the
+enforcement layer is simply not its subject. (This is excubitor's reading of the paper's scope, not a
+quotation from it.)
 
 **Policy-DSL runtime enforcement — a language for what the agent may do.** A family of systems wraps
 the agent in a domain-specific policy layer intercepting tool calls: NeMo Guardrails (input/output/
@@ -62,8 +63,10 @@ core conviction that prompts are advice and enforcement must be mechanical. It d
   a decidable, testable guarantee on a small surface instead of a probabilistic one on a large surface.
 
 - **The assumption it refuses — that the judge is trustworthy.** This is the sharpest divergence.
-  Most enforcement work (ABC states it explicitly) assumes the monitor/policy layer sits in a *separate
-  privileged tier the agent cannot reach*. Excubitor takes the opposite starting point: in a real agent
+  Most enforcement work leaves the enforcer's *own* integrity unaddressed — implicitly treating the
+  monitor/policy layer as a separate privileged tier the agent cannot reach (ABC, ProGent, and
+  AgentSpec each focus elsewhere and do not center self-tampering). Excubitor takes the opposite
+  starting point: in a real agent
   harness the loop often *can* reach its own guards — the marker file, the hook scripts, the settings
   that register them — so it fences the guards' **own kill-switches** and treats
   *a judge the model can rewrite is not a judge* as a first-class requirement
