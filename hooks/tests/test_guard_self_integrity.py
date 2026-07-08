@@ -137,6 +137,7 @@ class TestBashDenials(unittest.TestCase):
         "echo 'the fourth guard is guard-self-integrity in spirit'",
         "rm nothing.txt # then edit guard-loop-vc.py by hand",  # name only in a comment → bash never acts
         "ls -la # guard-one-unit.py notes",
+        "rm 1allow-default-branch",   # digit-PREFIXED filename ≠ the marker; must not be over-stripped to it
     ]
 
     def test_deny_set(self):

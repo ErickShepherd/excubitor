@@ -94,7 +94,9 @@ def main() -> None:
     scope = (os.environ.get("ONE_UNIT_CAP_SCOPE") or "").strip()
     baseline_raw = (os.environ.get("ONE_UNIT_CAP_BASELINE") or "").strip()
     # Inert unless the driver armed BOTH knobs (opt-in; interactive/`/loop` sessions set neither).
-    if not scope or not baseline_raw.isdigit():
+    # isascii() guards against non-ASCII "digits" (e.g. '²', fullwidth) that str.isdigit() accepts but
+    # int() then rejects with ValueError — treat those as not-armed (inert), never crash.
+    if not scope or not (baseline_raw.isascii() and baseline_raw.isdigit()):
         _allow()
     baseline = int(baseline_raw)
 
