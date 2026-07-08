@@ -50,10 +50,9 @@ class TestCredentialDegradation(unittest.TestCase):
             cu.get_usage(creds, timeout=0.001)
         except RuntimeError as e:
             self.assertNotIn(secret, str(e))
-        # (a no-token creds file yields the "no access token" message, also token-free)
-        with self.assertRaises(RuntimeError) as ctx:
+        # a no-token creds file raises the "no access token" RuntimeError (real coverage; nothing to leak).
+        with self.assertRaises(RuntimeError):
             cu.get_usage(self._creds(json.dumps({"claudeAiOauth": {}})))
-        self.assertNotIn("accessToken", str(ctx.exception).lower().replace("accesstoken", ""))
 
 
 if __name__ == "__main__":

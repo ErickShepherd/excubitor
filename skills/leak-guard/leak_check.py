@@ -82,8 +82,8 @@ class Finding:
 def mask(s: str) -> str:
     """Redact a matched secret for safe printing: reveal a short prefix, hide the rest, note length.
 
-    The prefix is capped at len//3 (max 4) so a SHORT secret isn't largely disclosed by the prefix
-    alone — an 8-char token shows 2 chars, not 4; a token of 6 or fewer shows none."""
+    The prefix is min(len//3, 4) so a SHORT secret isn't largely disclosed by the prefix alone:
+    len ≤ 2 shows none, 3–5 shows 1 char, 6–8 shows 2, 9–11 shows 3, and 12+ caps at 4."""
     s = s.strip()
     prefix = min(4, len(s) // 3)
     if prefix == 0:
