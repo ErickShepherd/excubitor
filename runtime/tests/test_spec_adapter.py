@@ -114,6 +114,21 @@ class TestAdapterGlue(unittest.TestCase):
         self.assertEqual(p.returncode, 0)
         self.assertEqual(json.loads(p.stdout)["decision"], "allow")  # fail-open process contract
 
+    def test_wrongly_typed_fields_do_not_crash(self):
+        # a valid-JSON envelope with wrong-typed fields must be handled, not raise (the core does
+        # len(command)) — the adapter's fail-open promise covers schema violations, not just bad JSON.
+        # A non-string/empty command has nothing to classify → allow:
+        for event in ({"command": 123, "loop_mode": "1"},
+                      {"command": None, "loop_mode": "1"},
+                      {"command": [], "loop_mode": "1"}):
+            self.assertEqual(sa.decide(event)["decision"], "allow", f"non-string command → allow: {event}")
+        # A valid command with a wrong-typed cwd must still classify (cwd coerced to None), not crash:
+        self.assertEqual(sa.decide({"command": "git push", "cwd": [], "loop_mode": "1"})["decision"], "deny")
+        # and the CLI on a wrong-typed command envelope stays fail-open (no crash):
+        p = subprocess.run([sys.executable, str(_HERE.parents[1] / "spec_adapter.py")],
+                           input=json.dumps({"command": 123, "loop_mode": "1"}), capture_output=True, text=True)
+        self.assertEqual((p.returncode, json.loads(p.stdout)["decision"]), (0, "allow"))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

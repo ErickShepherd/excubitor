@@ -212,6 +212,35 @@ class TestSupersede(unittest.TestCase):
         self.assertIn("TELOS-001", ids)
         self.assertNotIn("TELOS-000", ids)  # retired → not audited, but still parsed (history preserved)
 
+    def test_fingerprint_folds_in_verified_by(self):
+        # Removing/adding the executable witness must BUST the incremental cache key, or a now-unbacked
+        # DISCHARGED would carry forward forever as tier=cache without the witness re-running.
+        with_witness = tc.claim_fingerprint("code", "contract", "intent", "tests/t.py::x")
+        without = tc.claim_fingerprint("code", "contract", "intent", "")
+        self.assertNotEqual(with_witness, without)
+
+    def test_witness_tier_prior_without_judged_receipt_does_not_carry(self):
+        # The witness-removal hole: a claim DISCHARGED at witness tier last run (empty `judged` date),
+        # whose verified-by is now gone, must NOT silently carry forward as tier=cache — it must re-judge.
+        with tempfile.TemporaryDirectory() as td:
+            repo = _repo(Path(td), GOOD_RECORD, {"export.py": SRC_EXPORT})  # DISCHARGED, no verified-by
+            first = tc.audit(repo, run_witnesses=False)
+            c0 = first["claims"][0]
+            # simulate last run's ledger row: DISCHARGED at witness tier, empty judged receipt, same hash
+            prior = {c0["id"]: (c0["source_hash"], "DISCHARGED", "witness", "")}
+            c1 = tc.audit(repo, run_witnesses=False, prior=prior)["claims"][0]
+        self.assertNotEqual(c1.get("tier"), "cache", "a witness prior with no judged receipt must not carry")
+        self.assertTrue(c1["needs_judgment"], "it must be re-judged instead of silently carried forward")
+
+    def test_nul_byte_source_does_not_abort_audit(self):
+        # A first-party .py containing an embedded NUL byte makes ast.parse raise ValueError (not
+        # SyntaxError); build_graph/resolve_pointer must skip it, not crash the whole audit — the
+        # untrusted-repo-safe guarantee. audit() must complete and still see the good claim.
+        with tempfile.TemporaryDirectory() as td:
+            repo = _repo(Path(td), GOOD_RECORD, {"export.py": SRC_EXPORT, "poison.py": "x = '\x00'\n"})
+            r = tc.audit(repo, run_witnesses=False)  # must not raise
+        self.assertIn("TELOS-001", {c["id"] for c in r["claims"]})
+
     def test_dangling_superseded_by_raises(self):
         # DEF-5 regression: superseded-by a well-formed but NONEXISTENT id must abort, not silently retire
         # the live claim (audit() skips any superseded claim, so a typo'd target makes a real purpose vanish).
@@ -243,6 +272,17 @@ class TestResolver(unittest.TestCase):
             self.assertIn("def run", seg)
             self.assertFalse(tc.resolve_pointer(repo, "export.py::ghost")[0])
             self.assertFalse(tc.resolve_pointer(repo, "missing.py::run")[0])
+
+    def test_resolve_is_repo_confined(self):
+        # A discharged-by pointer must not escape the repo: an absolute path or `..` traversal (which
+        # would turn the resolver into a file-exists/valid-Python oracle outside the tree) resolves to
+        # not-found, never reading the out-of-repo file.
+        with tempfile.TemporaryDirectory() as td:
+            repo = _repo(Path(td), GOOD_RECORD, {"export.py": SRC_EXPORT})
+            # a real, definitely-existing outside file — must still resolve False (never read)
+            self.assertFalse(tc.resolve_pointer(repo, "/etc/hostname::x")[0])
+            self.assertFalse(tc.resolve_pointer(repo, "../../../../etc/hostname::x")[0])
+            self.assertFalse(tc.resolve_pointer(repo, "../secret.py::y")[0])
 
     def test_resolver_never_executes(self):
         # a module with an import-time side effect must resolve via AST without triggering it

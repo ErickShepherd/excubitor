@@ -68,6 +68,15 @@ class TestGuardDefaultBranch(unittest.TestCase):
             rc, out = _run({"tool_input": {"file_path": str(Path(td, "f.py"))}, "cwd": td})
             self.assertTrue(_denied(out), "the resolved custom default (develop) is protected too")
 
+    def test_slash_containing_default_protected(self):
+        # A slash-containing default branch (release/2.0, team/main) must stay protected — rsplit("/")
+        # used to yield "2.0" and silently un-fence the real default. removeprefix keeps the full name.
+        with tempfile.TemporaryDirectory() as td:
+            _repo(td, branch="release/2.0", origin_head="release/2.0")
+            rc, out = _run({"tool_input": {"file_path": str(Path(td, "f.py"))}, "cwd": td})
+            self.assertEqual(rc, 0)
+            self.assertTrue(_denied(out), "editing on the slash-named default branch must be denied")
+
     def test_feature_branch_defers(self):
         with tempfile.TemporaryDirectory() as td:
             _repo(td, branch="main")
@@ -105,6 +114,12 @@ class TestGuardDefaultBranch(unittest.TestCase):
             rc, out = _run({"tool_input": {"file_path": str(Path(td, "f.py"))}, "cwd": td}, env=env)
             self.assertEqual(rc, 0)              # never non-zero
             self.assertFalse(_denied(out))      # fails open (defer), does not crash
+
+    def test_non_object_json_fails_open(self):
+        # valid JSON that is not an object must fail open, not crash on payload.get(...).
+        for payload in (5, [], None, "x"):
+            rc, out = _run(payload)  # _run json.dumps() the value; a bare scalar/array is valid JSON
+            self.assertEqual((rc, out.strip()), (0, ""), f"non-object payload must defer: {payload!r}")
 
 
 if __name__ == "__main__":

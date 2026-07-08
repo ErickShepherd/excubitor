@@ -96,6 +96,10 @@ if [[ -z "$DECISION" ]]; then
   else
     say "   ${RED}${BOLD}✗ UNSAVED_WORK.txt is gone.${RST} No reflog, no undo. Three hours, unattended."
   fi
+else
+  # symmetric with Scene 1: if the guard misbehaves and DENIES while unarmed (the exact regression this
+  # crash-test exists to catch), surface it rather than silently swallowing the malfunction.
+  say "   ${RED}(unexpected: guard denied while unarmed — a regression; the demo drives the real guard)${RST}"
 fi
 pause; rule
 

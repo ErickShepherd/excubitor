@@ -64,6 +64,20 @@ class TestCheckOracleFrozen(unittest.TestCase):
         self._commit("feature.py", "x = 2\n")
         self.assertEqual(_run(self.d, "main", self.VB), 0)
 
+    def test_ignores_inherited_git_dir(self):
+        # An inherited GIT_DIR must NOT redirect the trusted queries away from --repo (confused-deputy
+        # spoof). With GIT_DIR pointing at a non-repo, an unsanitized check would error → fail-deny;
+        # sanitized, `-C <repo>` remains the sole source of truth and the untouched oracle stays FROZEN.
+        self._commit("feature.py", "x = 2\n")
+        env = dict(os.environ)
+        env["GIT_DIR"] = os.path.join(self.d, "nonexistent-gitdir")
+        env["GIT_WORK_TREE"] = self.d
+        p = subprocess.run(
+            [sys.executable, str(SCRIPT), "--repo", self.d, "--base", "main", "--verified-by", self.VB],
+            capture_output=True, text=True, env=env,
+        )
+        self.assertEqual(p.returncode, 0, f"GIT_DIR must be ignored; got: {p.stderr}")
+
     def test_not_frozen_when_oracle_edited(self):
         self._commit("tests/test_oracle.py", "def test_ok():\n    assert True  # weakened\n")
         self.assertEqual(_run(self.d, "main", self.VB), 1)
@@ -73,6 +87,35 @@ class TestCheckOracleFrozen(unittest.TestCase):
         self.g("add", "-A")
         self.g("commit", "-m", "rm oracle")
         self.assertEqual(_run(self.d, "main", self.VB), 1)
+
+    def test_not_frozen_when_one_of_several_oracle_files_deleted(self):
+        # THE MULTI-FILE HOLE: a verified-by naming several oracle files, of which the loop deletes ONE
+        # while leaving the others untouched, used to pass FROZEN (survivors alone looked clean). The
+        # deleted file was tracked at base, so its disappearance is tamper → must fail-deny.
+        (Path(self.d) / "tests" / "test_oracle_b.py").write_text("def test_b():\n    assert True\n")
+        self.g("add", "-A")
+        self.g("commit", "-m", "add second oracle")
+        # re-fork loop branch from this two-oracle base
+        self.g("checkout", "main")
+        self.g("merge", "--ff-only", "loop/telos")
+        self.g("checkout", "loop/telos")
+        os.remove(Path(self.d) / "tests" / "test_oracle.py")  # delete just ONE of the two
+        self.g("add", "-A")
+        self.g("commit", "-m", "rm one oracle")
+        vb = "python3 tests/test_oracle.py tests/test_oracle_b.py"
+        self.assertEqual(_run(self.d, "main", vb), 1, "deleting one of several oracle files must fail-deny")
+
+    def test_frozen_when_multiple_oracle_files_untouched(self):
+        # control: the same two-file verified-by, both untouched → still FROZEN (no false positive).
+        (Path(self.d) / "tests" / "test_oracle_b.py").write_text("def test_b():\n    assert True\n")
+        self.g("add", "-A")
+        self.g("commit", "-m", "add second oracle")
+        self.g("checkout", "main")
+        self.g("merge", "--ff-only", "loop/telos")
+        self.g("checkout", "loop/telos")
+        self._commit("feature.py", "x = 3\n")  # touch only feature code
+        vb = "python3 tests/test_oracle.py tests/test_oracle_b.py"
+        self.assertEqual(_run(self.d, "main", vb), 0, "both oracle files untouched → FROZEN")
 
     def test_frozen_with_pytest_nodeid(self):
         # verified-by carries a `path::Test::method` nodeid; the file part is what matters

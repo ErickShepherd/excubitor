@@ -18,6 +18,7 @@ without parsing ANSI. Deterministic: same input → byte-identical SVG.
 from __future__ import annotations
 
 import html
+import re
 import sys
 
 # terminal palette (a calm dark scheme; both the SVG and the demo read fine in light or dark READMEs)
@@ -87,9 +88,16 @@ def render(lines: list[str]) -> str:
     return "\n".join(out) + "\n"
 
 
+# Any ANSI escape sequence (CSI `ESC [ … <final>`, plus a bare/stray ESC). The documented pipeline
+# already produces NO_COLOR plain text, but an out-of-contract input (a captured colored transcript)
+# could carry raw ESC bytes that html.escape does NOT strip → invalid XML in the SVG. Remove them so
+# malformed input degrades to clean text instead of an unparseable image.
+_ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b.")
+
+
 def main() -> int:
-    lines = sys.stdin.read().replace("\x1b[H\x1b[2J\x1b[3J", "").splitlines()
-    sys.stdout.write(render(lines))
+    text = _ANSI.sub("", sys.stdin.read())
+    sys.stdout.write(render(text.splitlines()))
     return 0
 
 

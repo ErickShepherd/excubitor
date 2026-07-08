@@ -111,6 +111,7 @@ class TestBashDenials(unittest.TestCase):
         "echo disarm > /repo/.claude/allow-default-branch",         # redirect target
         "echo disarm >.claude/allow-default-branch",                # attached redirect
         "rm -f ~/.claude/hooks/guard-loop-vc.py",
+        "rm -f hooks/guard-loop-vc.py # with a trailing comment",  # real path BEFORE # → still caught
         "mv hooks/guard-default-branch.py /tmp/parked.py",
         "cp /dev/null hooks/guard-one-unit.py",
         "sed -i 's/PreToolUse/Disabled/' /home/u/.claude/settings.json",
@@ -134,6 +135,9 @@ class TestBashDenials(unittest.TestCase):
         # round-2 segmentation false-deny (a `(...)` in a commit message) is what this pins as fixed
         'git commit -m "refactor (see guard-loop-vc.py) later"',
         "echo 'the fourth guard is guard-self-integrity in spirit'",
+        "rm nothing.txt # then edit guard-loop-vc.py by hand",  # name only in a comment → bash never acts
+        "ls -la # guard-one-unit.py notes",
+        "rm 1allow-default-branch",   # digit-PREFIXED filename ≠ the marker; must not be over-stripped to it
     ]
 
     def test_deny_set(self):
@@ -208,6 +212,20 @@ class TestActivationAndContract(unittest.TestCase):
     def test_missing_target_defers(self):
         rc, out = _run({"tool_name": "Write", "tool_input": {}, "cwd": "/repo"})
         self.assertEqual((rc, out.strip()), (0, ""))
+
+    def test_non_object_json_fails_open(self):
+        # non-object JSON must fail open, not crash on payload.get(...).
+        for raw in ("5", "[]", "null"):
+            rc, out = _run(raw)
+            self.assertEqual((rc, out.strip()), (0, ""), f"non-object payload must defer: {raw!r}")
+
+    def test_nul_byte_does_not_crash_or_suppress_sibling(self):
+        # A NUL byte in one segment used to raise ValueError out of realpath (uncaught) → non-zero exit
+        # → under fail-open the whole compound command ran, disarming the guard. Now the NUL segment is
+        # skipped and the real kill-switch in the next segment is still caught (DENY, exit 0).
+        rc, out = _run(_bash("rm \x00x ; rm hooks/guard-loop-vc.py", cwd="/repo"))
+        self.assertEqual(rc, 0, "must exit 0 (fail-open process contract)")
+        self.assertTrue(_denied(out), "the NUL must not suppress the sibling kill-switch write")
 
 
 if __name__ == "__main__":
