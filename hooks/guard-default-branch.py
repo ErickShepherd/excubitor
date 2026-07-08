@@ -74,12 +74,15 @@ def main() -> None:
         payload = json.load(sys.stdin)
     except (json.JSONDecodeError, ValueError):
         _allow()  # unparseable input → fail open, never wedge the tool
+    if not isinstance(payload, dict):
+        _allow()  # valid-JSON-but-not-an-object → fail open; payload.get(...) must never raise AttributeError
 
     # Blanket off-switch (set via settings.json "env" to disable globally).
     if os.environ.get("CLAUDE_ALLOW_DEFAULT_BRANCH"):
         _allow()
 
-    tool_input = payload.get("tool_input") or {}
+    ti = payload.get("tool_input")
+    tool_input = ti if isinstance(ti, dict) else {}
     cwd = payload.get("cwd") or os.getcwd()
     # Edit/Write use file_path; NotebookEdit uses notebook_path.
     target = tool_input.get("file_path") or tool_input.get("notebook_path") or cwd

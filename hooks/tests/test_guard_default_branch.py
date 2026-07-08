@@ -106,6 +106,12 @@ class TestGuardDefaultBranch(unittest.TestCase):
             self.assertEqual(rc, 0)              # never non-zero
             self.assertFalse(_denied(out))      # fails open (defer), does not crash
 
+    def test_non_object_json_fails_open(self):
+        # valid JSON that is not an object must fail open, not crash on payload.get(...).
+        for payload in (5, [], None, "x"):
+            rc, out = _run(payload)  # _run json.dumps() the value; a bare scalar/array is valid JSON
+            self.assertEqual((rc, out.strip()), (0, ""), f"non-object payload must defer: {payload!r}")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

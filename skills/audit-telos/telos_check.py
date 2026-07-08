@@ -331,7 +331,10 @@ def resolve_pointer(repo: Path, pointer: str) -> tuple[bool, ast.AST | None, str
     try:
         src = f.read_text(encoding="utf-8", errors="replace")
         tree = ast.parse(src, filename=str(f))
-    except (OSError, SyntaxError):
+    except (OSError, SyntaxError, ValueError):
+        # ValueError: ast.parse raises it (not SyntaxError) on a source with an embedded NUL byte —
+        # a valid Unicode char that errors="replace" does not strip. Catch it so one such file in an
+        # untrusted repo is skipped (not-found) rather than aborting the whole audit (untrusted-repo safe).
         return False, None, None
     node = _find_symbol_node(tree, symbol)
     if node is None:
@@ -375,8 +378,8 @@ def build_graph(repo: Path):
         modules.add(mod)
         try:
             tree = ast.parse(p.read_text(encoding="utf-8", errors="replace"), filename=str(p))
-        except SyntaxError:
-            continue
+        except (SyntaxError, ValueError):
+            continue  # ValueError: embedded NUL byte in the source — skip the file, don't abort the audit
         for node in ast.iter_child_nodes(tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 q = f"{mod}::{node.name}"

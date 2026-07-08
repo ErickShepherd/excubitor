@@ -245,6 +245,17 @@ class TestGuardLoopVC(unittest.TestCase):
         rc, out = _run("")
         self.assertEqual((rc, out.strip()), (0, ""))
 
+    def test_non_object_json_fails_open(self):
+        # valid JSON that is not an object (5, "x", [], null) must fail OPEN, not crash with an
+        # AttributeError on payload.get(...) — the never-exit-non-zero contract is unconditional.
+        for raw in ("5", '"x"', "[]", "null", "true"):
+            rc, out = _run("", raw=raw)
+            self.assertEqual((rc, out.strip()), (0, ""), f"non-object payload must defer: {raw!r}")
+
+    def test_non_dict_tool_input_fails_open(self):
+        rc, out = _run("", raw=json.dumps({"tool_name": "Bash", "tool_input": "not-a-dict"}))
+        self.assertEqual((rc, out.strip()), (0, ""))
+
 
 def _mkrepo(branches: "tuple[str, ...]" = (), *, checkout: str, default_config: "str | None" = None) -> str:
     """Create a throwaway local git repo (no remote) with an initial commit on `main`.

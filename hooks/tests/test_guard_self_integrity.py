@@ -209,6 +209,20 @@ class TestActivationAndContract(unittest.TestCase):
         rc, out = _run({"tool_name": "Write", "tool_input": {}, "cwd": "/repo"})
         self.assertEqual((rc, out.strip()), (0, ""))
 
+    def test_non_object_json_fails_open(self):
+        # non-object JSON must fail open, not crash on payload.get(...).
+        for raw in ("5", "[]", "null"):
+            rc, out = _run(raw)
+            self.assertEqual((rc, out.strip()), (0, ""), f"non-object payload must defer: {raw!r}")
+
+    def test_nul_byte_does_not_crash_or_suppress_sibling(self):
+        # A NUL byte in one segment used to raise ValueError out of realpath (uncaught) → non-zero exit
+        # → under fail-open the whole compound command ran, disarming the guard. Now the NUL segment is
+        # skipped and the real kill-switch in the next segment is still caught (DENY, exit 0).
+        rc, out = _run(_bash("rm \x00x ; rm hooks/guard-loop-vc.py", cwd="/repo"))
+        self.assertEqual(rc, 0, "must exit 0 (fail-open process contract)")
+        self.assertTrue(_denied(out), "the NUL must not suppress the sibling kill-switch write")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
