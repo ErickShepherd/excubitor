@@ -117,6 +117,11 @@ branch, push, branch delete) — are the ones fenced. If a specific loop genuine
 verbs fenced, add it to `_classify`; the general posture is *don't hand the loop a capability it
 doesn't need*, not *enumerate every git verb*.
 
+The same is true of **`gh`**: only `gh pr merge` (a server-side integration) is fenced. Other
+write-capable `gh` verbs — `gh repo sync` (can fast-forward a remote branch), `gh release create`,
+`gh api` with a mutating method — are **not** fenced, for the same reason: the loop shouldn't be
+handed a `gh` capability it doesn't need. Documented here so the residual is enumerated, not implied.
+
 ## ACCEPTED — leak_check trusts its owner-authored `--private-tokens` regexes
 
 `skills/leak-guard/leak_check.py` runs each `re:` rule from the `--private-tokens` file against the
