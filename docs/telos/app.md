@@ -119,3 +119,12 @@ claims as proven.
 - verified-by: skills/leak-guard/tests/test_leak_check.py::TestContractWitness::test_contract
 - last-grilled: 2026-07-07
 - anchor: none
+
+### TELOS-011 — the decision core is runtime-neutral, not Claude-Code-bound
+- state: DISCHARGED
+- intent: the repo claims portability to any runtime that can intercept tool calls; a claim of portability that isn't backed by a second adapter and an equivalence proof is exactly the unproven assertion this repo refuses to make, so the same decision core must yield the same deny/allow through a non-Claude-Code envelope
+- discharged-by: runtime/spec_adapter.py::decide
+- contract: decide translates a host-agnostic envelope (command, cwd, loop_mode) through the guard-loop-vc decision core without reimplementing it, and reaches the same deny/allow decision the Claude Code PreToolUse hook reaches for the same command and arming mode
+- verified-by: runtime/tests/test_spec_adapter.py::TestRuntimeEquivalence::test_cc_and_generic_adapter_agree
+- last-grilled: 2026-07-07
+- anchor: none
