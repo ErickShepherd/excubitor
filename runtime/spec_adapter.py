@@ -57,14 +57,21 @@ def decide(event: dict) -> dict:
     The classification is byte-for-byte the same logic the Claude Code hook applies — this function
     only translates the envelope and the arming signal, which is inherently the per-runtime part.
     """
+    if not isinstance(event, dict):
+        return _allow()
     loop_mode = event.get("loop_mode")
     if not loop_mode:
         return _allow()  # inactive unless the loop is explicitly armed (same posture as the hook)
     command = event.get("command")
-    if not command:
-        return _allow()  # no shell command in this event → nothing for a VC guard to classify
+    # Type-guard the envelope fields before handing them to the core: a wrongly-typed `command`
+    # (e.g. an int) would raise deep in split_segments (`len(command)`), breaking the fail-open promise
+    # this adapter makes. A non-string command has nothing to classify → allow; cwd must be str-or-None.
+    if not isinstance(command, str) or not command:
+        return _allow()
+    cwd = event.get("cwd")
+    cwd = cwd if isinstance(cwd, str) else None
     yolo = str(loop_mode).strip().lower() == "yolo"
-    reason = _core._dangerous(command, yolo, event.get("cwd"))
+    reason = _core._dangerous(command, yolo, cwd)
     return {"decision": "deny", "reason": reason} if reason else _allow()
 
 
