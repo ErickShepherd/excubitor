@@ -97,17 +97,23 @@ def load_private_patterns(path: Path) -> list[tuple[str, "re.Pattern[str]"]]:
         line = raw.strip()
         if not line or line.startswith("#"):
             continue
+        # The category LABEL must be opaque: it is printed beside every finding, and a private token
+        # is exactly what "must never ship" — embedding the rule text here would re-leak the secret into
+        # the CI transcript, defeating the masking. Label by the rule's LINE in the tokens file so the
+        # operator can locate it without the value ever reaching stdout/stderr.
         if line.startswith("re:"):
             expr = line[3:]
             try:
-                out.append((f"private-regex:{expr}", re.compile(expr)))
+                out.append((f"private-regex@{i}", re.compile(expr)))
             except re.error as e:
                 # a malformed rule is a usage error → exit 2 (matches the exit-code table), and it is
-                # LOUD (never a silently-skipped rule that would quietly disable a leak check).
-                print(f"leak_check: {path}:{i}: bad regex {expr!r}: {e}", file=sys.stderr)
+                # LOUD (never a silently-skipped rule that would quietly disable a leak check). Point at
+                # the line, not the pattern text (which may itself embed the literal being hunted); the
+                # re.error message is structural (position/reason), not an echo of the pattern.
+                print(f"leak_check: bad private regex at {path}:{i}: {e}", file=sys.stderr)
                 raise SystemExit(2)
         else:
-            out.append((f"private-literal:{line}", re.compile(re.escape(line), re.IGNORECASE)))
+            out.append((f"private-literal@{i}", re.compile(re.escape(line), re.IGNORECASE)))
     return out
 
 
