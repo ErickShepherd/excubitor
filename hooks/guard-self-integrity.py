@@ -72,7 +72,9 @@ import sys
 # by split_segments(), so a kill-switch name quoted in an argument is NOT a false deny.
 _SEPARATORS = frozenset(";|&\n()`")
 # Leading redirection/fd noise on a token (`>file`, `2>>file`, `<file`) so the path inside is seen.
-_REDIR_PREFIX = re.compile(r"^[\d<>&]+")
+# The digits are an OPTIONAL fd number that must be FOLLOWED by a real redirect op (`<`/`>`/`&`) — else
+# a bare digit-prefixed filename (`1allow-default-branch`, `2024-notes.txt`) would be wrongly stripped.
+_REDIR_PREFIX = re.compile(r"^\d*[<>&]+")
 
 
 def split_segments(command: str) -> list[str]:
