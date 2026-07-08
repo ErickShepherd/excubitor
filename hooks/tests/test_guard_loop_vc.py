@@ -124,6 +124,8 @@ class TestGuardLoopVC(unittest.TestCase):
         "gh -R owner/repo pr view 5",          # value-flag before a read subcommand → allow
         "gh pr list --label merge",           # `merge` is a flag value, not the subcommand
         "gh pr checkout some-merge-branch",   # branch name contains 'merge'
+        "git worktree add ../wt remove",      # 'remove' here is a branch/path name, not the subcommand
+        "git worktree list",
         "git status && git diff",
         # read forms of the trust-anchor verbs stay allowed (the guards themselves use them)
         "git symbolic-ref HEAD",
@@ -243,6 +245,17 @@ class TestGuardLoopVC(unittest.TestCase):
 
     def test_empty_command_defers(self):
         rc, out = _run("")
+        self.assertEqual((rc, out.strip()), (0, ""))
+
+    def test_non_object_json_fails_open(self):
+        # valid JSON that is not an object (5, "x", [], null) must fail OPEN, not crash with an
+        # AttributeError on payload.get(...) — the never-exit-non-zero contract is unconditional.
+        for raw in ("5", '"x"', "[]", "null", "true"):
+            rc, out = _run("", raw=raw)
+            self.assertEqual((rc, out.strip()), (0, ""), f"non-object payload must defer: {raw!r}")
+
+    def test_non_dict_tool_input_fails_open(self):
+        rc, out = _run("", raw=json.dumps({"tool_name": "Bash", "tool_input": "not-a-dict"}))
         self.assertEqual((rc, out.strip()), (0, ""))
 
 

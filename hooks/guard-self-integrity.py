@@ -72,7 +72,9 @@ import sys
 # by split_segments(), so a kill-switch name quoted in an argument is NOT a false deny.
 _SEPARATORS = frozenset(";|&\n()`")
 # Leading redirection/fd noise on a token (`>file`, `2>>file`, `<file`) so the path inside is seen.
-_REDIR_PREFIX = re.compile(r"^[\d<>&]+")
+# The digits are an OPTIONAL fd number that must be FOLLOWED by a real redirect op (`<`/`>`/`&`) — else
+# a bare digit-prefixed filename (`1allow-default-branch`, `2024-notes.txt`) would be wrongly stripped.
+_REDIR_PREFIX = re.compile(r"^\d*[<>&]+")
 
 
 def split_segments(command: str) -> list[str]:
@@ -159,13 +161,19 @@ def _kill_switch(path: str) -> str | None:
 def _target_kill_switch(target: str, cwd: str) -> str | None:
     """Kill-switch check for a file-tool target: the path as given AND its symlink-resolved form
     (a symlink named something innocent must not launder a write into a guard script)."""
-    resolved = os.path.abspath(os.path.join(cwd, os.path.expanduser(target)))
+    try:
+        resolved = os.path.abspath(os.path.join(cwd, os.path.expanduser(target)))
+    except ValueError:
+        return None  # e.g. an embedded NUL byte — treat as no-match (the caller's scan continues)
     hit = _kill_switch(resolved)
     if hit:
         return hit
     try:
         real = os.path.realpath(resolved)
-    except OSError:
+    except (OSError, ValueError):
+        # realpath lstats each component; an embedded NUL raises ValueError ("embedded null byte"),
+        # NOT OSError — catch both so one poisoned token can't crash the guard (fail-open would then
+        # let a sibling kill-switch write through) or suppress the scan of the remaining tokens.
         return None
     return _kill_switch(real) if real != resolved else None
 
@@ -174,7 +182,10 @@ def _bash_kill_switch(command: str, cwd: str) -> str | None:
     """Best-effort scan of a Bash command for any token naming a kill-switch path."""
     for segment in split_segments(command):
         try:
-            tokens = shlex.split(segment)
+            # comments=True matches bash: an unquoted `#` starts a comment, so a kill-switch name that
+            # appears only AFTER it (`rm foo # see guard-loop-vc.py`) is never acted on and must not be a
+            # false deny. A `#` inside quotes is preserved by split_segments and stays a real token.
+            tokens = shlex.split(segment, comments=True)
         except ValueError:
             tokens = segment.split()  # unbalanced quotes etc. → best-effort
         for tok in tokens:
@@ -190,8 +201,10 @@ def _bash_kill_switch(command: str, cwd: str) -> str | None:
 def main() -> None:
     try:
         payload = json.load(sys.stdin)
-    except (json.JSONDecodeError, ValueError):
+    except ValueError:  # JSONDecodeError is a ValueError subclass — one catch suffices
         _allow()  # unparseable input → fail open, never wedge the tool
+    if not isinstance(payload, dict):
+        _allow()  # valid-JSON-but-not-an-object → fail open; payload.get(...) must never raise AttributeError
 
     # Inactive unless explicitly in a guarded loop — the same opt-in marker as guard-loop-vc.py,
     # either mode ("1" or "yolo"): YOLO's permit-to-act leans on these guards even harder.
@@ -199,7 +212,8 @@ def main() -> None:
         _allow()
 
     tool = payload.get("tool_name")
-    tool_input = payload.get("tool_input") or {}
+    ti = payload.get("tool_input")
+    tool_input = ti if isinstance(ti, dict) else {}
     cwd = payload.get("cwd") or os.getcwd()
 
     hit = None

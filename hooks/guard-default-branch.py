@@ -72,14 +72,17 @@ def _nearest_existing_dir(path: str, fallback: str) -> str:
 def main() -> None:
     try:
         payload = json.load(sys.stdin)
-    except (json.JSONDecodeError, ValueError):
+    except ValueError:  # JSONDecodeError is a ValueError subclass — one catch suffices
         _allow()  # unparseable input → fail open, never wedge the tool
+    if not isinstance(payload, dict):
+        _allow()  # valid-JSON-but-not-an-object → fail open; payload.get(...) must never raise AttributeError
 
     # Blanket off-switch (set via settings.json "env" to disable globally).
     if os.environ.get("CLAUDE_ALLOW_DEFAULT_BRANCH"):
         _allow()
 
-    tool_input = payload.get("tool_input") or {}
+    ti = payload.get("tool_input")
+    tool_input = ti if isinstance(ti, dict) else {}
     cwd = payload.get("cwd") or os.getcwd()
     # Edit/Write use file_path; NotebookEdit uses notebook_path.
     target = tool_input.get("file_path") or tool_input.get("notebook_path") or cwd
@@ -108,8 +111,11 @@ def main() -> None:
     # Always protect the conventional names; a resolved origin/HEAD ADDS to the set, never replaces it
     # (replacing it would silently un-protect main/master whenever origin/HEAD points elsewhere).
     protected = {"main", "master"}
-    if origin_head:
-        protected.add(origin_head.rsplit("/", 1)[-1])
+    if origin_head.startswith("refs/remotes/origin/"):
+        # Strip the fixed ref prefix, NOT rsplit("/") — a branch name can itself contain slashes
+        # (release/2.0, team/main), and rsplit would yield the wrong tail ("2.0") and silently
+        # un-protect the real default branch. removeprefix keeps the full name.
+        protected.add(origin_head.removeprefix("refs/remotes/origin/"))
 
     if branch in protected:
         _deny(

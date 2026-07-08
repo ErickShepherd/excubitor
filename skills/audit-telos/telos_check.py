@@ -325,13 +325,28 @@ def _find_symbol_node(tree: ast.AST, symbol: str) -> ast.AST | None:
 def resolve_pointer(repo: Path, pointer: str) -> tuple[bool, ast.AST | None, str | None]:
     """Resolve `path::symbol` statically. Returns (exists, node, source_segment). Never imports/runs."""
     path_str, _, symbol = pointer.partition("::")
+    # Confine resolution to the repo: an absolute `path_str` makes `repo / path_str` discard `repo`
+    # (pathlib), and `..` components walk out of the tree — a crafted `discharged-by: /etc/shadow::x`
+    # or `../../secret.py::y` would turn this into a file-exists / valid-Python oracle outside the repo.
+    # The resolver never executes, so the impact is only that oracle, but it still breaches the stated
+    # "untrusted-repo safe, repo-confined" boundary — reject anything that escapes.
+    if Path(path_str).is_absolute() or ".." in Path(path_str).parts:
+        return False, None, None
     f = repo / path_str
+    try:
+        if not f.resolve().is_relative_to(repo.resolve()):
+            return False, None, None  # symlink or normalization that lands outside the repo
+    except (OSError, ValueError, RuntimeError):
+        return False, None, None
     if not f.is_file():
         return False, None, None
     try:
         src = f.read_text(encoding="utf-8", errors="replace")
         tree = ast.parse(src, filename=str(f))
-    except (OSError, SyntaxError):
+    except (OSError, SyntaxError, ValueError):
+        # ValueError: ast.parse raises it (not SyntaxError) on a source with an embedded NUL byte —
+        # a valid Unicode char that errors="replace" does not strip. Catch it so one such file in an
+        # untrusted repo is skipped (not-found) rather than aborting the whole audit (untrusted-repo safe).
         return False, None, None
     node = _find_symbol_node(tree, symbol)
     if node is None:
@@ -375,8 +390,8 @@ def build_graph(repo: Path):
         modules.add(mod)
         try:
             tree = ast.parse(p.read_text(encoding="utf-8", errors="replace"), filename=str(p))
-        except SyntaxError:
-            continue
+        except (SyntaxError, ValueError):
+            continue  # ValueError: embedded NUL byte in the source — skip the file, don't abort the audit
         for node in ast.iter_child_nodes(tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 q = f"{mod}::{node.name}"
@@ -512,16 +527,21 @@ def content_hash(source_segment: str | None) -> str:
     return hashlib.sha256(source_segment.encode("utf-8")).hexdigest()[:_ANCHOR_HEX_LEN]
 
 
-def claim_fingerprint(source_segment: str | None, contract: str, intent: str) -> str:
+def claim_fingerprint(source_segment: str | None, contract: str, intent: str,
+                      verified_by: str = "") -> str:
     """The incremental-cache key for `--prior`: the discharged-by symbol's source PLUS the claim's
-    contract+intent. Folding the prose in is load-bearing — a claim can be AMENDED (its contract re-grilled)
-    while the pointed code stays byte-identical; keying on the code alone would carry the old DISCHARGED
-    forward and the LLM would never judge the NEW contract against the unchanged code — a silent pass in the
-    amend-fork's own path. Changing the contract OR the intent OR the code now busts the cache."""
+    contract+intent+verified-by. Folding the prose in is load-bearing — a claim can be AMENDED (its
+    contract re-grilled) while the pointed code stays byte-identical; keying on the code alone would carry
+    the old DISCHARGED forward and the LLM would never judge the NEW contract against the unchanged code — a
+    silent pass in the amend-fork's own path. Folding in `verified-by` closes the witness-removal hole:
+    deleting the executable witness (leaving code/contract/intent identical) must BUST the cache, or a
+    now-unbacked DISCHARGED would carry forward forever as tier=cache without the witness ever re-running.
+    Changing the contract OR the intent OR the code OR the witness now busts the cache."""
     h = hashlib.sha256()
     h.update((source_segment or "").encode("utf-8"))
     h.update(b"\x00"); h.update(contract.encode("utf-8"))
     h.update(b"\x00"); h.update(intent.encode("utf-8"))
+    h.update(b"\x00"); h.update(verified_by.encode("utf-8"))
     return h.hexdigest()[:_ANCHOR_HEX_LEN]
 
 
@@ -609,7 +629,8 @@ def audit(repo: Path, run_witnesses: bool = True, today: date | None = None,
             continue
         accounted_seed.add(pointer_qualname(repo, c.discharged_by))
         res["source_hash"] = claim_fingerprint(segment, c.fields.get("contract", ""),
-                                                c.fields.get("intent", ""))  # ledger cache key for --prior
+                                                c.fields.get("intent", ""),
+                                                c.fields.get("verified-by", ""))  # ledger cache key for --prior
         # anchor / staleness → SUSPECT (mechanical; never auto-DRIFTED)
         anchor = c.fields.get("anchor", "none").strip().lower()
         suspect_reasons = []
@@ -642,7 +663,11 @@ def audit(repo: Path, run_witnesses: bool = True, today: date | None = None,
         # whose tool-written `judged` receipt is fresh — never an unbacked `asserted`, never a stale judgment.
         pr = prior.get(c.id)
         if (pr and pr[0] == res["source_hash"] and pr[1] == "DISCHARGED"
-                and pr[2] in _CARRY_TIERS and not is_stale(pr[3], today)):
+                and pr[2] in _CARRY_TIERS and pr[3] and not is_stale(pr[3], today)):
+            # `pr[3]` (a non-empty tool-written `judged` date) is REQUIRED: a `witness`-tier prior emits an
+            # empty judged (`is_stale("")` is False, which would otherwise read as "fresh") — so without this
+            # a claim whose witness was removed would carry forward forever as tier=cache, never re-run. A
+            # real judged/cache verdict always carries a date; a witness prior with no receipt re-judges.
             res.update(state="DISCHARGED", tier="cache", judged=pr[3],
                        rationale=f"unchanged since prior DISCHARGED (fresh {pr[2]} receipt"
                                  f"{' ' + pr[3] if pr[3] else ''}; incremental skip)")
@@ -751,34 +776,34 @@ def emit_ledger(result: dict, judgments: dict | None, audit_date: str) -> str:
     cov = result["coverage"]
     cov_str = f"{cov*100:.0f}%" if cov is not None else "n/a (non-Python)"
     low_cov = cov is not None and cov < 0.5 and result["significant_surface"] >= 20
-    verdict = ("SUSPECT (whole record): coverage implausibly low — under-claiming likely"
-               if low_cov else f"{len(rows)+len(orphan_rows)} telos finding(s)")
+    cov_verdict = ("SUSPECT (whole record): coverage implausibly low — under-claiming likely"
+                   if low_cov else f"{len(rows)+len(orphan_rows)} telos finding(s)")
 
-    L = [f"# audit-telos — {repo} — {audit_date}", "",
-         f"**Verdict:** {verdict}  ·  **Coverage:** {cov_str} "
-         f"({result['accounted_for']}/{result['significant_surface']} significant surface accounted-for) "
-         f"·  **Claims:** {len(result['claims'])}  ·  "
-         f"**Telos:** {textwrap.shorten(result['telos'], width=80, placeholder=' …')}", ""]
+    out = [f"# audit-telos — {repo} — {audit_date}", "",
+           f"**Verdict:** {cov_verdict}  ·  **Coverage:** {cov_str} "
+           f"({result['accounted_for']}/{result['significant_surface']} significant surface accounted-for) "
+           f"·  **Claims:** {len(result['claims'])}  ·  "
+           f"**Telos:** {textwrap.shorten(result['telos'], width=80, placeholder=' …')}", ""]
     if low_cov:
-        L += ["> ⚠ Coverage is advisory in v1, but this is low enough to refuse a clean verdict: the record "
-              "likely under-claims (a Goodhart trap). Add claims for the unclaimed significant surface.", ""]
+        out += ["> ⚠ Coverage is advisory in v1, but this is low enough to refuse a clean verdict: the record "
+                "likely under-claims (a Goodhart trap). Add claims for the unclaimed significant surface.", ""]
     # NB: placeholders for empty sections must NOT be bullets — a bullet under `## Clean` would be
     # miscounted as a target-level TN by audit_accuracy.py (it credits every bullet in that section).
-    L += ["## Open findings — worklist (ranked; work top-down, one isolated change each)",
-          "<!-- each item ends with (disp: pending); triage flips it to (disp: TP)/(disp: FP)/(disp: AMENDED) -->"]
-    L += rows or ["_no claim drift/unmet findings_"]
-    L += ["", "## Orphans (code with no stated purpose)"]
-    L += orphan_rows or ["_no candidate orphans_"]
-    L += ["", "## Clean (credited)  — each discharged claim is a target-level TN (a clean bill)"]
-    L += [f"- {c['id']} — {c['title']}: discharged [{tier or '?'}]." for c, tier in discharged] or \
-         ["_none discharged this run_"]
-    L += ["", "## Per-claim verdict  (hash = claim fingerprint: symbol source + contract + intent; "
-          "tier = audit-computed evidence tier; judged = tool-written LLM-verdict date — all for --prior)",
-          "| claim | hash | state | tier | judged |", "|-------|------|-------|------|--------|"]
-    L += [f"| {cid} | {h or '-'} | {st} | {ti or '-'} | {jd or '-'} |"
-          for cid, h, st, ti, jd in verdict_table]
-    L += ["", "## False negatives (misses — fill when a re-audit/human/incident finds a missed drift)", ""]
-    return "\n".join(L) + "\n"
+    out += ["## Open findings — worklist (ranked; work top-down, one isolated change each)",
+            "<!-- each item ends with (disp: pending); triage flips it to (disp: TP)/(disp: FP)/(disp: AMENDED) -->"]
+    out += rows or ["_no claim drift/unmet findings_"]
+    out += ["", "## Orphans (code with no stated purpose)"]
+    out += orphan_rows or ["_no candidate orphans_"]
+    out += ["", "## Clean (credited)  — each discharged claim is a target-level TN (a clean bill)"]
+    out += [f"- {c['id']} — {c['title']}: discharged [{tier or '?'}]." for c, tier in discharged] or \
+           ["_none discharged this run_"]
+    out += ["", "## Per-claim verdict  (hash = claim fingerprint: symbol source + contract + intent; "
+            "tier = audit-computed evidence tier; judged = tool-written LLM-verdict date — all for --prior)",
+            "| claim | hash | state | tier | judged |", "|-------|------|-------|------|--------|"]
+    out += [f"| {cid} | {h or '-'} | {st} | {ti or '-'} | {jd or '-'} |"
+            for cid, h, st, ti, jd in verdict_table]
+    out += ["", "## False negatives (misses — fill when a re-audit/human/incident finds a missed drift)", ""]
+    return "\n".join(out) + "\n"
 
 
 _VERDICT_ROW_RE = re.compile(

@@ -136,6 +136,16 @@ class GuardOneUnit(unittest.TestCase):
         _commit(repo, "feat(content-review): a unit")
         self.assertFalse(_denied(_run(scope="content-review", baseline="not-a-number", repo=repo)[1]))
         self.assertFalse(_denied(_run(scope="content-review", baseline="-1", repo=repo)[1]))
+        # non-ASCII "digits" that str.isdigit() accepts but int() rejects must be inert, not crash.
+        rc, out = _run(scope="content-review", baseline="²", repo=repo)  # superscript two
+        self.assertEqual(rc, 0)
+        self.assertFalse(_denied(out))
+
+    def test_non_object_json_fails_open(self):
+        # valid JSON that is not an object must fail open, not crash on payload.get("cwd").
+        for raw in ("5", "[]", "null"):
+            rc, out = _run(scope="content-review", baseline="0", repo=None, raw=raw)
+            self.assertEqual((rc, out.strip()), (0, ""), f"non-object payload must defer: {raw!r}")
 
 
 if __name__ == "__main__":

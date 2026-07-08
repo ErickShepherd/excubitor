@@ -340,7 +340,10 @@ def _classify(tokens: list[str], yolo: bool, cwd: str | None) -> str | None:
         return "delete untracked files (git clean)"
     if sub == "branch" and any(d in rest for d in ("-d", "-D", "--delete")):
         return "delete a branch (git branch -d/-D)"
-    if sub == "worktree" and "remove" in rest:
+    # position-aware (like `remote set-head` / `gh pr merge` below), NOT a bare `"remove" in rest`
+    # membership — else `git worktree add ../wt remove` (a branch/path literally named `remove`) would
+    # be a false deny. Only the `remove` SUBCOMMAND (first positional) is the destructive one.
+    if sub == "worktree" and _subcommand_path(rest, set(), 1) == ["remove"]:
         return "remove a worktree (git worktree remove)"
     # Both `remote set-head` and the write form of `symbolic-ref` rewrite refs/remotes/origin/HEAD —
     # the trust anchor _default_branch() (and guard-default-branch.py) reads for default-branch
@@ -439,8 +442,11 @@ def _deny_message(reason: str, yolo: bool) -> str:
 def main() -> None:
     try:
         payload = json.load(sys.stdin)
-    except (json.JSONDecodeError, ValueError):
+    except ValueError:  # JSONDecodeError is a ValueError subclass — one catch suffices
         _allow()  # unparseable input → fail open, never wedge the tool
+    if not isinstance(payload, dict):
+        _allow()  # valid-JSON-but-not-an-object (5, "x", [], null) → fail open; the never-exit-non-zero
+        # contract is unconditional, so payload.get(...) must never see a non-dict and raise AttributeError
 
     # Inactive unless explicitly in a guarded loop (opt-in marker). The value selects the mode.
     marker = os.environ.get("CLAUDE_LOOP_GUARD")
@@ -451,7 +457,8 @@ def main() -> None:
     if payload.get("tool_name") != "Bash":
         _allow()  # matcher should restrict to Bash, but never assume
 
-    command = (payload.get("tool_input") or {}).get("command") or ""
+    tool_input = payload.get("tool_input")
+    command = (tool_input if isinstance(tool_input, dict) else {}).get("command") or ""
     cwd = payload.get("cwd") or os.getcwd()
     reason = _dangerous(command, yolo, cwd)
     if reason:

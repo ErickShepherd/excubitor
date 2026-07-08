@@ -47,16 +47,15 @@ def _allow() -> None:
 
 
 def _deny(reason: str) -> None:
-    print(
-        json.dumps(
-            {
-                "hookSpecificOutput": {
-                    "hookEventName": "PreToolUse",
-                    "permissionDecision": "deny",
-                    "permissionDecisionReason": reason,
-                }
+    json.dump(  # same form as the sibling guards (guard-loop-vc / guard-default-branch / self-integrity)
+        {
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "deny",
+                "permissionDecisionReason": reason,
             }
-        )
+        },
+        sys.stdout,
     )
     sys.exit(0)
 
@@ -86,13 +85,17 @@ def _scoped_commit_count(repo_dir: str | None, scope: str) -> int | None:
 def main() -> None:
     try:
         payload = json.load(sys.stdin)
-    except (json.JSONDecodeError, ValueError):
+    except ValueError:  # JSONDecodeError is a ValueError subclass — one catch suffices
         _allow()  # unparseable input → fail open, never wedge the tool
+    if not isinstance(payload, dict):
+        _allow()  # valid-JSON-but-not-an-object → fail open; payload.get(...) must never raise AttributeError
 
     scope = (os.environ.get("ONE_UNIT_CAP_SCOPE") or "").strip()
     baseline_raw = (os.environ.get("ONE_UNIT_CAP_BASELINE") or "").strip()
     # Inert unless the driver armed BOTH knobs (opt-in; interactive/`/loop` sessions set neither).
-    if not scope or not baseline_raw.isdigit():
+    # isascii() guards against non-ASCII "digits" (e.g. '²', fullwidth) that str.isdigit() accepts but
+    # int() then rejects with ValueError — treat those as not-armed (inert), never crash.
+    if not scope or not (baseline_raw.isascii() and baseline_raw.isdigit()):
         _allow()
     baseline = int(baseline_raw)
 

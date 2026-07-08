@@ -38,10 +38,22 @@ import subprocess
 import sys
 
 
+# Location-redirecting git env vars: an inherited GIT_DIR / GIT_WORK_TREE / GIT_INDEX_FILE OVERRIDES
+# `-C <repo>`, so a freeze check could silently evaluate a DIFFERENT tree than --repo names — a
+# confused-deputy spoof of "frozen". Strip them so `-C <repo>` is the sole source of truth.
+_REDIRECT_GIT_VARS = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR",
+                      "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_NAMESPACE")
+
+
+def _git_env() -> dict:
+    return {k: v for k, v in os.environ.items() if k not in _REDIRECT_GIT_VARS}
+
+
 def _git(repo: str, *args: str) -> tuple[bool, str]:
     """Run a read-only git query; return (ok, stdout). Never raises."""
     try:
-        p = subprocess.run(["git", "-C", repo, *args], capture_output=True, text=True, timeout=10)
+        p = subprocess.run(["git", "-C", repo, *args], capture_output=True, text=True, timeout=10,
+                           env=_git_env())
     except (OSError, subprocess.SubprocessError):
         return False, ""
     if p.returncode != 0:
@@ -49,7 +61,14 @@ def _git(repo: str, *args: str) -> tuple[bool, str]:
     return True, p.stdout
 
 
-def _oracle_files(repo: str, verified_by: str) -> list[str]:
+def _existed_at_base(repo: str, base: str, rel: str) -> bool:
+    """True iff `rel` was a tracked blob at `base` — the precise signal that a now-missing oracle file
+    was DELETED/renamed on the loop branch (tamper), as opposed to a token that was never a file at all
+    (an interpreter name, a bare test-id). `git cat-file -e <base>:<rel>` exits 0 iff the blob exists."""
+    return _git(repo, "cat-file", "-e", f"{base}:{rel}")[0]
+
+
+def _oracle_files(repo: str, base: str, verified_by: str) -> tuple[list[str], list[str]]:
     """Extract the **tracked, repo-relative** file paths a `verified-by:` command refers to.
 
     The command is e.g. `python3 scripts/test_validate.py` or
@@ -67,30 +86,34 @@ def _oracle_files(repo: str, verified_by: str) -> list[str]:
     """
     ok, top = _git(repo, "rev-parse", "--show-toplevel")
     if not ok or not top.strip():
-        return []
+        return [], []
     toplevel = os.path.realpath(top.strip())
     try:
         tokens = shlex.split(verified_by)
     except ValueError:
         tokens = verified_by.split()
     files: list[str] = []
+    tampered: list[str] = []  # file-tokens that existed at base but are gone/untracked now → fail-deny
     for tok in tokens:
         candidate = tok.split("::", 1)[0]  # pytest nodeid: keep the file part
         if not candidate or candidate.startswith("-"):
             continue
         abs_candidate = candidate if os.path.isabs(candidate) else os.path.join(repo, candidate)
         real = os.path.realpath(abs_candidate)  # resolves symlinks → the file actually executed
-        if not os.path.isfile(real):
-            continue
         rel = os.path.normpath(os.path.relpath(real, toplevel))
         if rel.startswith(".."):
             continue  # outside the work tree → cannot appear in the diff
-        # Require tracked: an untracked oracle's edits never show in a committed diff, so its
-        # immutability is unverifiable here → drop (→ fail-deny if it was the only oracle).
-        if not _git(repo, "ls-files", "--error-unmatch", "--", rel)[0]:
+        # A token that DOESN'T resolve to a currently-tracked file is dropped — BUT if that same path
+        # was a tracked blob at `base`, its disappearance is exactly the tamper this check exists to
+        # catch (a multi-file verified-by whose loop deleted one oracle file must NOT pass on the
+        # survivors). Distinguish deletion (existed at base → tampered) from a non-file token that was
+        # never an oracle (interpreter / bare test-id → never at base → safely dropped).
+        if not os.path.isfile(real) or not _git(repo, "ls-files", "--error-unmatch", "--", rel)[0]:
+            if _existed_at_base(repo, base, rel):
+                tampered.append(rel)
             continue
         files.append(rel)
-    return files
+    return files, tampered
 
 
 def _changed_files(repo: str, base: str) -> set[str] | None:
@@ -116,7 +139,17 @@ def main() -> int:
         print(f"NOT-FROZEN: {repo} is not a git repo", file=sys.stderr)
         return 1
 
-    oracle_files = _oracle_files(repo, args.verified_by)
+    oracle_files, tampered = _oracle_files(repo, args.base, args.verified_by)
+    if tampered:
+        # A verified-by oracle file that was tracked at base is now missing/untracked — deleted or
+        # renamed away on the loop branch. The survivors alone can't vouch for the ones that vanished
+        # (the loop could have removed exactly the assertion that gated it), so fail-deny.
+        print(
+            f"NOT-FROZEN: oracle file(s) tracked at {args.base} are now missing/untracked on the loop "
+            f"branch — deleted or renamed (tamper): {', '.join(tampered)} (fail-deny)",
+            file=sys.stderr,
+        )
+        return 1
     if not oracle_files:
         # No extractable oracle file → immutability is unverifiable → fail-deny.
         print(

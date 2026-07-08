@@ -37,6 +37,14 @@ LIMITS (honest): pattern/literal matching, not semantic understanding. It will m
 shape it has no pattern for, a private token you did not supply, a secret split across lines or
 base64-wrapped, or one only present in a binary/rendered asset it skips. It is a deterministic gate for
 the known-shape and known-token cases — a seatbelt at the boundary, not a proof of cleanliness.
+
+The `--private-tokens` file is TRUSTED input — you author it, it is as trusted as the code it guards.
+A `re:` rule there is run against the (untrusted) scanned content, so a PATHOLOGICAL regex (catastrophic
+backtracking, e.g. `re:(a+)+$`) can be driven to hang by crafted content — a self-inflicted ReDoS. The
+built-in patterns are all linear and ReDoS-safe; keep your own `re:` rules linear too (avoid nested
+quantifiers). A stdlib scanner cannot interrupt a Python regex mid-backtrack without a per-match
+subprocess sandbox, which would be out of proportion for owner-authored input — so this is a documented,
+accepted residual (see KNOWN-BYPASSES.md), not a silently-hoped-away one.
 """
 from __future__ import annotations
 
@@ -64,13 +72,6 @@ _BUILTIN: list[tuple[str, "re.Pattern[str]"]] = [
     ("url-credentials", re.compile(r"\b[a-zA-Z][a-zA-Z0-9+.-]*://[^\s:/@]+:[^\s:/@]+@[^\s/]+")),
 ]
 
-# Text-file heuristic: skip obvious binaries by extension AND by a NUL-byte probe (so an unknown-ext
-# binary doesn't crash the scan or hide a finding in mojibake).
-_BINARY_EXT = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".pdf", ".zip", ".gz", ".tar",
-               ".woff", ".woff2", ".ttf", ".eot", ".mp4", ".mov", ".mp3", ".wasm", ".so", ".dylib",
-               ".o", ".a", ".class", ".pyc", ".bin", ".exe", ".dll"}
-
-
 @dataclass(frozen=True)
 class Finding:
     location: str   # path:line
@@ -79,11 +80,15 @@ class Finding:
 
 
 def mask(s: str) -> str:
-    """Redact a matched secret for safe printing: keep a 4-char prefix, hide the rest, note length."""
+    """Redact a matched secret for safe printing: reveal a short prefix, hide the rest, note length.
+
+    The prefix is min(len//3, 4) so a SHORT secret isn't largely disclosed by the prefix alone:
+    len ≤ 2 shows none, 3–5 shows 1 char, 6–8 shows 2, 9–11 shows 3, and 12+ caps at 4."""
     s = s.strip()
-    if len(s) <= 4:
+    prefix = min(4, len(s) // 3)
+    if prefix == 0:
         return f"…[{len(s)} chars]"
-    return f"{s[:4]}…[{len(s)} chars]"
+    return f"{s[:prefix]}…[{len(s)} chars]"
 
 
 def load_private_patterns(path: Path) -> list[tuple[str, "re.Pattern[str]"]]:
@@ -97,17 +102,23 @@ def load_private_patterns(path: Path) -> list[tuple[str, "re.Pattern[str]"]]:
         line = raw.strip()
         if not line or line.startswith("#"):
             continue
+        # The category LABEL must be opaque: it is printed beside every finding, and a private token
+        # is exactly what "must never ship" — embedding the rule text here would re-leak the secret into
+        # the CI transcript, defeating the masking. Label by the rule's LINE in the tokens file so the
+        # operator can locate it without the value ever reaching stdout/stderr.
         if line.startswith("re:"):
             expr = line[3:]
             try:
-                out.append((f"private-regex:{expr}", re.compile(expr)))
+                out.append((f"private-regex@{i}", re.compile(expr)))
             except re.error as e:
                 # a malformed rule is a usage error → exit 2 (matches the exit-code table), and it is
-                # LOUD (never a silently-skipped rule that would quietly disable a leak check).
-                print(f"leak_check: {path}:{i}: bad regex {expr!r}: {e}", file=sys.stderr)
+                # LOUD (never a silently-skipped rule that would quietly disable a leak check). Point at
+                # the line, not the pattern text (which may itself embed the literal being hunted); the
+                # re.error message is structural (position/reason), not an echo of the pattern.
+                print(f"leak_check: bad private regex at {path}:{i}: {e}", file=sys.stderr)
                 raise SystemExit(2)
         else:
-            out.append((f"private-literal:{line}", re.compile(re.escape(line), re.IGNORECASE)))
+            out.append((f"private-literal@{i}", re.compile(re.escape(line), re.IGNORECASE)))
     return out
 
 
@@ -131,8 +142,11 @@ def scan_text(text: str, patterns: list[tuple[str, "re.Pattern[str]"]], allow: s
 
 
 def _looks_binary(path: Path) -> bool:
-    if path.suffix.lower() in _BINARY_EXT:
-        return True
+    """True iff the file's CONTENT looks binary (a NUL byte in the first 8 KiB). Keyed on CONTENT, not
+    extension: a text file with a binary-ish name (notes.pdf, config.bin, a text foo.so) must still be
+    scanned — skipping it by extension would silently miss a secret pasted into it, the dangerous
+    fail-open direction for a gate. A genuinely binary file has a NUL early and is skipped (and the skip
+    is reported by scan(), never silent)."""
     try:
         with path.open("rb") as f:
             return b"\x00" in f.read(8192)
@@ -155,14 +169,17 @@ def iter_files(paths: list[Path]) -> "tuple[list[Path], list[str]]":
 
 
 def scan(paths: list[Path], patterns: list[tuple[str, "re.Pattern[str]"]],
-         allow: set[str]) -> tuple[list[Finding], int, list[str]]:
-    """Scan all paths. Returns (findings, suppressed_count, errors). Unreadable files become errors
-    (fail-closed: an un-scannable path is treated as not-verified, contributing a non-zero exit)."""
+         allow: set[str]) -> tuple[list[Finding], int, list[str], list[str]]:
+    """Scan all paths. Returns (findings, suppressed_count, errors, skipped_binary). Unreadable files
+    become errors (fail-closed: an un-scannable path is treated as not-verified → non-zero exit);
+    content-detected binary files are skipped but REPORTED (a skip is visible, never silent)."""
     files, errors = iter_files(paths)
     findings: list[Finding] = []
     suppressed = 0
+    skipped: list[str] = []
     for f in files:
         if _looks_binary(f):
+            skipped.append(str(f))
             continue
         try:
             text = f.read_text(encoding="utf-8", errors="strict")
@@ -172,13 +189,15 @@ def scan(paths: list[Path], patterns: list[tuple[str, "re.Pattern[str]"]],
         fnd, sup = scan_text(text, patterns, allow, str(f))
         findings.extend(fnd)
         suppressed += sup
-    return findings, suppressed, errors
+    return findings, suppressed, errors, skipped
 
 
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description="Deterministic private→public leak scanner (leak-guard).")
     ap.add_argument("paths", nargs="+", help="files or directories to scan")
-    ap.add_argument("--private-tokens", help="file of must-never-ship patterns (literal or re:<regex>)")
+    ap.add_argument("--private-tokens", help="file of must-never-ship patterns (literal or re:<regex>); "
+                                             "TRUSTED input — keep re: rules linear (a pathological one "
+                                             "can ReDoS on crafted content; see the module LIMITS)")
     ap.add_argument("--allow", action="append", default=[], help="exact matched text to whitelist (repeatable)")
     ap.add_argument("--allow-file", help="file of whitelist strings, one per line")
     ap.add_argument("--no-builtin", action="store_true", help="skip built-in secret patterns")
@@ -202,20 +221,23 @@ def main(argv: list[str]) -> int:
             print(f"leak_check: --allow-file not found: {af}", file=sys.stderr)
             return 2
         allow |= {ln.strip() for ln in af.read_text(encoding="utf-8", errors="replace").splitlines()
-                  if ln.strip() and not ln.startswith("#")}
+                  if ln.strip() and not ln.strip().startswith("#")}  # strip BEFORE the # test (mirror
+        # load_private_patterns) so an INDENTED `# comment` is a comment, not a literal whitelist entry
 
-    findings, suppressed, errors = scan([Path(p) for p in args.paths], patterns, allow)
+    findings, suppressed, errors, skipped = scan([Path(p) for p in args.paths], patterns, allow)
 
     for e in errors:
         print(f"ERROR  {e}", file=sys.stderr)
     for f in findings:
         print(f"LEAK   {f.location} — {f.category}: {f.masked}")
+    for s in skipped:
+        print(f"note: skipped (binary content, not scanned): {s}", file=sys.stderr)  # a skip is visible
     if suppressed:
         print(f"note: {suppressed} match(es) suppressed by explicit whitelist", file=sys.stderr)
 
     if findings or errors:
         print(f"leak_check: BLOCK — {len(findings)} finding(s), {len(errors)} error(s)", file=sys.stderr)
-        return 1 if findings and not errors else (1 if findings else 2)
+        return 1 if findings else 2  # a finding gates as 1; an errors-only run (fail-closed) as 2
     print("leak_check: clean", file=sys.stderr)
     return 0
 

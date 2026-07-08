@@ -30,8 +30,11 @@ def get_usage(creds_path: str = DEFAULT_CREDS, *, timeout: float = 20.0) -> dict
     """Fetch the usage JSON. Raises RuntimeError with a friendly message on failure."""
     try:
         token = _load_token(creds_path)
-    except OSError as e:
-        raise RuntimeError(f"no Claude credentials at {creds_path} ({e})") from e
+    except (OSError, ValueError, AttributeError, TypeError) as e:
+        # OSError: missing/unreadable file. ValueError (incl. json.JSONDecodeError): malformed JSON.
+        # AttributeError/TypeError: valid JSON of the wrong shape (a list/scalar → `.get` fails). All
+        # degrade to the documented friendly RuntimeError, never an undocumented raw exception type.
+        raise RuntimeError(f"could not read Claude credentials at {creds_path} ({e.__class__.__name__})") from e
     if not token:
         raise RuntimeError("no Claude OAuth access token found in credentials")
     req = urllib.request.Request(USAGE_URL, headers={
