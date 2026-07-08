@@ -8,7 +8,7 @@ falsifiable intent-record system for letting an LLM agent work unattended withou
 bless its own work. The watcher that stays awake while the loop runs and nobody else is looking.
 
 Stdlib-only Python hooks + [Agent Skills](https://code.claude.com/docs/en/skills)-format capability
-packets, with 152 tests and the design rationale that produced them. Built for and battle-tested
+packets, with 168 tests and the design rationale that produced them. Built for and battle-tested
 with Claude Code; the concepts (PreToolUse guards, frozen oracles, evidence tiers) port to any
 agent runtime that can intercept tool calls.
 
@@ -85,7 +85,7 @@ skills/
   audit-telos/             # conformance audit (read side) + strict parser + 69 tests
   telos-loop/              # telos-anchored unattended loop recipe
   ralph-loop/              # charter-driven loop + oracle-freeze/suspend scripts + 38 tests
-  leak-guard/              # private→public boundary guard
+  leak-guard/              # private→public boundary guard + leak_check.py + 16 tests
 docs/design/               # 10 design/deliberation records
 docs/telos/                # this repo's own intent record (audited by its own tooling)
 scripts/install.sh         # symlink skills+hooks into ~/.claude, register the hooks
@@ -132,13 +132,13 @@ Interactive work is unaffected until you explicitly say "I'm looping."
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install pytest
-.venv/bin/pytest -q        # 152 tests: 45 hooks, 69 audit-telos, 38 ralph-loop
-                           # (149 pass; 3 audit-telos ledger round-trip tests skip — they
+.venv/bin/pytest -q        # 168 tests: 45 hooks, 69 audit-telos, 38 ralph-loop, 16 leak-guard
+                           # (165 pass; 3 audit-telos ledger round-trip tests skip — they
                            #  need a private sibling module that did not ship, see the extraction notes)
 ```
 
 CI runs the same suite on a stock GitHub runner (`.github/workflows/ci.yml`), plus this repo's
-own telos audit — the nine claims in [`docs/telos/app.md`](docs/telos/app.md) must all resolve
+own telos audit — the ten claims in [`docs/telos/app.md`](docs/telos/app.md) must all resolve
 DISCHARGED at the `witness` evidence tier, i.e. every safety claim this README makes about the
 guards is re-proven by an executed test on every CI run.
 

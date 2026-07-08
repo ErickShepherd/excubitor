@@ -68,7 +68,7 @@ cannot forge — a strict parser, an exit code, a denied tool call, or a human.
 hooks/                    # the guards + tests/ (stdlib only; no imports across components)
 skills/<name>/SKILL.md    # open Agent Skills format: frontmatter trigger + instructions
 skills/<name>/scripts/    # executable helpers (ralph-loop's oracle/suite/suspend checks)
-skills/<name>/tests/      # per-component pytest suites (152 total)
+skills/<name>/tests/      # per-component pytest suites (168 total)
 docs/design/              # the deliberation records behind each mechanism
 docs/telos/               # this repo's own claims, audited by its own audit-telos
 scripts/install.sh        # symlinks + idempotent settings.json hook registration

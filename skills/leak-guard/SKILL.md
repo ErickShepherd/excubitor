@@ -8,7 +8,7 @@ description: >-
 argument-hint: "<the artifact or content to guard>"
 allowed-tools: [Read, Grep, Glob, Bash]
 metadata:
-  version: 1.0.0
+  version: 1.1.0
 ---
 
 # leak-guard
@@ -38,10 +38,20 @@ published it's cached, indexed, and effectively irreversible; the re-check that 
 1. **Identify the boundary.** What's the private source-of-truth, and what's the public artifact? The
    guard runs at the crossing — and scans *both* the source content and the built output (a leak can
    appear only after rendering).
-2. **Run the deterministic guard if the repo has one** — the `contentguard.py` pattern: a stdlib
-   scanner that exits non-zero on a finding and gates the build. Deterministic + tested beats a model
-   eyeballing it. If there's no tool, scan: grep the artifact for the known-private tokens/patterns
-   sourced from the private file.
+2. **Run the deterministic scanner** — [`leak_check.py`](leak_check.py), a stdlib tool shipped with
+   this skill: it scans the artifact (file or directory) for built-in structured secrets (private
+   keys, AWS/GitHub/token shapes, URL credentials) **and** the must-never-ship tokens you supply, exits
+   non-zero on a finding (so it gates a build), fails closed, and prints findings **masked** (it never
+   re-prints the secret). Deterministic + tested beats a model eyeballing it.
+
+   ```bash
+   # scan a built artifact against the project's private canon, whitelisting intentional exceptions
+   python3 leak_check.py ./public-site/ --private-tokens .private-tokens --allow "IntentionallyPublicName"
+   ```
+
+   `--private-tokens` is a file of literals or `re:<regex>` (the names/systems/numbers from your private
+   source-of-truth — the guard can't know these, you tell it). See `leak_check.py --help`; its LIMITS
+   docstring is honest about what pattern-matching misses.
 3. **Block on a hit.** A finding stops the publish. Report `where — what leaked`; the human redacts, or
    **explicitly** whitelists an intentional exception — never silently.
 4. **Fail closed.** If you can't verify it's clean, treat it as not-clean.
