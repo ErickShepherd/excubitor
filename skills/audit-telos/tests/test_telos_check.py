@@ -212,6 +212,15 @@ class TestSupersede(unittest.TestCase):
         self.assertIn("TELOS-001", ids)
         self.assertNotIn("TELOS-000", ids)  # retired → not audited, but still parsed (history preserved)
 
+    def test_nul_byte_source_does_not_abort_audit(self):
+        # A first-party .py containing an embedded NUL byte makes ast.parse raise ValueError (not
+        # SyntaxError); build_graph/resolve_pointer must skip it, not crash the whole audit — the
+        # untrusted-repo-safe guarantee. audit() must complete and still see the good claim.
+        with tempfile.TemporaryDirectory() as td:
+            repo = _repo(Path(td), GOOD_RECORD, {"export.py": SRC_EXPORT, "poison.py": "x = '\x00'\n"})
+            r = tc.audit(repo, run_witnesses=False)  # must not raise
+        self.assertIn("TELOS-001", {c["id"] for c in r["claims"]})
+
     def test_dangling_superseded_by_raises(self):
         # DEF-5 regression: superseded-by a well-formed but NONEXISTENT id must abort, not silently retire
         # the live claim (audit() skips any superseded claim, so a typo'd target makes a real purpose vanish).

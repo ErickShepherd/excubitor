@@ -159,13 +159,19 @@ def _kill_switch(path: str) -> str | None:
 def _target_kill_switch(target: str, cwd: str) -> str | None:
     """Kill-switch check for a file-tool target: the path as given AND its symlink-resolved form
     (a symlink named something innocent must not launder a write into a guard script)."""
-    resolved = os.path.abspath(os.path.join(cwd, os.path.expanduser(target)))
+    try:
+        resolved = os.path.abspath(os.path.join(cwd, os.path.expanduser(target)))
+    except ValueError:
+        return None  # e.g. an embedded NUL byte — treat as no-match (the caller's scan continues)
     hit = _kill_switch(resolved)
     if hit:
         return hit
     try:
         real = os.path.realpath(resolved)
-    except OSError:
+    except (OSError, ValueError):
+        # realpath lstats each component; an embedded NUL raises ValueError ("embedded null byte"),
+        # NOT OSError — catch both so one poisoned token can't crash the guard (fail-open would then
+        # let a sibling kill-switch write through) or suppress the scan of the remaining tokens.
         return None
     return _kill_switch(real) if real != resolved else None
 
@@ -192,6 +198,8 @@ def main() -> None:
         payload = json.load(sys.stdin)
     except (json.JSONDecodeError, ValueError):
         _allow()  # unparseable input → fail open, never wedge the tool
+    if not isinstance(payload, dict):
+        _allow()  # valid-JSON-but-not-an-object → fail open; payload.get(...) must never raise AttributeError
 
     # Inactive unless explicitly in a guarded loop — the same opt-in marker as guard-loop-vc.py,
     # either mode ("1" or "yolo"): YOLO's permit-to-act leans on these guards even harder.
@@ -199,7 +207,8 @@ def main() -> None:
         _allow()
 
     tool = payload.get("tool_name")
-    tool_input = payload.get("tool_input") or {}
+    ti = payload.get("tool_input")
+    tool_input = ti if isinstance(ti, dict) else {}
     cwd = payload.get("cwd") or os.getcwd()
 
     hit = None
