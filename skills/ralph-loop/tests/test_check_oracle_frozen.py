@@ -64,6 +64,20 @@ class TestCheckOracleFrozen(unittest.TestCase):
         self._commit("feature.py", "x = 2\n")
         self.assertEqual(_run(self.d, "main", self.VB), 0)
 
+    def test_ignores_inherited_git_dir(self):
+        # An inherited GIT_DIR must NOT redirect the trusted queries away from --repo (confused-deputy
+        # spoof). With GIT_DIR pointing at a non-repo, an unsanitized check would error → fail-deny;
+        # sanitized, `-C <repo>` remains the sole source of truth and the untouched oracle stays FROZEN.
+        self._commit("feature.py", "x = 2\n")
+        env = dict(os.environ)
+        env["GIT_DIR"] = os.path.join(self.d, "nonexistent-gitdir")
+        env["GIT_WORK_TREE"] = self.d
+        p = subprocess.run(
+            [sys.executable, str(SCRIPT), "--repo", self.d, "--base", "main", "--verified-by", self.VB],
+            capture_output=True, text=True, env=env,
+        )
+        self.assertEqual(p.returncode, 0, f"GIT_DIR must be ignored; got: {p.stderr}")
+
     def test_not_frozen_when_oracle_edited(self):
         self._commit("tests/test_oracle.py", "def test_ok():\n    assert True  # weakened\n")
         self.assertEqual(_run(self.d, "main", self.VB), 1)

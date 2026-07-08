@@ -48,10 +48,22 @@ import subprocess
 import sys
 
 
+# Location-redirecting git env vars: an inherited GIT_DIR / GIT_WORK_TREE / GIT_INDEX_FILE OVERRIDES
+# `-C <repo>`, so a freeze check could silently evaluate a DIFFERENT tree than --repo names — a
+# confused-deputy spoof of "frozen". Strip them so `-C <repo>` is the sole source of truth.
+_REDIRECT_GIT_VARS = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR",
+                      "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_NAMESPACE")
+
+
+def _git_env() -> dict:
+    return {k: v for k, v in os.environ.items() if k not in _REDIRECT_GIT_VARS}
+
+
 def _git(repo: str, *args: str) -> tuple[bool, str]:
     """Run a read-only git query; return (ok, stdout). Never raises."""
     try:
-        p = subprocess.run(["git", "-C", repo, *args], capture_output=True, text=True, timeout=10)
+        p = subprocess.run(["git", "-C", repo, *args], capture_output=True, text=True, timeout=10,
+                           env=_git_env())
     except (OSError, subprocess.SubprocessError):
         return False, ""
     if p.returncode != 0:
@@ -64,7 +76,7 @@ def _empty_tree(repo: str) -> str | None:
     try:
         p = subprocess.run(
             ["git", "-C", repo, "hash-object", "-t", "tree", "--stdin"],
-            input="", capture_output=True, text=True, timeout=10,
+            input="", capture_output=True, text=True, timeout=10, env=_git_env(),
         )
     except (OSError, subprocess.SubprocessError):
         return None
