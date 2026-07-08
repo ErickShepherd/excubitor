@@ -64,8 +64,9 @@ Read honestly, because overclaiming here would be its own version of the fabrica
   refuses to represent an *unbacked* completion claim as proven (an unwitnessed `DISCHARGED` is demoted
   to SUSPECT; witness **exit codes** are trusted over the model's say-so). That blocks the *cheap* forgery
   — asserting "done" with nothing behind it. It does **not** by itself catch a *sophisticated* forgery
-  like 4,000 fake users passing a real check (the "backed-but-weak witness" residual, documented in
-  [`KNOWN-BYPASSES.md`](../../KNOWN-BYPASSES.md) and [`SECURITY.md`](../../SECURITY.md)). That residual is
+  like 4,000 fake users passing a real check (the "backed-but-weak witness" residual, stated in
+  [`SECURITY.md`](../../SECURITY.md) and pinned in
+  [`test_adversarial_records.py`](../../skills/audit-telos/tests/test_adversarial_records.py)). That residual is
   the whole reason excubitor's design severs the *ability to act* (Axis B) rather than trusting any audit
   of the agent's output: when you cannot fully trust the done-signal, you make the act reversible and
   gate the irreversible tail on a human.
