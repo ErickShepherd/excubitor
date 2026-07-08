@@ -88,9 +88,10 @@ core conviction that prompts are advice and enforcement must be mechanical. It d
 - **No injection defense.** It does nothing about poisoned tool streams or prompt injection — VIGIL's
   and SafeMCP's territory, and a real gap if that is your threat.
 - **Narrow blast radius.** It fences git/VC actions on one host runtime (Claude Code). Its decision
-  logic is runtime-neutral in principle (a JSON tool-call in, a deny/allow out), but portability to
-  another runtime is a documented design property, not a claim proven against a live third-party
-  runtime. The DSL systems are far more general.
+  core is *demonstrably* runtime-neutral — a second, non-Claude-Code adapter drives the same code with
+  an equivalence test ([`SPEC.md`](SPEC.md)) — but that demonstration is a generic envelope, not an
+  integration proven against a live third-party runtime (LangChain, an MCP gateway, etc.). The DSL
+  systems are far more general.
 
 ## The one idea worth taking
 
