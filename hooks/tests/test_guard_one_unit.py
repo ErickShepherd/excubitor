@@ -5,7 +5,7 @@ Drives the hook as a subprocess against a real temp git repo, asserting the deny
 deny = exit 0 + JSON permissionDecision=deny; defer = exit 0 with no decision. Pins the load-bearing
 properties: INACTIVE unless BOTH env knobs are set; DENIES once the scope-matched commit count exceeds
 the baseline (the session's one unit landed); is SCOPE-MATCHED so a sibling stage's commit does NOT
-trip the cap (parallel stage-a‖stage-b safety); and FAILS OPEN on unparseable input or a non-git dir.
+trip the cap (parallel two-worker safety); and FAILS OPEN on unparseable input or a non-git dir.
 
 Stdlib unittest only. Run:
   python3 hooks/tests/test_guard_one_unit.py
@@ -102,7 +102,7 @@ class GuardOneUnit(unittest.TestCase):
         self.assertTrue(_denied(out))
 
     def test_scope_matched_sibling_commit_does_not_trip(self):
-        # Parallel stage-a‖stage-b: a stage-b commit must NOT end the stage-a worker's session.
+        # Two workers in parallel: a sibling-scope commit must NOT end this worker's session.
         repo = _new_repo()
         _commit(repo, "feat(stage-b): sibling unit")  # different scope
         rc, out = _run(scope="stage-a", baseline="0", repo=repo)

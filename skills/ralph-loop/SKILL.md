@@ -113,8 +113,8 @@ dispatch to the anchor's section below.
 > headless worker, so the cap does not eat them.) **Safety** is that the
 > unit is **committed before the turn ends** on a durable branch (the recipe's existing property — *not* a
 > signal handler; nothing is killed mid-unit), so a worker that ignores the deny merely collects denials and
-> stops: bounded waste, never corruption. Scope-match the commit count (not a raw `HEAD` count) so the
-> `stage-a ∥ stage-b` parallel stage doesn't cross-trip. Design + threat analysis:
+> stops: bounded waste, never corruption. Scope-match the commit count (not a raw `HEAD` count) so a
+> two-worker parallel stage doesn't cross-trip. Design + threat analysis:
 > [`ralph-loop-one-unit-per-session.md`](../../docs/design/ralph-loop-one-unit-per-session.md). (This
 > per-session cap is **re-fire harness, not bespoke halting** — the *stop* decision still belongs to the
 > anchor's progress signal, per *Notes*; the cap only bounds how much one worker does *before* that signal is
