@@ -515,16 +515,21 @@ def content_hash(source_segment: str | None) -> str:
     return hashlib.sha256(source_segment.encode("utf-8")).hexdigest()[:_ANCHOR_HEX_LEN]
 
 
-def claim_fingerprint(source_segment: str | None, contract: str, intent: str) -> str:
+def claim_fingerprint(source_segment: str | None, contract: str, intent: str,
+                      verified_by: str = "") -> str:
     """The incremental-cache key for `--prior`: the discharged-by symbol's source PLUS the claim's
-    contract+intent. Folding the prose in is load-bearing — a claim can be AMENDED (its contract re-grilled)
-    while the pointed code stays byte-identical; keying on the code alone would carry the old DISCHARGED
-    forward and the LLM would never judge the NEW contract against the unchanged code — a silent pass in the
-    amend-fork's own path. Changing the contract OR the intent OR the code now busts the cache."""
+    contract+intent+verified-by. Folding the prose in is load-bearing — a claim can be AMENDED (its
+    contract re-grilled) while the pointed code stays byte-identical; keying on the code alone would carry
+    the old DISCHARGED forward and the LLM would never judge the NEW contract against the unchanged code — a
+    silent pass in the amend-fork's own path. Folding in `verified-by` closes the witness-removal hole:
+    deleting the executable witness (leaving code/contract/intent identical) must BUST the cache, or a
+    now-unbacked DISCHARGED would carry forward forever as tier=cache without the witness ever re-running.
+    Changing the contract OR the intent OR the code OR the witness now busts the cache."""
     h = hashlib.sha256()
     h.update((source_segment or "").encode("utf-8"))
     h.update(b"\x00"); h.update(contract.encode("utf-8"))
     h.update(b"\x00"); h.update(intent.encode("utf-8"))
+    h.update(b"\x00"); h.update(verified_by.encode("utf-8"))
     return h.hexdigest()[:_ANCHOR_HEX_LEN]
 
 
@@ -612,7 +617,8 @@ def audit(repo: Path, run_witnesses: bool = True, today: date | None = None,
             continue
         accounted_seed.add(pointer_qualname(repo, c.discharged_by))
         res["source_hash"] = claim_fingerprint(segment, c.fields.get("contract", ""),
-                                                c.fields.get("intent", ""))  # ledger cache key for --prior
+                                                c.fields.get("intent", ""),
+                                                c.fields.get("verified-by", ""))  # ledger cache key for --prior
         # anchor / staleness → SUSPECT (mechanical; never auto-DRIFTED)
         anchor = c.fields.get("anchor", "none").strip().lower()
         suspect_reasons = []
@@ -645,7 +651,11 @@ def audit(repo: Path, run_witnesses: bool = True, today: date | None = None,
         # whose tool-written `judged` receipt is fresh — never an unbacked `asserted`, never a stale judgment.
         pr = prior.get(c.id)
         if (pr and pr[0] == res["source_hash"] and pr[1] == "DISCHARGED"
-                and pr[2] in _CARRY_TIERS and not is_stale(pr[3], today)):
+                and pr[2] in _CARRY_TIERS and pr[3] and not is_stale(pr[3], today)):
+            # `pr[3]` (a non-empty tool-written `judged` date) is REQUIRED: a `witness`-tier prior emits an
+            # empty judged (`is_stale("")` is False, which would otherwise read as "fresh") — so without this
+            # a claim whose witness was removed would carry forward forever as tier=cache, never re-run. A
+            # real judged/cache verdict always carries a date; a witness prior with no receipt re-judges.
             res.update(state="DISCHARGED", tier="cache", judged=pr[3],
                        rationale=f"unchanged since prior DISCHARGED (fresh {pr[2]} receipt"
                                  f"{' ' + pr[3] if pr[3] else ''}; incremental skip)")

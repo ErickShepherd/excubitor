@@ -212,6 +212,26 @@ class TestSupersede(unittest.TestCase):
         self.assertIn("TELOS-001", ids)
         self.assertNotIn("TELOS-000", ids)  # retired → not audited, but still parsed (history preserved)
 
+    def test_fingerprint_folds_in_verified_by(self):
+        # Removing/adding the executable witness must BUST the incremental cache key, or a now-unbacked
+        # DISCHARGED would carry forward forever as tier=cache without the witness re-running.
+        with_witness = tc.claim_fingerprint("code", "contract", "intent", "tests/t.py::x")
+        without = tc.claim_fingerprint("code", "contract", "intent", "")
+        self.assertNotEqual(with_witness, without)
+
+    def test_witness_tier_prior_without_judged_receipt_does_not_carry(self):
+        # The witness-removal hole: a claim DISCHARGED at witness tier last run (empty `judged` date),
+        # whose verified-by is now gone, must NOT silently carry forward as tier=cache — it must re-judge.
+        with tempfile.TemporaryDirectory() as td:
+            repo = _repo(Path(td), GOOD_RECORD, {"export.py": SRC_EXPORT})  # DISCHARGED, no verified-by
+            first = tc.audit(repo, run_witnesses=False)
+            c0 = first["claims"][0]
+            # simulate last run's ledger row: DISCHARGED at witness tier, empty judged receipt, same hash
+            prior = {c0["id"]: (c0["source_hash"], "DISCHARGED", "witness", "")}
+            c1 = tc.audit(repo, run_witnesses=False, prior=prior)["claims"][0]
+        self.assertNotEqual(c1.get("tier"), "cache", "a witness prior with no judged receipt must not carry")
+        self.assertTrue(c1["needs_judgment"], "it must be re-judged instead of silently carried forward")
+
     def test_nul_byte_source_does_not_abort_audit(self):
         # A first-party .py containing an embedded NUL byte makes ast.parse raise ValueError (not
         # SyntaxError); build_graph/resolve_pointer must skip it, not crash the whole audit — the
