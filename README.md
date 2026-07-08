@@ -8,7 +8,7 @@ falsifiable intent-record system for letting an LLM agent work unattended withou
 bless its own work. The watcher that stays awake while the loop runs and nobody else is looking.
 
 Stdlib-only Python hooks + [Agent Skills](https://code.claude.com/docs/en/skills)-format capability
-packets, with 175 tests and the design rationale that produced them. Built for and battle-tested
+packets, with 194 tests and the design rationale that produced them. Built for and battle-tested
 with Claude Code; the VC-guard's decision core is runtime-neutral — a second, non-Claude-Code adapter
 drives the *same* code with an equivalence test to prove it ([`SPEC.md`](SPEC.md)), so its portability
 to any runtime that can intercept tool calls is demonstrated, not just asserted.
@@ -146,8 +146,8 @@ Interactive work is unaffected until you explicitly say "I'm looping."
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install pytest
-.venv/bin/pytest -q        # 175 tests: 45 hooks, 69 audit-telos, 38 ralph-loop, 16 leak-guard, 7 runtime
-                           # (172 pass; 3 audit-telos ledger round-trip tests skip — they
+.venv/bin/pytest -q        # 194 tests: 52 hooks, 73 audit-telos, 44 ralph-loop, 17 leak-guard, 8 runtime
+                           # (191 pass; 3 audit-telos ledger round-trip tests skip — they
                            #  need a private sibling module that did not ship, see the extraction notes)
 ```
 
