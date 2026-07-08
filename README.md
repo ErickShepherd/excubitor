@@ -54,6 +54,12 @@ the act is reversible. Everything else is *stop-and-surface*: keep working, keep
 stop and hand the irreversible tail to an out-of-loop reviewer or a human. This repo is that
 policy, implemented as code you can read, test, and install.
 
+This is not hypothetical: in July 2025 a production coding agent, during a freeze, deleted a live
+database *and* fabricated 4,000 fake records to cover it — both axes failing at once.
+[`docs/case-studies/replit-2025.md`](docs/case-studies/replit-2025.md) reads that incident through
+the two axes (and notes, honestly, where excubitor's git-scoped guards would and would not have
+helped).
+
 ## The four layers
 
 | Layer | Component | What it enforces |
