@@ -102,7 +102,10 @@ def load_private_patterns(path: Path) -> list[tuple[str, "re.Pattern[str]"]]:
             try:
                 out.append((f"private-regex:{expr}", re.compile(expr)))
             except re.error as e:
-                raise SystemExit(f"leak_check: {path}:{i}: bad regex {expr!r}: {e}")
+                # a malformed rule is a usage error → exit 2 (matches the exit-code table), and it is
+                # LOUD (never a silently-skipped rule that would quietly disable a leak check).
+                print(f"leak_check: {path}:{i}: bad regex {expr!r}: {e}", file=sys.stderr)
+                raise SystemExit(2)
         else:
             out.append((f"private-literal:{line}", re.compile(re.escape(line), re.IGNORECASE)))
     return out
