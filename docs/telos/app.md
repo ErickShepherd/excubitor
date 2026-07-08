@@ -110,3 +110,12 @@ claims as proven.
 - verified-by: hooks/tests/test_guard_loop_vc.py::TestGuardLoopVC::test_trust_anchor_rewrite_denied_read_allowed
 - last-grilled: 2026-07-07
 - anchor: none
+
+### TELOS-010 — the leak scanner blocks a boundary crossing rather than waving it through
+- state: DISCHARGED
+- intent: a leak is asymmetric — once published it is effectively irreversible — so the private-to-public scanner must exit non-zero on a finding (gating the build) and fail closed when it cannot verify, never silently pass; a scanner that defaults to clean is worse than none because it manufactures false confidence
+- discharged-by: skills/leak-guard/leak_check.py::main
+- contract: main returns a non-zero exit code when a built-in secret pattern or a supplied private token matches (a finding) and when a scan target or a required tokens file cannot be read (fail-closed), and returns zero only when the scan completes with no finding after explicit whitelisting
+- verified-by: skills/leak-guard/tests/test_leak_check.py::TestContractWitness::test_contract
+- last-grilled: 2026-07-07
+- anchor: none
