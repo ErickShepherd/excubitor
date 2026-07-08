@@ -68,6 +68,15 @@ class TestGuardDefaultBranch(unittest.TestCase):
             rc, out = _run({"tool_input": {"file_path": str(Path(td, "f.py"))}, "cwd": td})
             self.assertTrue(_denied(out), "the resolved custom default (develop) is protected too")
 
+    def test_slash_containing_default_protected(self):
+        # A slash-containing default branch (release/2.0, team/main) must stay protected — rsplit("/")
+        # used to yield "2.0" and silently un-fence the real default. removeprefix keeps the full name.
+        with tempfile.TemporaryDirectory() as td:
+            _repo(td, branch="release/2.0", origin_head="release/2.0")
+            rc, out = _run({"tool_input": {"file_path": str(Path(td, "f.py"))}, "cwd": td})
+            self.assertEqual(rc, 0)
+            self.assertTrue(_denied(out), "editing on the slash-named default branch must be denied")
+
     def test_feature_branch_defers(self):
         with tempfile.TemporaryDirectory() as td:
             _repo(td, branch="main")

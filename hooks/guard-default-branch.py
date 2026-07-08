@@ -111,8 +111,11 @@ def main() -> None:
     # Always protect the conventional names; a resolved origin/HEAD ADDS to the set, never replaces it
     # (replacing it would silently un-protect main/master whenever origin/HEAD points elsewhere).
     protected = {"main", "master"}
-    if origin_head:
-        protected.add(origin_head.rsplit("/", 1)[-1])
+    if origin_head.startswith("refs/remotes/origin/"):
+        # Strip the fixed ref prefix, NOT rsplit("/") — a branch name can itself contain slashes
+        # (release/2.0, team/main), and rsplit would yield the wrong tail ("2.0") and silently
+        # un-protect the real default branch. removeprefix keeps the full name.
+        protected.add(origin_head.removeprefix("refs/remotes/origin/"))
 
     if branch in protected:
         _deny(
