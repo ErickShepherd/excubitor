@@ -325,7 +325,19 @@ def _find_symbol_node(tree: ast.AST, symbol: str) -> ast.AST | None:
 def resolve_pointer(repo: Path, pointer: str) -> tuple[bool, ast.AST | None, str | None]:
     """Resolve `path::symbol` statically. Returns (exists, node, source_segment). Never imports/runs."""
     path_str, _, symbol = pointer.partition("::")
+    # Confine resolution to the repo: an absolute `path_str` makes `repo / path_str` discard `repo`
+    # (pathlib), and `..` components walk out of the tree — a crafted `discharged-by: /etc/shadow::x`
+    # or `../../secret.py::y` would turn this into a file-exists / valid-Python oracle outside the repo.
+    # The resolver never executes, so the impact is only that oracle, but it still breaches the stated
+    # "untrusted-repo safe, repo-confined" boundary — reject anything that escapes.
+    if Path(path_str).is_absolute() or ".." in Path(path_str).parts:
+        return False, None, None
     f = repo / path_str
+    try:
+        if not f.resolve().is_relative_to(repo.resolve()):
+            return False, None, None  # symlink or normalization that lands outside the repo
+    except (OSError, ValueError, RuntimeError):
+        return False, None, None
     if not f.is_file():
         return False, None, None
     try:

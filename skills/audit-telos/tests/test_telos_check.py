@@ -273,6 +273,17 @@ class TestResolver(unittest.TestCase):
             self.assertFalse(tc.resolve_pointer(repo, "export.py::ghost")[0])
             self.assertFalse(tc.resolve_pointer(repo, "missing.py::run")[0])
 
+    def test_resolve_is_repo_confined(self):
+        # A discharged-by pointer must not escape the repo: an absolute path or `..` traversal (which
+        # would turn the resolver into a file-exists/valid-Python oracle outside the tree) resolves to
+        # not-found, never reading the out-of-repo file.
+        with tempfile.TemporaryDirectory() as td:
+            repo = _repo(Path(td), GOOD_RECORD, {"export.py": SRC_EXPORT})
+            # a real, definitely-existing outside file — must still resolve False (never read)
+            self.assertFalse(tc.resolve_pointer(repo, "/etc/hostname::x")[0])
+            self.assertFalse(tc.resolve_pointer(repo, "../../../../etc/hostname::x")[0])
+            self.assertFalse(tc.resolve_pointer(repo, "../secret.py::y")[0])
+
     def test_resolver_never_executes(self):
         # a module with an import-time side effect must resolve via AST without triggering it
         boom = "raise RuntimeError('import-time side effect should never fire')\n\ndef run():\n    return 1\n"
