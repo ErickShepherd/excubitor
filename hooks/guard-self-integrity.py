@@ -180,7 +180,10 @@ def _bash_kill_switch(command: str, cwd: str) -> str | None:
     """Best-effort scan of a Bash command for any token naming a kill-switch path."""
     for segment in split_segments(command):
         try:
-            tokens = shlex.split(segment)
+            # comments=True matches bash: an unquoted `#` starts a comment, so a kill-switch name that
+            # appears only AFTER it (`rm foo # see guard-loop-vc.py`) is never acted on and must not be a
+            # false deny. A `#` inside quotes is preserved by split_segments and stays a real token.
+            tokens = shlex.split(segment, comments=True)
         except ValueError:
             tokens = segment.split()  # unbalanced quotes etc. → best-effort
         for tok in tokens:
