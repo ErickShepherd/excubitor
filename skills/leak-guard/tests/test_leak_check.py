@@ -107,31 +107,39 @@ class TestPrivateTokens(unittest.TestCase):
     def test_literal_private_token_case_insensitive_substring(self):
         canon = _file(self.dir, "private.txt", "# my canon\nAcme Confidential Project\n")
         art = _file(self.dir, "resume.md", "Led the acme confidential project to launch.\n")
-        rc, out, _ = _run([str(art), "--private-tokens", str(canon)])
+        rc, out, err = _run([str(art), "--private-tokens", str(canon)])
         self.assertEqual(rc, 1)
-        self.assertIn("private-literal:Acme Confidential Project", out)
+        self.assertIn("private-literal@2", out)  # opaque line-number label, not the rule text
+        self.assertNotIn("Acme Confidential Project", out + err)  # the private token must NOT be printed
 
     def test_private_regex(self):
         canon = _file(self.dir, "private.txt", "re:\\b555-\\d{4}\\b\n")
         art = _file(self.dir, "bio.md", "call me at 555-0134 anytime\n")
-        rc, out, _ = _run([str(art), "--private-tokens", str(canon)])
+        rc, out, err = _run([str(art), "--private-tokens", str(canon)])
         self.assertEqual(rc, 1)
-        self.assertIn("private-regex", out)
+        self.assertIn("private-regex@1", out)
+        self.assertNotIn("555-0134", out + err)   # the full matched number is masked, never shown whole
+        self.assertNotIn("\\d{4}", out + err)     # nor is the regex SOURCE (which can embed a literal)
 
     def test_no_builtin_scans_only_private(self):
         # With --no-builtin, an AWS key is ignored; only the private token fires.
         canon = _file(self.dir, "private.txt", "TopSecretName\n")
         art = _file(self.dir, "a.txt", f"AWS={AWS_KEY}\nabout TopSecretName here\n")
-        rc, out, _ = _run([str(art), "--private-tokens", str(canon), "--no-builtin"])
+        rc, out, err = _run([str(art), "--private-tokens", str(canon), "--no-builtin"])
         self.assertEqual(rc, 1)
-        self.assertIn("private-literal:TopSecretName", out)
+        self.assertIn("private-literal@1", out)
+        self.assertNotIn("TopSecretName", out + err)  # the private token must NOT be printed
         self.assertNotIn("aws-access-key-id", out)
 
-    def test_bad_regex_fails_loud(self):
-        canon = _file(self.dir, "private.txt", "re:[unclosed\n")
+    def test_bad_regex_fails_loud_without_leaking_the_pattern(self):
+        # A private regex may itself embed a literal secret; a bad one must fail loud (exit 2) but must
+        # NOT echo the pattern source into stderr — point at its line in the tokens file instead.
+        canon = _file(self.dir, "private.txt", "re:SuperSecretPrefix[unclosed\n")
         art = _file(self.dir, "a.txt", "hello\n")
-        rc, _, err = _run([str(art), "--private-tokens", str(canon)])
+        rc, out, err = _run([str(art), "--private-tokens", str(canon)])
         self.assertEqual(rc, 2)  # loud SystemExit, not a silently-skipped rule
+        self.assertNotIn("SuperSecretPrefix", out + err)  # the pattern text must not leak
+        self.assertIn(":1:", err)  # points at the offending line
 
 
 class TestWhitelistIsExplicit(unittest.TestCase):
@@ -155,10 +163,11 @@ class TestWhitelistIsExplicit(unittest.TestCase):
         # Whitelisting one token must NOT suppress a DIFFERENT leak.
         canon = _file(self.dir, "private.txt", "PublicBrandName\nSecretClient\n")
         art = _file(self.dir, "site.md", "PublicBrandName works with SecretClient.\n")
-        rc, out, _ = _run([str(art), "--private-tokens", str(canon), "--allow", "PublicBrandName"])
+        rc, out, err = _run([str(art), "--private-tokens", str(canon), "--allow", "PublicBrandName"])
         self.assertEqual(rc, 1)
-        self.assertIn("private-literal:SecretClient", out)
-        self.assertNotIn("private-literal:PublicBrandName", out)
+        self.assertIn("private-literal@2", out)       # SecretClient (line 2) still fires
+        self.assertNotIn("private-literal@1", out)    # PublicBrandName (line 1) whitelisted → suppressed
+        self.assertNotIn("SecretClient", out + err)   # and the private token itself is never printed
 
 
 class TestFailClosed(unittest.TestCase):
