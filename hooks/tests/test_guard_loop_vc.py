@@ -124,6 +124,8 @@ class TestGuardLoopVC(unittest.TestCase):
         "gh -R owner/repo pr view 5",          # value-flag before a read subcommand → allow
         "gh pr list --label merge",           # `merge` is a flag value, not the subcommand
         "gh pr checkout some-merge-branch",   # branch name contains 'merge'
+        "git worktree add ../wt remove",      # 'remove' here is a branch/path name, not the subcommand
+        "git worktree list",
         "git status && git diff",
         # read forms of the trust-anchor verbs stay allowed (the guards themselves use them)
         "git symbolic-ref HEAD",
