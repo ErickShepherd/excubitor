@@ -4,7 +4,7 @@
 timeout backstop and over reopening the no-watcher deferral).
 **Touches:** [`ralph-loop/SKILL.md`](../../skills/ralph-loop/SKILL.md) (the invariant + mechanism),
 [`hooks/guard-one-unit.py`](../../hooks/guard-one-unit.py) (new, the tiny gate), the
-driver that realizes the loop (e.g. an internal repo `tools/bulk-apply-pipeline.sh`). Sibling to the act-fence
+driver that realizes the loop (the owning repo's loop-driver script, e.g. a `tools/run-loop.sh`). Sibling to the act-fence
 guard [`guard-loop-vc.py`](../../hooks/guard-loop-vc.py).
 
 ## Problem
@@ -13,8 +13,8 @@ A headless `claude -p "/<skill>"` worker is a **free-running agent**. The recipe
 a *soft* instruction, and "iteration" was never bound to "the worker's turn." Observed 2026-06-30: a single
 `bulk-content-review` worker stayed in ONE turn for **2h41m and drained ~51 units**, committing each. That
 defeats the per-iteration **fresh-context re-read** that is the recipe's entire anti-drift purpose — later
-units are judged through a context polluted by the earlier ones (and degrade on plain long-context grounds; the
-dominant fix, "de-hedge the cover," risks becoming a reflexive pattern rather than a fresh judgment). The
+units are judged through a context polluted by the earlier ones (and degrade on plain long-context grounds; a
+fix that dominated early units risks becoming a reflexive pattern rather than a fresh judgment). The
 driver's outer loop only re-spawns a fresh context **when the worker exits** — and a worker that internally
 loops never exits, so the fresh re-read silently degrades from "per unit" to "per multi-hour batch."
 
@@ -34,7 +34,7 @@ New PreToolUse hook `guard-one-unit.py`, a sibling of `guard-loop-vc.py`, **opt-
 worker spawn** (so interactive sessions and `/loop` wakes — each already a fresh session — are untouched):
 
 - `ONE_UNIT_CAP_SCOPE` — the conventional-commit **scope** the worker's unit commits carry (the driver derives
-  it from the skill: `${skill#bulk-}` → `content-review` / `resume` / `cover` / …).
+  it from the skill it spawns, e.g. `${skill#bulk-}` → `content-review`).
 - `ONE_UNIT_CAP_BASELINE` — the count of scope-matched commits on the branch **at spawn time**.
 
 On **every** tool call: if the env is unset → no-op (allow). Else recompute the scoped commit count — the
@@ -47,10 +47,10 @@ count and cross-trip the parallel guarantee below — subject-only keeps the att
 the worker ends the turn; the driver's existing re-fire then re-spawns a **fresh** process — which *is* the
 anti-drift re-read.
 
-**Why scope-matched, not a raw HEAD count.** In the `resume ∥ cover` parallel stage two workers commit to the
-**same branch**; a raw, un-scoped HEAD count would let the *sibling's* commit trip my cap before I commit my
-own unit (livelock risk). Disjoint conventional-commit scopes (`feat(resume)` vs `feat(cover)` vs
-`feat(content-review)`) attribute each commit to its own worker → parallel-safe. **Contract for the driver
+**Why scope-matched, not a raw HEAD count.** When two worker skills run as a parallel stage committing to the
+**same branch**, a raw, un-scoped HEAD count would let the *sibling's* commit trip my cap before I commit my
+own unit (livelock risk). Disjoint conventional-commit scopes (`feat(<scope-a>)` vs `feat(<scope-b>)`)
+attribute each commit to its own worker → parallel-safe. **Contract for the driver
 branch:** the driver computes `ONE_UNIT_CAP_BASELINE` and the hook computes the runtime count with the
 **identical** subject-only invocation (`git log --format=%s HEAD`, counting the literal `(<scope>)`); they
 **must** match — a divergent invocation (e.g. the driver using `rev-list --grep` while the hook counts
@@ -98,7 +98,7 @@ ends the turn (bounded waste, never corruption). **Fail-open:** any hook error �
   `~/.claude/settings.json` `PreToolUse` (matcher `*`), merged in idempotently. Inert until a driver sets the
   env, so zero effect on ordinary interactive work.
 - **an internal repo** (separate branch): `run_iteration` exports `ONE_UNIT_CAP_SCOPE` + `ONE_UNIT_CAP_BASELINE`
-  per spawn; the bulk-* charters say "do **one** unit, make a **single** commit, then **STOP** — end your turn."
+  per spawn; the loop charters say "do **one** unit, make a **single** commit, then **STOP** — end your turn."
 
 ## Non-goals
 

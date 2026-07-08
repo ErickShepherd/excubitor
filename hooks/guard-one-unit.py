@@ -19,8 +19,8 @@ already a fresh session and needs no cap).
 MECHANISM. On every tool call, recompute the scoped commit count — the number of commits whose
 SUBJECT carries `(<scope>)` (`git log --format=%s HEAD`, counted; NOT `rev-list --grep`, which also
 matches the message body) — and DENY when it exceeds the baseline, i.e. this session has already
-committed its one unit. Subject-and-scope-matched (not a raw HEAD count) so the resume‖cover parallel
-stage, where two workers commit to the same branch, doesn't cross-trip (each worker's commit subject
+committed its one unit. Subject-and-scope-matched (not a raw HEAD count) so a two-worker parallel
+stage, where both workers commit to the same branch, doesn't cross-trip (each worker's commit subject
 carries a disjoint scope).
 
 ONE_UNIT_CAP_REPO optionally pins the repo dir; otherwise the payload `cwd` (fallback: process cwd).
@@ -65,7 +65,7 @@ def _scoped_commit_count(repo_dir: str | None, scope: str) -> int | None:
 
     Counts subjects (`git log --format=%s`), NOT `rev-list --grep` — the latter matches the whole
     commit *message* (subject + body), so a worker whose commit body merely mentions another stage's
-    scope would inflate that stage's count and could cross-trip the resume‖cover parallel guarantee.
+    scope would inflate that stage's count and could cross-trip the parallel-stage guarantee.
     Subject-only keeps the per-worker attribution exact.
     """
     cmd = ["git"]

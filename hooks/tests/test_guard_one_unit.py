@@ -5,7 +5,7 @@ Drives the hook as a subprocess against a real temp git repo, asserting the deny
 deny = exit 0 + JSON permissionDecision=deny; defer = exit 0 with no decision. Pins the load-bearing
 properties: INACTIVE unless BOTH env knobs are set; DENIES once the scope-matched commit count exceeds
 the baseline (the session's one unit landed); is SCOPE-MATCHED so a sibling stage's commit does NOT
-trip the cap (parallel resume‖cover safety); and FAILS OPEN on unparseable input or a non-git dir.
+trip the cap (parallel two-worker safety); and FAILS OPEN on unparseable input or a non-git dir.
 
 Stdlib unittest only. Run:
   python3 hooks/tests/test_guard_one_unit.py
@@ -102,12 +102,12 @@ class GuardOneUnit(unittest.TestCase):
         self.assertTrue(_denied(out))
 
     def test_scope_matched_sibling_commit_does_not_trip(self):
-        # Parallel resume‖cover: a cover commit must NOT end the resume worker's session.
+        # Two workers in parallel: a sibling-scope commit must NOT end this worker's session.
         repo = _new_repo()
-        _commit(repo, "feat(cover): sibling unit")  # different scope
-        rc, out = _run(scope="resume", baseline="0", repo=repo)
+        _commit(repo, "feat(stage-b): sibling unit")  # different scope
+        rc, out = _run(scope="stage-a", baseline="0", repo=repo)
         self.assertEqual(rc, 0)
-        self.assertFalse(_denied(out))  # resume scoped-count still 0 == baseline → allow
+        self.assertFalse(_denied(out))  # stage-a scoped-count still 0 == baseline → allow
 
     def test_fail_open_unparseable_stdin(self):
         repo = _new_repo()
