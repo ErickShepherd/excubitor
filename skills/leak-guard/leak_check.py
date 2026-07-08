@@ -80,11 +80,15 @@ class Finding:
 
 
 def mask(s: str) -> str:
-    """Redact a matched secret for safe printing: keep a 4-char prefix, hide the rest, note length."""
+    """Redact a matched secret for safe printing: reveal a short prefix, hide the rest, note length.
+
+    The prefix is capped at len//3 (max 4) so a SHORT secret isn't largely disclosed by the prefix
+    alone — an 8-char token shows 2 chars, not 4; a token of 6 or fewer shows none."""
     s = s.strip()
-    if len(s) <= 4:
+    prefix = min(4, len(s) // 3)
+    if prefix == 0:
         return f"…[{len(s)} chars]"
-    return f"{s[:4]}…[{len(s)} chars]"
+    return f"{s[:prefix]}…[{len(s)} chars]"
 
 
 def load_private_patterns(path: Path) -> list[tuple[str, "re.Pattern[str]"]]:
@@ -217,7 +221,8 @@ def main(argv: list[str]) -> int:
             print(f"leak_check: --allow-file not found: {af}", file=sys.stderr)
             return 2
         allow |= {ln.strip() for ln in af.read_text(encoding="utf-8", errors="replace").splitlines()
-                  if ln.strip() and not ln.startswith("#")}
+                  if ln.strip() and not ln.strip().startswith("#")}  # strip BEFORE the # test (mirror
+        # load_private_patterns) so an INDENTED `# comment` is a comment, not a literal whitelist entry
 
     findings, suppressed, errors, skipped = scan([Path(p) for p in args.paths], patterns, allow)
 
@@ -232,7 +237,7 @@ def main(argv: list[str]) -> int:
 
     if findings or errors:
         print(f"leak_check: BLOCK — {len(findings)} finding(s), {len(errors)} error(s)", file=sys.stderr)
-        return 1 if findings and not errors else (1 if findings else 2)
+        return 1 if findings else 2  # a finding gates as 1; an errors-only run (fail-closed) as 2
     print("leak_check: clean", file=sys.stderr)
     return 0
 
