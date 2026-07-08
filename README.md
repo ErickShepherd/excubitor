@@ -178,6 +178,16 @@ kind of forged safety claim this repo exists to refuse. In this project a **guar
 security bug**, and so is an overstated safety claim — [`SECURITY.md`](SECURITY.md) says what counts
 and how to report it.
 
+## Where this sits vs. prior work
+
+[`RELATED-WORK.md`](RELATED-WORK.md) positions excubitor honestly against the fast-growing
+agent-safety literature — injection defenses (VIGIL), probabilistic behavioral contracts, policy-DSL
+enforcers, verified code generation — including what those systems have that this one does not (formal
+guarantees, benchmarks). The short version: excubitor's distinct slice is **completion-claim integrity
++ the irreversibility boundary for unattended loops**, enforced *deterministically*, *witness-backed*,
+with the enforcement layer fencing its **own** integrity — the assumption ("a judge the model can
+rewrite is not a judge") that most runtime-enforcement work assumes away.
+
 ## Glossary — referenced but not included
 
 This library is extracted from a larger private skill set; the shipped files occasionally
