@@ -47,16 +47,15 @@ def _allow() -> None:
 
 
 def _deny(reason: str) -> None:
-    print(
-        json.dumps(
-            {
-                "hookSpecificOutput": {
-                    "hookEventName": "PreToolUse",
-                    "permissionDecision": "deny",
-                    "permissionDecisionReason": reason,
-                }
+    json.dump(  # same form as the sibling guards (guard-loop-vc / guard-default-branch / self-integrity)
+        {
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "deny",
+                "permissionDecisionReason": reason,
             }
-        )
+        },
+        sys.stdout,
     )
     sys.exit(0)
 
@@ -86,7 +85,7 @@ def _scoped_commit_count(repo_dir: str | None, scope: str) -> int | None:
 def main() -> None:
     try:
         payload = json.load(sys.stdin)
-    except (json.JSONDecodeError, ValueError):
+    except ValueError:  # JSONDecodeError is a ValueError subclass — one catch suffices
         _allow()  # unparseable input → fail open, never wedge the tool
     if not isinstance(payload, dict):
         _allow()  # valid-JSON-but-not-an-object → fail open; payload.get(...) must never raise AttributeError
