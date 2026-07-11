@@ -27,6 +27,9 @@ cannot forge — a strict parser, an exit code, a denied tool call, or a human.
                                  ├─ guard-one-unit.py         (*: post-commit cap)
                                  └─ guard-self-integrity.py   (armed loop: no writes to the
                                                                guards' own kill-switches)
+                                 └──every deny──► ~/.claude/excubitor/denials.jsonl
+                                                  (_denial_log.py: telemetry, best-effort
+                                                   after the decision; NOT evidence)
                                                         ▲
                                                         │ armed by env markers
    unattended loop (skills/ralph-loop, skills/telos-loop)
@@ -53,7 +56,12 @@ cannot forge — a strict parser, an exit code, a denied tool call, or a human.
    an undeterminable branch blocks the merge). `guard-self-integrity.py` closes the reflexive hole:
    while a loop guard is armed, the loop may not write the guards' own kill-switches (the
    allow-default-branch marker, the hook scripts, the settings.json hooks block) — a judge the
-   model can rewrite is not a judge.
+   model can rewrite is not a judge. Every deny is also appended to a local JSONL telemetry log
+   (`hooks/_denial_log.py`) strictly *after* the decision is flushed to the runtime, strictly
+   best-effort, and time-bounded (a hung write is abandoned, not waited on) — neither a faulting
+   nor a blocking telemetry write can change or outlast a decision. The log is observability, not
+   evidence: it is deliberately not a fenced kill-switch (see KNOWN-BYPASSES.md) and nothing in
+   the trust story reads it.
 
 3. **Loop ↔ its own oracle.** YOLO mode's permit-to-act is only sound if the loop cannot edit the
    oracle that gates it. `check_oracle_frozen.py` verifies, from git history, that the oracle file
@@ -65,7 +73,8 @@ cannot forge — a strict parser, an exit code, a denied tool call, or a human.
 ## Layout
 
 ```
-hooks/                    # the guards + tests/ (stdlib only; no imports across components)
+hooks/                    # the guards + _denial_log.py telemetry helper + tests/ (stdlib only;
+                          # no imports across components — the helper is within-component)
 skills/<name>/SKILL.md    # open Agent Skills format: frontmatter trigger + instructions
 skills/<name>/scripts/    # executable helpers (ralph-loop's oracle/suite/suspend checks)
 skills/<name>/tests/      # per-component pytest suites (194 total)

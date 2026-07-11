@@ -36,6 +36,8 @@ def _run(
 ) -> "tuple[int, str]":
     env = dict(os.environ)
     env.pop("CLAUDE_LOOP_GUARD", None)
+    # Keep test denies out of the real telemetry log (every deny appends — see hooks/_denial_log.py).
+    env.setdefault("EXCUBITOR_DENIAL_LOG", os.devnull)
     if guard:  # True → conservative "1"; a str ("1"/"yolo") sets that mode; False → unset (inactive)
         env["CLAUDE_LOOP_GUARD"] = guard if isinstance(guard, str) else "1"
     payload = raw if raw is not None else json.dumps({"tool_name": tool, "tool_input": {"command": command}})

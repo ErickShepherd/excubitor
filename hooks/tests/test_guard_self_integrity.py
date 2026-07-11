@@ -28,6 +28,8 @@ HOOK = Path(__file__).resolve().parents[1] / "guard-self-integrity.py"
 def _run(payload_or_raw, *, guard: "bool | str" = True) -> "tuple[int, str]":
     env = dict(os.environ)
     env.pop("CLAUDE_LOOP_GUARD", None)
+    # Keep test denies out of the real telemetry log (every deny appends — see hooks/_denial_log.py).
+    env.setdefault("EXCUBITOR_DENIAL_LOG", os.devnull)
     if guard:  # True → conservative "1"; a str sets that mode; False → unset (inactive)
         env["CLAUDE_LOOP_GUARD"] = guard if isinstance(guard, str) else "1"
     raw = payload_or_raw if isinstance(payload_or_raw, str) else json.dumps(payload_or_raw)

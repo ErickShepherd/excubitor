@@ -45,8 +45,11 @@ done
 [[ $# -gt 0 ]] && exit 0
 
 # --- hooks ----------------------------------------------------------------
+# _denial_log.py is a shared helper the guards load from their resolved directory, NOT a hook —
+# linked so even a COPIED (non-symlinked) guard in ~/.claude/hooks finds it; never registered below.
 mkdir -p "$HOOKS_DIR"
-for hook in guard-default-branch.py guard-loop-vc.py guard-one-unit.py guard-self-integrity.py; do
+for hook in guard-default-branch.py guard-loop-vc.py guard-one-unit.py guard-self-integrity.py \
+            _denial_log.py; do
   link "$REPO/hooks/$hook" "$HOOKS_DIR/$hook"
 done
 
