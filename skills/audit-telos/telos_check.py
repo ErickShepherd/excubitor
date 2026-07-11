@@ -591,6 +591,76 @@ def run_witness(repo: Path, verified_by: str) -> tuple[bool, str]:
 
 
 # ── deterministic state computation ──────────────────────────────────────────────────────────────────
+def _classify_claim(repo: Path, c, today: date, prior: dict[str, tuple[str, str, str, str]],
+                    run_witnesses: bool, edges) -> tuple[dict, str | None]:
+    """Per-claim state machine: resolve the discharged-by pointer, consult/run its witness, apply the
+    anchor + last-grilled SUSPECT rules, then settle the claim to UNMET / DRIFTED / SUSPECT / DISCHARGED
+    or flag `needs_judgment` for the LLM tier. Returns `(res, accounted_qualname)` where the qualname is
+    the resolved discharged-by symbol to fold into the coverage seed (None when the pointer is unset or
+    unresolved, so an unmet claim adds nothing to accounted-for)."""
+    res = {"id": c.id, "title": c.title, "contract": c.fields.get("contract", ""),
+           "intent": c.fields.get("intent", ""), "discharged_by": c.discharged_by,
+           "state": None, "needs_judgment": False, "rationale": "", "facet": None,
+           "target": c.discharged_by or c.id, "severity": "MED", "tier": None, "judged": ""}
+    if not c.is_pointed:
+        res.update(state="UNMET", facet="telos-unmet", target=c.id, severity="HIGH",
+                   rationale="pointer is none/TODO/unset")
+        return res, None
+    exists, node, segment = resolve_pointer(repo, c.discharged_by)
+    if not exists:
+        res.update(state="UNMET", facet="telos-unmet", target=c.id, severity="HIGH",
+                   rationale=f"symbol {c.discharged_by} not found (renamed/deleted) — fails loud")
+        return res, None
+    accounted_qualname = pointer_qualname(repo, c.discharged_by)
+    res["source_hash"] = claim_fingerprint(segment, c.fields.get("contract", ""),
+                                            c.fields.get("intent", ""),
+                                            c.fields.get("verified-by", ""))  # ledger cache key for --prior
+    # anchor / staleness → SUSPECT (mechanical; never auto-DRIFTED)
+    anchor = c.fields.get("anchor", "none").strip().lower()
+    suspect_reasons = []
+    if anchor != "none" and content_hash(segment) != anchor:
+        suspect_reasons.append("anchor content-hash mismatch — re-judge")
+    if is_stale(c.fields.get("last-grilled", ""), today):
+        suspect_reasons.append("last-grilled stale past threshold — re-grill")
+    # executable witness, if present, is authoritative
+    witness = c.fields.get("verified-by", "").strip()
+    if witness and run_witnesses:
+        ok, detail = run_witness(repo, witness)
+        if not ok:
+            res.update(state="DRIFTED", facet="telos-drift", severity="MED",
+                       rationale=f"verified-by witness failed: {detail}")
+            return res, accounted_qualname
+        res["rationale"] = f"verified-by witness passed ({detail})"
+        res.update(state="DISCHARGED", tier="witness")
+        if suspect_reasons:
+            res.update(state="SUSPECT", tier=None, facet="telos-drift",
+                       rationale="; ".join(suspect_reasons))
+        return res, accounted_qualname
+    if suspect_reasons:
+        res.update(state="SUSPECT", facet="telos-drift", rationale="; ".join(suspect_reasons))
+        return res, accounted_qualname
+    # resolves, no witness, not suspect → tier-gated + judged-keyed incremental cache, else the LLM call.
+    # B4: carry a prior DISCHARGED forward ONLY for a carry-eligible tier on a byte-identical fingerprint
+    # whose tool-written `judged` receipt is fresh — never an unbacked `asserted`, never a stale judgment.
+    pr = prior.get(c.id)
+    if (pr and pr[0] == res["source_hash"] and pr[1] == "DISCHARGED"
+            and pr[2] in _CARRY_TIERS and pr[3] and not is_stale(pr[3], today)):
+        # `pr[3]` (a non-empty tool-written `judged` date) is REQUIRED: a `witness`-tier prior emits an
+        # empty judged (`is_stale("")` is False, which would otherwise read as "fresh") — so without this
+        # a claim whose witness was removed would carry forward forever as tier=cache, never re-run. A
+        # real judged/cache verdict always carries a date; a witness prior with no receipt re-judges.
+        res.update(state="DISCHARGED", tier="cache", judged=pr[3],
+                   rationale=f"unchanged since prior DISCHARGED (fresh {pr[2]} receipt"
+                             f"{' ' + pr[3] if pr[3] else ''}; incremental skip)")
+    else:
+        neighbors, truncated = claim_neighbors(pointer_qualname(repo, c.discharged_by), edges)
+        res.update(needs_judgment=True, tier="unproven", facet="telos-drift",
+                   neighbors=neighbors, neighbors_truncated=truncated,
+                   rationale="pointer resolves; LLM must judge contract fulfillment (DISCHARGED vs "
+                             "DRIFTED) over the discharged-by symbol AND its 1-hop callees (neighbors)")
+    return res, accounted_qualname
+
+
 def audit(repo: Path, run_witnesses: bool = True, today: date | None = None,
           prior: dict[str, tuple[str, str, str, str]] | None = None) -> dict:
     """Full deterministic pass. Returns a JSON-able result the LLM tier consumes and emit-ledger renders.
@@ -612,71 +682,9 @@ def audit(repo: Path, run_witnesses: bool = True, today: date | None = None,
     for c in record.claims:
         if c.fields.get("superseded-by", "").strip():
             continue  # retired claim — preserved for history (git + the record), not audited
-        res = {"id": c.id, "title": c.title, "contract": c.fields.get("contract", ""),
-               "intent": c.fields.get("intent", ""), "discharged_by": c.discharged_by,
-               "state": None, "needs_judgment": False, "rationale": "", "facet": None,
-               "target": c.discharged_by or c.id, "severity": "MED", "tier": None, "judged": ""}
-        if not c.is_pointed:
-            res.update(state="UNMET", facet="telos-unmet", target=c.id, severity="HIGH",
-                       rationale="pointer is none/TODO/unset")
-            claim_results.append(res)
-            continue
-        exists, node, segment = resolve_pointer(repo, c.discharged_by)
-        if not exists:
-            res.update(state="UNMET", facet="telos-unmet", target=c.id, severity="HIGH",
-                       rationale=f"symbol {c.discharged_by} not found (renamed/deleted) — fails loud")
-            claim_results.append(res)
-            continue
-        accounted_seed.add(pointer_qualname(repo, c.discharged_by))
-        res["source_hash"] = claim_fingerprint(segment, c.fields.get("contract", ""),
-                                                c.fields.get("intent", ""),
-                                                c.fields.get("verified-by", ""))  # ledger cache key for --prior
-        # anchor / staleness → SUSPECT (mechanical; never auto-DRIFTED)
-        anchor = c.fields.get("anchor", "none").strip().lower()
-        suspect_reasons = []
-        if anchor != "none" and content_hash(segment) != anchor:
-            suspect_reasons.append("anchor content-hash mismatch — re-judge")
-        if is_stale(c.fields.get("last-grilled", ""), today):
-            suspect_reasons.append("last-grilled stale past threshold — re-grill")
-        # executable witness, if present, is authoritative
-        witness = c.fields.get("verified-by", "").strip()
-        if witness and run_witnesses:
-            ok, detail = run_witness(repo, witness)
-            if not ok:
-                res.update(state="DRIFTED", facet="telos-drift", severity="MED",
-                           rationale=f"verified-by witness failed: {detail}")
-                claim_results.append(res)
-                continue
-            res["rationale"] = f"verified-by witness passed ({detail})"
-            res.update(state="DISCHARGED", tier="witness")
-            if suspect_reasons:
-                res.update(state="SUSPECT", tier=None, facet="telos-drift",
-                           rationale="; ".join(suspect_reasons))
-            claim_results.append(res)
-            continue
-        if suspect_reasons:
-            res.update(state="SUSPECT", facet="telos-drift", rationale="; ".join(suspect_reasons))
-            claim_results.append(res)
-            continue
-        # resolves, no witness, not suspect → tier-gated + judged-keyed incremental cache, else the LLM call.
-        # B4: carry a prior DISCHARGED forward ONLY for a carry-eligible tier on a byte-identical fingerprint
-        # whose tool-written `judged` receipt is fresh — never an unbacked `asserted`, never a stale judgment.
-        pr = prior.get(c.id)
-        if (pr and pr[0] == res["source_hash"] and pr[1] == "DISCHARGED"
-                and pr[2] in _CARRY_TIERS and pr[3] and not is_stale(pr[3], today)):
-            # `pr[3]` (a non-empty tool-written `judged` date) is REQUIRED: a `witness`-tier prior emits an
-            # empty judged (`is_stale("")` is False, which would otherwise read as "fresh") — so without this
-            # a claim whose witness was removed would carry forward forever as tier=cache, never re-run. A
-            # real judged/cache verdict always carries a date; a witness prior with no receipt re-judges.
-            res.update(state="DISCHARGED", tier="cache", judged=pr[3],
-                       rationale=f"unchanged since prior DISCHARGED (fresh {pr[2]} receipt"
-                                 f"{' ' + pr[3] if pr[3] else ''}; incremental skip)")
-        else:
-            neighbors, truncated = claim_neighbors(pointer_qualname(repo, c.discharged_by), edges)
-            res.update(needs_judgment=True, tier="unproven", facet="telos-drift",
-                       neighbors=neighbors, neighbors_truncated=truncated,
-                       rationale="pointer resolves; LLM must judge contract fulfillment (DISCHARGED vs "
-                                 "DRIFTED) over the discharged-by symbol AND its 1-hop callees (neighbors)")
+        res, accounted_qualname = _classify_claim(repo, c, today, prior, run_witnesses, edges)
+        if accounted_qualname is not None:
+            accounted_seed.add(accounted_qualname)
         claim_results.append(res)
 
     # accounted-for = closure of discharged-by symbols over call edges, then class↔method containment
@@ -715,19 +723,16 @@ def _row(severity: str, target: str, facet: str, problem: str, disp: str = "pend
     return f"- [ ] **[{severity}]** {target} — [{facet}] {problem} → {fix}  (disp: {disp})"
 
 
-def emit_ledger(result: dict, judgments: dict | None, audit_date: str) -> str:
-    """Render the result + LLM judgments into the audit-repo worklist ledger format.
-
-    `judgments` maps claim-id / candidate-target → {"verdict": DISCHARGED|DRIFTED|orphan|plumbing|claim,
-    "rationale": str}. Anything left unjudged is emitted as `(disp: pending)` so the accuracy store
-    excludes it from the rates (never a silent clean pass)."""
-    judgments = judgments or {}
-    repo = repo_name(Path(result["repo"]))
+def _render_claim_rows(claims: list[dict], judgments: dict,
+                       audit_date: str) -> tuple[list[str], list[tuple], list[tuple]]:
+    """Fold the per-claim audit results + LLM judgments into `(finding rows, verdict-table entries,
+    discharged claims)`. A `needs_judgment` claim adopts its judgment's DISCHARGED/DRIFTED verdict (an
+    LLM DISCHARGED earns the `judged` tier + a receipt dated this run); an unjudged one stays PENDING."""
     rows: list[str] = []
     # (claim-id, source_hash, final state, evidence tier, tool-written judged date) for next run's --prior
     verdict_table: list[tuple[str, str, str, str, str]] = []
     discharged: list[tuple[dict, "str | None"]] = []
-    for c in result["claims"]:
+    for c in claims:
         state = c["state"]
         rationale = c["rationale"]
         tier = c.get("tier")
@@ -759,9 +764,15 @@ def emit_ledger(result: dict, judgments: dict | None, audit_date: str) -> str:
         elif state == "SUSPECT":
             rows.append(_row(c["severity"], c["id"], "telos-drift",
                              f'"{c["title"]}" SUSPECT: {rationale}'))
+    return rows, verdict_table, discharged
 
+
+def _render_orphan_rows(candidates: list[dict], judgments: dict) -> list[str]:
+    """Render the candidate-orphan section: an `orphan` verdict is a finding, `plumbing`/`claim` are
+    dropped (legit plumbing, or routed to `telos` as a proposed claim), an unjudged candidate stays a
+    needs-judgment row."""
     orphan_rows: list[str] = []
-    for cand in result["candidates"]:
+    for cand in candidates:
         j = judgments.get(cand["target"], {})
         verdict = j.get("verdict")
         if verdict in ("plumbing", "claim"):
@@ -772,6 +783,19 @@ def emit_ledger(result: dict, judgments: dict | None, audit_date: str) -> str:
         else:
             orphan_rows.append(_row("LOW", cand["target"], "telos-orphan",
                                     "candidate — needs orphan-meaningfulness judgment"))
+    return orphan_rows
+
+
+def emit_ledger(result: dict, judgments: dict | None, audit_date: str) -> str:
+    """Render the result + LLM judgments into the audit-repo worklist ledger format.
+
+    `judgments` maps claim-id / candidate-target → {"verdict": DISCHARGED|DRIFTED|orphan|plumbing|claim,
+    "rationale": str}. Anything left unjudged is emitted as `(disp: pending)` so the accuracy store
+    excludes it from the rates (never a silent clean pass)."""
+    judgments = judgments or {}
+    repo = repo_name(Path(result["repo"]))
+    rows, verdict_table, discharged = _render_claim_rows(result["claims"], judgments, audit_date)
+    orphan_rows = _render_orphan_rows(result["candidates"], judgments)
 
     cov = result["coverage"]
     cov_str = f"{cov*100:.0f}%" if cov is not None else "n/a (non-Python)"
