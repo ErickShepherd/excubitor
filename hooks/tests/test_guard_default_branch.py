@@ -41,6 +41,9 @@ def _repo(td: str, branch: str = "main", origin_head: "str | None" = None) -> st
 
 
 def _run(payload: dict, env: "dict | None" = None) -> "tuple[int, str]":
+    env = dict(os.environ) if env is None else dict(env)
+    # Keep test denies out of the real telemetry log (every deny appends — see hooks/_denial_log.py).
+    env.setdefault("EXCUBITOR_DENIAL_LOG", os.devnull)
     p = subprocess.run([sys.executable, str(HOOK)], input=json.dumps(payload),
                        capture_output=True, text=True, env=env)
     return p.returncode, p.stdout

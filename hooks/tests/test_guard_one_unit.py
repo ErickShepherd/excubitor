@@ -52,6 +52,8 @@ def _run(
     env = dict(os.environ)
     for k in ("ONE_UNIT_CAP_SCOPE", "ONE_UNIT_CAP_BASELINE", "ONE_UNIT_CAP_REPO"):
         env.pop(k, None)
+    # Keep test denies out of the real telemetry log (every deny appends — see hooks/_denial_log.py).
+    env.setdefault("EXCUBITOR_DENIAL_LOG", os.devnull)
     if scope is not None:
         env["ONE_UNIT_CAP_SCOPE"] = scope
     if baseline is not None:
