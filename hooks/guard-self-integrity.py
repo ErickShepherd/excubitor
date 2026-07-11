@@ -56,6 +56,12 @@ Registered in settings.json for the Bash|Edit|Write|NotebookEdit tools.
 Contract (docs/en/hooks): deny = exit 0 + JSON on stdout with
 hookSpecificOutput.permissionDecision="deny"; emitting no decision defers to the normal flow.
 We never exit non-zero — a guard bug must fail OPEN (process sense), never wedge the tool.
+
+Every deny is also appended, strictly best-effort AFTER the decision is on stdout, to a local
+JSONL telemetry log (see hooks/_denial_log.py) — a telemetry fault never changes the decision.
+The log is deliberately NOT a kill-switch path this guard fences: the guards deny identically
+whether the log exists or not, so fencing it would not protect guard integrity, only add
+false-deny surface. The log is observability, not evidence (see KNOWN-BYPASSES.md).
 """
 from __future__ import annotations
 
@@ -131,7 +137,26 @@ def _allow() -> None:
     sys.exit(0)
 
 
-def _deny(reason: str) -> None:
+def _record_denial(reason: str, payload: dict) -> None:
+    """Best-effort denial telemetry via the sibling hooks/_denial_log.py (loaded by resolved
+    path, the runtime/spec_adapter.py pattern, so the ~/.claude symlink layout finds it). ANY
+    fault — module missing (a copied guard with no sibling), unwritable log, anything — is
+    swallowed: the deny already flushed to stdout must never be affected."""
+    try:
+        import importlib.util
+
+        mod_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "_denial_log.py")
+        spec = importlib.util.spec_from_file_location("_denial_log", mod_path)
+        if spec is None or spec.loader is None:
+            return
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        mod.record("guard-self-integrity", reason, payload)
+    except Exception:
+        pass
+
+
+def _deny(reason: str, payload: dict) -> None:
     json.dump(
         {
             "hookSpecificOutput": {
@@ -142,6 +167,11 @@ def _deny(reason: str) -> None:
         },
         sys.stdout,
     )
+    # Decision first, telemetry second: flush the deny to the harness BEFORE any telemetry I/O,
+    # so even a pathologically hung log write can't eat the decision past the hook timeout
+    # (which would fail OPEN and let the fenced call run).
+    sys.stdout.flush()
+    _record_denial(reason, payload)
     sys.exit(0)
 
 
@@ -231,7 +261,8 @@ def main() -> None:
             f"is not a judge. Reads still work through the Read tool. If a kill-switch file "
             f"genuinely needs changing, that is stop-and-surface work for a human outside the "
             f"loop. This is a seatbelt for the default path, not a sandbox — see this hook's "
-            f"SCOPE / LIMITS docstring for what it does not catch."
+            f"SCOPE / LIMITS docstring for what it does not catch.",
+            payload,
         )
     _allow()
 

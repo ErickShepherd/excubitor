@@ -67,6 +67,9 @@ hookSpecificOutput.permissionDecision="deny"; emitting no decision defers to the
 We never exit non-zero — a guard bug must fail OPEN, never wedge the tool. (Note: "fail open" is the
 *process* contract — never crash/wedge the tool. The merge-allow *decision* in YOLO mode fails
 DENY: an undeterminable branch yields a normal deny, not a crash.)
+
+Every deny is also appended, strictly best-effort AFTER the decision is on stdout, to a local
+JSONL telemetry log (see hooks/_denial_log.py) — a telemetry fault never changes the decision.
 """
 from __future__ import annotations
 
@@ -124,7 +127,26 @@ def _allow() -> None:
     sys.exit(0)
 
 
-def _deny(reason: str) -> None:
+def _record_denial(reason: str, payload: dict) -> None:
+    """Best-effort denial telemetry via the sibling hooks/_denial_log.py (loaded by resolved
+    path, the runtime/spec_adapter.py pattern, so the ~/.claude symlink layout finds it). ANY
+    fault — module missing (a copied guard with no sibling), unwritable log, anything — is
+    swallowed: the deny already flushed to stdout must never be affected."""
+    try:
+        import importlib.util
+
+        mod_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "_denial_log.py")
+        spec = importlib.util.spec_from_file_location("_denial_log", mod_path)
+        if spec is None or spec.loader is None:
+            return
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        mod.record("guard-loop-vc", reason, payload)
+    except Exception:
+        pass
+
+
+def _deny(reason: str, payload: dict) -> None:
     json.dump(
         {
             "hookSpecificOutput": {
@@ -135,6 +157,11 @@ def _deny(reason: str) -> None:
         },
         sys.stdout,
     )
+    # Decision first, telemetry second: flush the deny to the harness BEFORE any telemetry I/O,
+    # so even a pathologically hung log write can't eat the decision past the hook timeout
+    # (which would fail OPEN and let the fenced call run).
+    sys.stdout.flush()
+    _record_denial(reason, payload)
     sys.exit(0)
 
 
@@ -462,7 +489,7 @@ def main() -> None:
     cwd = payload.get("cwd") or os.getcwd()
     reason = _dangerous(command, yolo, cwd)
     if reason:
-        _deny(_deny_message(reason, yolo))
+        _deny(_deny_message(reason, yolo), payload)
     _allow()
 
 

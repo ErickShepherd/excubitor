@@ -30,6 +30,9 @@ hookSpecificOutput.permissionDecision="deny"; emit no decision to defer to the n
 exit non-zero and FAIL OPEN on any error — a guard bug must never wedge the tool. The cap only tightens
 the common case; a miss degrades to today's free-running behavior, never to corruption.
 
+Every deny is also appended, strictly best-effort AFTER the decision is on stdout, to a local
+JSONL telemetry log (see hooks/_denial_log.py) — a telemetry fault never changes the decision.
+
 Registered in settings.json PreToolUse with matcher "*" (it must see every tool, since the post-commit
 action to deny may be any tool, not just Bash).
 """
@@ -46,7 +49,26 @@ def _allow() -> None:
     sys.exit(0)
 
 
-def _deny(reason: str) -> None:
+def _record_denial(reason: str, payload: dict) -> None:
+    """Best-effort denial telemetry via the sibling hooks/_denial_log.py (loaded by resolved
+    path, the runtime/spec_adapter.py pattern, so the ~/.claude symlink layout finds it). ANY
+    fault — module missing (a copied guard with no sibling), unwritable log, anything — is
+    swallowed: the deny already flushed to stdout must never be affected."""
+    try:
+        import importlib.util
+
+        mod_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "_denial_log.py")
+        spec = importlib.util.spec_from_file_location("_denial_log", mod_path)
+        if spec is None or spec.loader is None:
+            return
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        mod.record("guard-one-unit", reason, payload)
+    except Exception:
+        pass
+
+
+def _deny(reason: str, payload: dict) -> None:
     json.dump(  # same form as the sibling guards (guard-loop-vc / guard-default-branch / self-integrity)
         {
             "hookSpecificOutput": {
@@ -57,6 +79,11 @@ def _deny(reason: str) -> None:
         },
         sys.stdout,
     )
+    # Decision first, telemetry second: flush the deny to the harness BEFORE any telemetry I/O,
+    # so even a pathologically hung log write can't eat the decision past the hook timeout
+    # (which would fail OPEN and let the fenced call run).
+    sys.stdout.flush()
+    _record_denial(reason, payload)
     sys.exit(0)
 
 
@@ -110,7 +137,8 @@ def main() -> None:
             f"(scope '{scope}': {current} vs baseline {baseline}). STOP NOW — end your turn without "
             "further tool calls. The loop driver will start a FRESH session for the next unit; that "
             "fresh re-read of the spec from disk is the anti-drift point. Do not attempt more work "
-            "this session. See docs/design/ralph-loop-one-unit-per-session.md."
+            "this session. See docs/design/ralph-loop-one-unit-per-session.md.",
+            payload,
         )
     _allow()
 

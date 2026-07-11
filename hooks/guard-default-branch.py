@@ -15,6 +15,9 @@ Otherwise it denies the call with a message telling Claude to branch first.
 Contract (docs/en/hooks): deny = exit 0 + JSON on stdout with
 hookSpecificOutput.permissionDecision="deny"; emitting no decision defers. We never
 exit non-zero — a guard bug must not wedge the editor, only fail open.
+
+Every deny is also appended, strictly best-effort AFTER the decision is on stdout, to a local
+JSONL telemetry log (see hooks/_denial_log.py) — a telemetry fault never changes the decision.
 """
 from __future__ import annotations
 
@@ -40,7 +43,26 @@ def _allow() -> None:
     sys.exit(0)
 
 
-def _deny(reason: str) -> None:
+def _record_denial(reason: str, payload: dict) -> None:
+    """Best-effort denial telemetry via the sibling hooks/_denial_log.py (loaded by resolved
+    path, the runtime/spec_adapter.py pattern, so the ~/.claude symlink layout finds it). ANY
+    fault — module missing (a copied guard with no sibling), unwritable log, anything — is
+    swallowed: the deny already flushed to stdout must never be affected."""
+    try:
+        import importlib.util
+
+        mod_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "_denial_log.py")
+        spec = importlib.util.spec_from_file_location("_denial_log", mod_path)
+        if spec is None or spec.loader is None:
+            return
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        mod.record("guard-default-branch", reason, payload)
+    except Exception:
+        pass
+
+
+def _deny(reason: str, payload: dict) -> None:
     json.dump(
         {
             "hookSpecificOutput": {
@@ -51,6 +73,11 @@ def _deny(reason: str) -> None:
         },
         sys.stdout,
     )
+    # Decision first, telemetry second: flush the deny to the harness BEFORE any telemetry I/O,
+    # so even a pathologically hung log write can't eat the decision past the hook timeout
+    # (which would fail OPEN and let the fenced call run).
+    sys.stdout.flush()
+    _record_denial(reason, payload)
     sys.exit(0)
 
 
@@ -123,7 +150,8 @@ def main() -> None:
             f"`git switch -c <type>/<slug>` carries your current changes onto a new "
             f"branch (branching-strategy: feature/, fix/, docs/, chore/, refactor/, …). "
             f"To intentionally allow the default branch in this repo, create the marker: "
-            f"touch {os.path.join(repo, '.claude', 'allow-default-branch')}"
+            f"touch {os.path.join(repo, '.claude', 'allow-default-branch')}",
+            payload,
         )
     _allow()
 
