@@ -111,7 +111,7 @@ scripts/demo.sh            # 60-second zero-install crash test (drives the real 
 Requires Python 3.11+ and `git`. For Claude Code:
 
 ```bash
-git clone <this-repo> && cd excubitor
+git clone https://github.com/ErickShepherd/excubitor.git && cd excubitor
 scripts/install.sh          # symlinks skills/* and hooks/* into ~/.claude, and idempotently
                             # registers the four guards in ~/.claude/settings.json
 ```
