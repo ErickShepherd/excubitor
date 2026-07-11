@@ -141,6 +141,20 @@ hardcode-protected regardless, YOLO mode fails **deny** on ambiguity, and the on
 into the mis-resolved branch is a revertable `--no-ff` merge (push stays denied). See
 `hooks/guard-loop-vc.py::_default_branch` and `TELOS-006`.
 
+## ACCEPTED — the denial-telemetry log is editable by the agent it records
+
+Every guard deny is appended to a local JSONL log (`hooks/_denial_log.py`; default
+`~/.claude/excubitor/denials.jsonl`). That log is **observability, not evidence**: it lives on the
+same disk the agent writes, and `guard-self-integrity.py` deliberately does **not** fence it — an
+armed loop can edit or delete its own denial history. Fencing it would not protect the guards'
+integrity (they deny identically whether the log exists or not, and the decision is flushed to the
+harness *before* the log write), it would only add false-deny surface for a file nothing
+load-bearing reads. Nothing in the trust story leans on the log; a consumer that needs
+tamper-evident denial records needs a sink outside the agent's write reach, which is out of scope
+for a stdlib guard set. Pinned bidirectionally in
+`hooks/tests/test_denial_log.py::TestLogIsNotAKillSwitch` (armed loop touching the log is allowed;
+the same command shape against a real kill-switch still denies).
+
 ## CLOSED — self-integrity holes (fixed because they protect a guard's own judge)
 
 These *did* work and no longer do — they are the closures the crux does call for, because each let the
