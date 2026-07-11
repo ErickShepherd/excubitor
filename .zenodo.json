@@ -1,0 +1,22 @@
+{
+  "upload_type": "software",
+  "title": "excubitor: Safety fences for autonomous coding agents - mechanical guards, loop discipline, and a falsifiable intent-record system",
+  "description": "Stdlib-only Python hooks plus Agent Skills-format capability packets that let an LLM coding agent work unattended without trusting it to bless its own work. Provides mechanical version-control guards, loop discipline, and a falsifiable intent-record (telos) system. The guard's decision core is runtime-neutral: a second, non-Claude-Code adapter drives the same code under an equivalence test, so its portability is demonstrated rather than asserted.",
+  "access_right": "open",
+  "license": "MIT",
+  "keywords": [
+    "ai-agents",
+    "autonomous-agents",
+    "ai-safety",
+    "guardrails",
+    "claude-code",
+    "version-control",
+    "Python"
+  ],
+  "creators": [
+    {
+      "name": "Shepherd, Erick Edward",
+      "orcid": "0000-0002-4750-6100"
+    }
+  ]
+}
