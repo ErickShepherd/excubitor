@@ -1,0 +1,30 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "excubitor"
+abstract: >-
+  Safety fences for autonomous coding agents: stdlib-only Python
+  hooks plus Agent Skills-format capability packets that let an LLM
+  agent work unattended without trusting it to bless its own work.
+  Provides mechanical version-control guards, loop discipline, and a
+  falsifiable intent-record (telos) system. The guard's decision core
+  is runtime-neutral - a second, non-Claude-Code adapter drives the
+  same code under an equivalence test - so its portability is
+  demonstrated rather than asserted.
+type: software
+authors:
+  - family-names: "Shepherd"
+    given-names: "Erick Edward"
+    email: "dev@erickshepherd.com"
+    orcid: "https://orcid.org/0000-0002-4750-6100"
+version: "0.1.0"
+date-released: "2026-07-11"
+license: MIT
+repository-code: "https://github.com/ErickShepherd/excubitor"
+url: "https://github.com/ErickShepherd/excubitor"
+keywords:
+  - ai-agents
+  - autonomous-agents
+  - ai-safety
+  - guardrails
+  - claude-code
+  - version-control
