@@ -281,7 +281,7 @@ def _parse_date(s: str) -> date | None:
 # ── static-AST resolver (never imports/executes the target) ──────────────────────────────────────────
 SKIP_DIRS = {".git", ".venv", "venv", "env", "__pycache__", "node_modules", "build", "dist",
              "site-packages", ".tox", ".mypy_cache", ".pytest_cache", "vendor", "third_party",
-             "migrations", ".eggs", "_vendor", "tmp"}
+             "migrations", ".eggs", "_vendor", "tmp", "brand"}
 
 
 def _is_first_party(rel: Path) -> bool:
