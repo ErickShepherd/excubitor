@@ -92,14 +92,14 @@ must never discharge its own claims).
 ## What's in the box
 
 ```
-hooks/                     # 4 stdlib-only PreToolUse guards + 45 tests
+hooks/                     # 4 stdlib-only PreToolUse guards + 52 tests
 skills/
   telos/                   # intent-record authoring (write side)
-  audit-telos/             # conformance audit (read side) + strict parser + 69 tests
+  audit-telos/             # conformance audit (read side) + strict parser + 73 tests
   telos-loop/              # telos-anchored unattended loop recipe
-  ralph-loop/              # charter-driven loop + oracle-freeze/suspend scripts + 38 tests
-  leak-guard/              # private→public boundary guard + leak_check.py + 16 tests
-runtime/                   # runtime-neutral adapter (portability, proven) + 7 tests — see SPEC.md
+  ralph-loop/              # charter-driven loop + oracle-freeze/suspend scripts + 44 tests
+  leak-guard/              # private→public boundary guard + leak_check.py + 17 tests
+runtime/                   # runtime-neutral adapter (portability, proven) + 8 tests — see SPEC.md
 docs/design/               # 10 design/deliberation records
 docs/telos/                # this repo's own intent record (audited by its own tooling)
 scripts/install.sh         # symlink skills+hooks into ~/.claude, register the hooks
