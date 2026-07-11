@@ -5,3 +5,6 @@ __pycache__/
 
 # optional animated demo, regenerated from scripts/demo.tape via vhs (static frame demo.svg IS committed)
 scripts/demo.gif
+
+# local scratch (WSL-safe durable temp; never committed)
+tmp/
