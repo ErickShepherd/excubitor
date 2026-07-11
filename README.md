@@ -5,6 +5,10 @@
   </picture>
 </p>
 
+<p align="center">
+  <a href="https://doi.org/10.5281/zenodo.21315916"><img alt="DOI" src="https://img.shields.io/badge/DOI-10.5281%2Fzenodo.21315916-blue"></a>
+</p>
+
 *Excubitor* — Latin, "one who stands out of bed": the night watch. The Byzantine **excubitores**
 guarded the emperor's chambers precisely so that no one else had to stay awake.
 
