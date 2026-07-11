@@ -6,7 +6,10 @@ Drives each guard as a subprocess into a real deny and asserts the telemetry con
     $EXCUBITOR_DENIAL_LOG, with the guard/tool/target/reason/mode/session_id fields;
   * the deny decision NEVER depends on telemetry — an unwritable log path, a log path that is a
     directory, or a copied guard with no sibling module all still emit the deny JSON, exit 0,
-    and print nothing to stderr (the fault is swallowed, not just non-fatal);
+    and print nothing to stderr (the fault is swallowed, not just non-fatal); and a write that
+    BLOCKS (a reader-less FIFO stands in for a stalled mount) is abandoned on the daemon-thread
+    timeout, so the guard still exits with its deny well inside the 10s hook timeout — a hung
+    hook would fail OPEN and run the fenced call, so promptness IS the security property;
   * commands/reasons containing newlines and control characters stay ONE line (json escaping);
   * the ~/.claude symlink install layout resolves back to the repo sibling (run via a symlink);
   * BIDIRECTIONAL PIN (KNOWN-BYPASSES.md): guard-self-integrity does NOT fence the telemetry
@@ -25,6 +28,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -127,6 +131,26 @@ class TestDenialLogModule(unittest.TestCase):
             self.assertEqual(event["reason"], "why")
             self.assertEqual(event["session_id"], "s")
 
+    def test_record_caps_hostile_field_sizes(self):
+        # target/reason are attacker-influenceable and the log never rotates — both are bounded.
+        mod = _load_module()
+        with tempfile.TemporaryDirectory() as td:
+            log = os.path.join(td, "denials.jsonl")
+            env_log = os.environ.get("EXCUBITOR_DENIAL_LOG")
+            os.environ["EXCUBITOR_DENIAL_LOG"] = log
+            try:
+                huge = "x" * (mod._MAX_FIELD * 3)
+                self.assertTrue(mod.record("g", huge, {"tool_input": {"command": huge}}))
+            finally:
+                if env_log is None:
+                    os.environ.pop("EXCUBITOR_DENIAL_LOG", None)
+                else:
+                    os.environ["EXCUBITOR_DENIAL_LOG"] = env_log
+            event = json.loads(Path(log).read_text())
+            for field in ("target", "reason"):
+                self.assertEqual(len(event[field]), mod._MAX_FIELD + len(mod._TRUNCATION_MARK))
+                self.assertTrue(event[field].endswith(mod._TRUNCATION_MARK))
+
     def test_record_never_raises(self):
         mod = _load_module()
         with tempfile.TemporaryDirectory() as td:
@@ -212,6 +236,30 @@ class TestGuardsLogDenials(unittest.TestCase):
                     self.assertEqual(p.returncode, 0)
                     self.assertIsNotNone(_denied(p.stdout))
                     self.assertEqual(p.stderr, "")  # fault swallowed, no traceback
+
+    def test_blocked_log_write_still_denies_promptly(self):
+        # THE hung-write case (a fast-failing fault is easy; a write that BLOCKS is the one that
+        # would hold the guard past the 10s hook timeout, where the harness fails OPEN and runs
+        # the fenced call). A FIFO with no reader blocks open(..., "a") indefinitely — the daemon
+        # writer thread must be abandoned on its 1s join timeout and the guard must still exit 0
+        # with the deny, promptly. Bound is generous (6s) to stay unflaky on a loaded machine
+        # while still proving we come in far under the hook timeout.
+        with tempfile.TemporaryDirectory() as td:
+            fifo = os.path.join(td, "denials.fifo")
+            os.mkfifo(fifo)
+            env = _base_env(fifo)
+            env["CLAUDE_LOOP_GUARD"] = "1"
+            start = time.monotonic()
+            p = subprocess.run(
+                [sys.executable, str(HOOKS / "guard-loop-vc.py")],
+                input=json.dumps({"tool_name": "Bash", "tool_input": {"command": "git push"}}),
+                capture_output=True, text=True, env=env, timeout=8,  # backstop: fail, don't hang
+            )
+            elapsed = time.monotonic() - start
+            self.assertEqual(p.returncode, 0)
+            self.assertIsNotNone(_denied(p.stdout))
+            self.assertEqual(p.stderr, "")
+            self.assertLess(elapsed, 6.0)
 
     def test_copied_guard_without_sibling_still_denies(self):
         # A guard COPIED out of the repo (no _denial_log.py sibling anywhere in its resolved

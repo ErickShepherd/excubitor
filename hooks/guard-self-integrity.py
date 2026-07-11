@@ -167,9 +167,10 @@ def _deny(reason: str, payload: dict) -> None:
         },
         sys.stdout,
     )
-    # Decision first, telemetry second: flush the deny to the harness BEFORE any telemetry I/O,
-    # so even a pathologically hung log write can't eat the decision past the hook timeout
-    # (which would fail OPEN and let the fenced call run).
+    # Decision first, telemetry second: flush the deny to the harness BEFORE any telemetry I/O.
+    # Flushing alone is necessary but not sufficient — a hung write would still hold this process
+    # past the hook timeout (which fails OPEN and lets the fenced call run) — so record() also
+    # time-bounds the filesystem I/O in an abandonable daemon thread (see hooks/_denial_log.py).
     sys.stdout.flush()
     _record_denial(reason, payload)
     sys.exit(0)

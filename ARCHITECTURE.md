@@ -57,8 +57,9 @@ cannot forge — a strict parser, an exit code, a denied tool call, or a human.
    while a loop guard is armed, the loop may not write the guards' own kill-switches (the
    allow-default-branch marker, the hook scripts, the settings.json hooks block) — a judge the
    model can rewrite is not a judge. Every deny is also appended to a local JSONL telemetry log
-   (`hooks/_denial_log.py`) strictly *after* the decision is flushed to the runtime and strictly
-   best-effort — a telemetry fault can never change a decision. The log is observability, not
+   (`hooks/_denial_log.py`) strictly *after* the decision is flushed to the runtime, strictly
+   best-effort, and time-bounded (a hung write is abandoned, not waited on) — neither a faulting
+   nor a blocking telemetry write can change or outlast a decision. The log is observability, not
    evidence: it is deliberately not a fenced kill-switch (see KNOWN-BYPASSES.md) and nothing in
    the trust story reads it.
 
