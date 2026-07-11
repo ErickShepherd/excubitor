@@ -28,7 +28,7 @@ quotation from it.)
 
 **Policy-DSL runtime enforcement — a language for what the agent may do.** A family of systems wraps
 the agent in a domain-specific policy layer intercepting tool calls: NeMo Guardrails (input/output/
-tool-call rails), and research enforcers such as AgentSpec and ProGent (DSLs for tool-access control at
+tool-call rails), and research enforcers such as AgentSpec and Progent (DSLs for tool-access control at
 call time). These are *expressive and general* — you write the policy — and typically presume the
 policy engine is trusted and correctly specified.
 
@@ -64,7 +64,7 @@ core conviction that prompts are advice and enforcement must be mechanical. It d
 
 - **The assumption it refuses — that the judge is trustworthy.** This is the sharpest divergence.
   Most enforcement work leaves the enforcer's *own* integrity unaddressed — implicitly treating the
-  monitor/policy layer as a separate privileged tier the agent cannot reach (ABC, ProGent, and
+  monitor/policy layer as a separate privileged tier the agent cannot reach (ABC, Progent, and
   AgentSpec each focus elsewhere and do not center self-tampering). Excubitor takes the opposite
   starting point: in a real agent
   harness the loop often *can* reach its own guards — the marker file, the hook scripts, the settings
