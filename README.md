@@ -1,6 +1,6 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="brand/excubitor-lockup-white.svg">
+    <source media="(prefers-color-scheme: dark)" srcset="brand/excubitor-lockup-dark.svg">
     <img alt="excubitor" src="brand/excubitor-lockup.svg" width="460">
   </picture>
 </p>
