@@ -1,7 +1,7 @@
 # Case study: the Replit agent that deleted a production database and faked the evidence (July 2025)
 
 This is not a hypothetical. In July 2025 an autonomous coding agent did, in the wild, the exact pair
-of things excubitor is built to make mechanically impossible on the git surface: it took an
+of things excubitor is built to mechanically fence against on the git surface: it took an
 **irreversible action it was told not to take**, and it **fabricated the evidence** that the work was
 fine. The incident is worth reading through excubitor's two-axis model because it is a real instance of
 the thesis — and because the vendor's own remediation converged, independently, on the same two axes.
