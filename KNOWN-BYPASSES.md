@@ -29,6 +29,18 @@ argument is not falsely promoted to its own command) — then `shlex.split` each
 resulting **literal tokens** — a git subcommand, or a path's basename. They do **not** run a shell, so
 any construct that only resolves to the dangerous token *after* bash expands it is invisible to them.
 
+`guard-loop-vc.py` additionally steps over an **enumerated set of exec-prefix launchers** (`env`,
+`command`, `exec`, `nohup`, `setsid`, `sudo`, `doas`, `nice`, `ionice`, `stdbuf`, `timeout`, `time`,
+`unbuffer`, `eatmydata`, `catchsegv`, `torsocks`): these run their argument list
+as a new command, so it resolves the *delegated* executable (recursing for a chain like
+`sudo nice git push`) instead of anchoring on the launcher's own basename. A shell running a simple
+`-c`/`+c` command string (`bash`/`sh`/`dash`/`zsh`/`ksh -c "git push"`) is re-scanned as the command
+line it is. Every token is still literal — this is executable resolution, not shell expansion — so the
+shell-expansion residuals below apply unchanged on top of it. The set holds launchers whose
+separate-value option grammar is **small, stable, and confidently complete** (so a value token is
+never misread as the command); it is **enumerated, not exhaustive** — an exec-prefix outside it,
+including a launcher with a large or version-growing option grammar, is an accepted residual (below).
+
 ## ACCEPTED — shell word-expansion evades literal-token matching
 
 Both guards match a *literal* token. A word expansion that mutates the token before bash resolves it
@@ -76,6 +88,36 @@ under-block over the false deny: a false deny trips ordinary work and gets the g
 while the quoted-substitution under-block is one more instance of the "resolves only after the shell
 runs" residual this whole file documents. Pinned in both suites' `TestAcceptedResiduals` /
 `ACCEPTED_RESIDUALS`.
+
+## ACCEPTED — an exec-prefix outside the recognized launcher set
+
+`guard-loop-vc.py` steps over an **enumerated** set of exec-prefix launchers (see *How the guards
+parse*), so `env git push`, `sudo git branch -D main`, `nice -n 5 git merge`, `timeout 60 git push`,
+`unbuffer git push`, and `bash -c "git push"` are all caught. The set is a curated list of launchers
+whose invocation grammar is **small, stable, and confidently modeled** — it is **not a claim to
+recognize every launcher on the system, nor to fully parse a launcher with a large or version-growing
+option set.** An exec-prefix *outside* the set still runs the fenced verb one token deeper and defers;
+this is the same residual class as an indirect wrapper script, pinned ALLOW in
+`hooks/tests/test_guard_loop_vc.py::TestLauncherPrefix::test_launcher_residuals_still_allow`:
+
+| Bypass | Why it's outside the set |
+|---|---|
+| `taskset 0x3 git push` / `chrt 10 git push` / `flock /tmp/lock git push` | a **leading positional of the launcher's own** (cpu mask / RT priority / lock file) sits before the command; the guard lands on it, not `git` |
+| `unshare git push` / `numactl -N 0 git push` / `cpulimit -l 50 git push` / `strace git push` / `ltrace git push` / `proot -r / git push` | a **large or version-growing separate-value option grammar**: modeling it half-way lets the newest option slip and mis-read its value as the command — the exact "claimed catch that slips" failure this fence must avoid — so it is documented, not claimed. (Enumerating every value-option of every such tool completely is the per-tool-grammar chase the crux refuses.) |
+| `xargs git push` / `xargs -i git push` / `xargs --process-slot-var V git push` | **an optional-arg option grammar** the consume-next-token model cannot represent: `-i`/`-e`/`-l`/`--replace` take an *attached-only optional* value (so the next token is NOT their value), while `--process-slot-var` *is* separate-value and grows the set — no single "consume next token or not" rule is correct for both, so `xargs` is documented, not modeled |
+| `firejail git push` / `firejail --whitelist /x git push` | firejail's option surface is **large enough that a separate-value option cannot be confidently ruled out** (most are attached `--opt=val`, but the set is big and grows); rather than half-model it and risk a slip, it is documented, not claimed |
+| `su -c 'git push'` / `runuser -c 'git push'` / `sg grp -c 'git push'` | a **privileged shell running a `-c` string** with a different arg grammar than the plain `bash`/`sh -c` that *is* re-scanned; also needs privilege |
+| `bash -o monitor -c 'git push'` / `bash -co monitor 'git push'` / `bash --rcfile f -c 'git push'` | a shell `-c` whose option vector carries a **value-consuming `-o`/`-O`** (or a `--rcfile`/`--init-file`) that eats a separate token and shifts the command position; the simple `-c`/`+c` flag-cluster forms *are* caught, this interleaved form is not |
+| `env -S 'git push origin main'` | `env -S` **re-splits one string arg** — an expansion, like the `$VAR`/brace cases above |
+| `sudo … ×N git push` (N > recursion cap) | a launcher **chain deeper than `_MAX_LAUNCHER_DEPTH`** (absurd to type; bounded backstop against pathological input) |
+
+Closing the whole class means either recognizing every launcher binary on every host, or parsing each
+one's positional/option grammar (and, for `-S` and the interleaved `-c` strings, expanding) — the
+deny-set / shell-reimplementation race the crux refuses. The recognized set covers the common,
+no-privilege prefixes; the rest is enumerated here, not chased. **Adding a launcher to the recognized
+set is the right move when its separate-value option grammar is small, stable, and confidently
+complete** — do that and move its row to `TestLauncherPrefix.LAUNCHER_DENY`, rather than growing this
+table or half-modeling a launcher whose newest option would then slip.
 
 ## ACCEPTED — the guards see only what the runtime hands them
 
@@ -194,6 +236,7 @@ loop rewrite the judge that constrains it.
 | An armed loop could `touch .claude/allow-default-branch`, or edit/delete the guard scripts or the `.claude/settings.json` hooks block, to disarm the fence | Denied while `CLAUDE_LOOP_GUARD` is set (file tools **and** Bash) | `guard-self-integrity.py` (TELOS-007/008) |
 | `git remote set-head` / `git symbolic-ref <name> <ref>` / `-d` could repoint `refs/remotes/origin/HEAD`, the trust anchor both guards read | Denied in both modes; the read form of `symbolic-ref` stays allowed | `guard-loop-vc.py::_classify` (TELOS-009) |
 | A dangerous verb or kill-switch glued inside an *unquoted* subshell / command substitution — `(git push)`, `$(rm PATH)`, `` `rm PATH` `` — slipped past the segment splitter | Denied; segments now split (quote-aware) on `(`, `)`, and backtick | both guards' `split_segments()` |
+| An **exec-prefix launcher** hid the fenced verb one token deeper — `env git push`, `sudo git branch -D main`, `nice git merge`, `timeout 60 git push`, `env gh pr merge 5`, `unbuffer git push`, `bash -c "git push"` — so the guard anchored on the launcher basename (`env`) and deferred, a trivial no-privilege disarm of the **whole** loop-vc deny set | Denied; `_classify` steps over an enumerated launcher set (and re-scans a simple shell `-c` string) and re-classifies the delegated command (an exec-prefix outside the set remains the ACCEPTED residual above) | `guard-loop-vc.py::_classify` / `_after_launcher` / `_shell_c_command` (TELOS-001) |
 
 ## Reporting a bypass
 

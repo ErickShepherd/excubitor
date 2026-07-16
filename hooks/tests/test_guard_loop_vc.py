@@ -109,6 +109,21 @@ class TestGuardLoopVC(unittest.TestCase):
         "git branch -qD feature",                              # quiet + force-delete
         "git branch -dr origin/feature",                       # delete letter first in the cluster
         "git symbolic-ref -qd refs/remotes/origin/HEAD",       # quiet + delete
+        # exec-prefix launchers run the real command one token deeper — the fenced verb must still
+        # be seen (representative cases; the full battery is TestLauncherPrefix)
+        "env git push origin main",                            # POSIX launcher, no privilege
+        "env -a x git push",                                    # env -a <argv0> still execs (coreutils 9.x)
+        "env --argv0 x git branch -D main",                    # ... separate long form
+        # value options CLUSTERED behind other short flags still consume their value (not read as
+        # the command) — a `-u`→`-vu` cluster must not reopen the bypass
+        "env -vu FOO git push",                                # -vu = -v (flag) + -u <var>; env intact
+        "sudo -knu deploy git branch -D main",                 # -knu = -k -n -u <user>
+        "ionice -tc 2 git push",                               # -tc = -t (flag) + -c <class>
+        "timeout -fs KILL 30 git push",                        # -fs = -f + -s <sig>, then DURATION
+        "sudo git branch -D main",                             # launcher + branch delete
+        "nice -n 5 git merge --no-ff topic",                   # launcher with a value-option
+        "timeout 60 git push",                                 # launcher with a leading DURATION
+        "env gh pr merge 5",                                   # launcher in front of gh
     ]
 
     # --- allow set (guard active): safe reads / non-irreversible writes ---
@@ -503,6 +518,161 @@ class TestGuardYoloDefaultBranchParsing(unittest.TestCase):
         rc, out = _run(f"git -C {d} merge --no-ff topic", guard="yolo")
         self.assertEqual(rc, 0, "fail-open contract")
         self.assertTrue(_denied(out), "merge into the real default 'team/main' must be denied")
+
+
+class TestLauncherPrefix(unittest.TestCase):
+    """Exec-prefix launchers (`env`/`sudo`/`nice`/`timeout`/…) run their argument list as a new
+    command, so a fenced git/gh verb hides one token past the launcher. Before the fix, the guard
+    anchored on the launcher basename (`env`), saw no `git` executable, and DEFERRED — a trivial,
+    no-privilege disarm of the ENTIRE deny set (`env git push`, `sudo git branch -D main`,
+    `env gh pr merge 5`). These pin that every launcher in the family is now stepped over, that a
+    chain (`sudo nice git push`) is followed, and — bidirectionally — that ordinary launcher uses of
+    a NON-fenced command are not false-denied. Closes the TELOS-001 hole; the whole irreversible set
+    stays fenced regardless of a launcher prefix.
+    """
+
+    # Every one runs a fenced git/gh verb one token deeper → must DENY.
+    LAUNCHER_DENY = [
+        "env git push origin main",
+        "env GIT_AUTHOR_NAME=x git push",       # env's own VAR=val before the command
+        "env -i git push",                       # env clearing the environment
+        "env -u FOO git push",                   # env -u <name> (value-option) then the command
+        "env -- git push",                       # option terminator, then the command
+        "command git push origin main",          # the bash `command` builtin form
+        "exec git push origin main",             # exec replaces the shell with git push
+        "exec -a name git push",                 # exec -a <name> (value-option)
+        "nohup git push origin main",
+        "setsid git push origin main",
+        "nice git merge --no-ff topic",
+        "nice -n 5 git push origin main",        # nice -n <adj> (value-option)
+        "nice -5 git push origin main",          # nice -<adj> attached
+        "ionice -c2 git branch -D main",         # ionice attached class
+        "ionice -c 2 git branch -D main",        # ionice -c <class> (value-option)
+        "stdbuf -oL git push origin main",       # stdbuf attached mode
+        "timeout 60 git push origin main",       # timeout <DURATION> command (leading positional)
+        "timeout -s KILL 60 git push",           # timeout -s <sig> then DURATION then command
+        "time git push origin main",
+        "sudo git push origin main",
+        "sudo -u deploy git branch -D main",     # sudo -u <user> (value-option)
+        "doas git push origin main",
+        "sudo nice git push origin main",        # a launcher CHAIN is followed to the git verb
+        "env nohup git branch -D main",          # ditto, different chain
+        "/usr/bin/env git push",                 # launcher via absolute path → basename
+        # further direct-exec launchers with small/stable value grammars (same class as `env`)
+        "unbuffer git push origin main",         # fixes the stdbuf<->unbuffer asymmetry
+        "eatmydata git push origin main",
+        "catchsegv git push origin main",
+        "torsocks git push origin main",
+        "torsocks -u alice git push",            # torsocks -u <user> (SOCKS5 username, value-option)
+        "torsocks --pass pw git branch -D main", # ... and --pass (the username/password pair)
+        "doas -a myrole git push",               # doas -a <style> (value-option)
+        # a shell running a `-c` command STRING: re-scanned as the command line it is. Only the
+        # simple `-c`/`+c` flag-cluster forms (no value-consuming `-o`/`-O`) are modeled; the
+        # `-o`-interleaved forms are the documented residual (LAUNCHER_RESIDUALS).
+        'bash -c "git push"',
+        "bash -c 'git push origin main'",
+        "sh -c 'git branch -D main'",
+        'dash -c "git merge --no-ff topic"',
+        "zsh -c 'git push'",
+        'bash -lc "git push"',                   # flag cluster `-lc` (no value-consuming letter)
+        'bash -cx "git push"',                   # `-c` need not be last in the cluster
+        'bash -cvx "git push"',                  # ... multi-letter cluster
+        'bash -xc "git push"',                   # ... `-c` last but not first
+        'bash +c "git push"',                    # `+`-prefixed cluster also runs the string
+        'bash +cx "git push"',
+        'bash --norc -c "git push"',             # a non-value long option before `-c`
+        'sh -cx "git branch -D main"',
+        'bash -c "env git push"',                # a launcher INSIDE the -c string
+        'bash -c "gh pr merge 5"',
+        'env bash -c "git push"',                # launcher in front of the shell
+        "/usr/bin/time -o /tmp/x git push",      # GNU time -o <file> (value-option)
+        "/usr/bin/time -f %e git push",          # GNU time -f <fmt> (value-option)
+        "torsocks -p 9050 git push",             # torsocks -p <port> (value-option)
+        "torsocks -a 127.0.0.1 git branch -D main",
+    ]
+
+    def test_launcher_prefix_denied(self):
+        for cmd in self.LAUNCHER_DENY:
+            rc, out = _run(cmd)
+            self.assertEqual(rc, 0, f"must exit 0 (fail-open contract): {cmd}")
+            self.assertTrue(_denied(out), f"launcher-hidden VC verb must be DENIED: {cmd}")
+
+    # Ordinary launcher uses whose delegated command is NOT fenced must still DEFER — the step-over
+    # must not manufacture a false deny. `sudo -u git push` is the sharp one: it runs a command
+    # literally named `push` as the user `git`, NOT `git push` — the value-option consumes `git`.
+    LAUNCHER_ALLOW = [
+        "env",                                   # prints the environment; no command
+        "env FOO=bar git status",                # git, but a non-fenced subcommand
+        "time ls -l",
+        "nice -n 10 make",
+        "command -v git",                        # a `command` lookup, not a git run
+        "sudo -u deploy git status",             # non-fenced git subcommand under sudo
+        "timeout 60 make test",
+        "nice git commit -m 'ready to push'",    # 'push' only in the commit message
+        "sudo -u git push",                      # run cmd `push` as user `git` — NOT `git push`
+        "env -uv FOO git push",                  # -uv = -u with ATTACHED value 'v' → runs cmd FOO, not git
+        "env -vu FOO git status",                # clustered value-opt, but a non-fenced subcommand
+        "unbuffer git status",                   # recognized launcher + non-fenced subcommand
+        'bash -c "echo git push is coming"',     # 'git push' only inside an echo string
+        'bash -cx "echo hi"',                    # multi-letter cluster, non-fenced inner
+        'bash +c "echo hi"',                     # `+`-prefixed cluster, non-fenced inner
+        'sh -c "git status"',                    # shell -c with a non-fenced inner command
+        "bash script.sh",                        # a script shell (no -c) → body not scanned, defer
+        "/usr/bin/time -o out.txt make",         # GNU time value-option before a non-fenced command
+        "torsocks -p 9050 curl https://x",       # torsocks value-option before a non-git command
+    ]
+
+    def test_launcher_non_fenced_still_allows(self):
+        for cmd in self.LAUNCHER_ALLOW:
+            rc, out = _run(cmd)
+            self.assertEqual((rc, out.strip()), (0, ""), f"must DEFER (no decision): {cmd}")
+
+    # Exec-prefix mechanisms OUTSIDE the recognized set — an accepted residual, the same class as an
+    # indirect wrapper script (KNOWN-BYPASSES.md "an exec-prefix outside the recognized launcher
+    # set"). The recognized set is enumerated, not exhaustive; these are the notable ones left out —
+    # a launcher with a leading positional of its own (cpu mask / RT priority / lock file); a large
+    # or version-growing separate-value option grammar not confidently modeled (`unshare`, `numactl`,
+    # `cpulimit`, `strace`, `ltrace`, `proot`) — half-modeling one invites the "claimed catch that
+    # slips" defect, so it is documented, not claimed; a privileged shell string with a different arg
+    # order (`su`/`runuser`/`sg -c`); a shell `-c` whose option vector has a value-consuming
+    # `-o`/`-O` (or a `--rcfile`/`--init-file`) that shifts the command position; a string-splitting
+    # option (`env -S`); and a launcher chain past the recursion cap. Pinned ALLOW BIDIRECTIONALLY:
+    # if a change starts catching one, this fails and forces an honest SCOPE/LIMITS + KNOWN-BYPASSES
+    # update (a caught residual should MOVE to LAUNCHER_DENY, not silently change scope).
+    LAUNCHER_RESIDUALS = [
+        "taskset 0x3 git push origin main",      # bare cpu-mask positional before the command
+        "chrt 10 git push origin main",          # bare scheduling-priority positional
+        "flock /tmp/lock git push origin main",  # flock <file> command (leading file positional)
+        "unshare git push origin main",          # large/version-growing separate-value option set
+        "unshare --map-user 1000 git push",      # ... e.g. --map-user <uid> (separate value)
+        "numactl -N 0 git push",                 # ditto — value grammar grows across versions
+        "cpulimit -l 50 git push",
+        "xargs git push origin main",            # optional-arg opts (-i/--replace) unmodelable here
+        "xargs --process-slot-var V git push",   # ... plus version-growing separate-value opts
+        "echo x | xargs -i git push",            # -i is attached-only; runs git push per input line
+        "strace git push origin main",           # heavier option grammar, not modeled → not caught
+        "ltrace git push origin main",
+        "proot -r /rootfs git push",
+        "firejail git push origin main",         # large option surface; can't rule out a sep-value opt
+        "firejail --whitelist /x git push",
+        "su -c 'git push'",                      # privileged shell string, different arg grammar
+        "runuser -u ci -c 'git push'",
+        "sg developers -c 'git push'",
+        "bash -co monitor 'git push'",           # shell `-o` eats a separate token → command shifts
+        "bash -o monitor -c 'git push'",         # ... `-o` before `-c`
+        "bash --rcfile /tmp/rc -c 'git push'",   # a separate-value long shell option before `-c`
+        "env -S 'git push origin main'",         # env re-splits one string arg (an expansion)
+        "sudo " * 11 + "git push",               # a launcher chain deeper than _MAX_LAUNCHER_DEPTH
+    ]
+
+    def test_launcher_residuals_still_allow(self):
+        for cmd in self.LAUNCHER_RESIDUALS:
+            rc, out = _run(cmd)
+            self.assertEqual(
+                (rc, out.strip()), (0, ""),
+                f"ACCEPTED-RESIDUAL CHANGED: this launcher bypass is documented in KNOWN-BYPASSES.md "
+                f"and used to ALLOW; it is now caught. Update SCOPE/LIMITS + KNOWN-BYPASSES.md and "
+                f"move it out of LAUNCHER_RESIDUALS: {cmd}")
 
 
 if __name__ == "__main__":
