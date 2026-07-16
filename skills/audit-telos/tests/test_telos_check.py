@@ -262,6 +262,63 @@ class TestSupersede(unittest.TestCase):
             with self.assertRaises(tc.TelosError):
                 tc.parse_record(_repo(Path(td), md, {"export.py": SRC_EXPORT}))
 
+    # --- R-05: supersession-graph validation (cycles / chain-to-active / all-retired) ---
+
+    @staticmethod
+    def _aux_claim(cid: str, superseded_by: str | None = None) -> str:
+        sup = f"\n            - superseded-by: {superseded_by}" if superseded_by else ""
+        return textwrap.dedent(f"""
+            ### {cid} — auxiliary claim for supersession-graph tests
+            - state: DISCHARGED
+            - intent: exercises the R-05 supersession graph.
+            - discharged-by: export.py::run
+            - contract: run() redacts every record before any write{sup}
+        """)
+
+    def test_two_node_supersession_cycle_raises(self):
+        # R-05: TELOS-001 -> TELOS-002 -> TELOS-001 used to parse; audit() then skipped BOTH claims, so
+        # the record audited vacuously clean with zero active claims.
+        md = GOOD_RECORD.replace("- anchor: none", "- superseded-by: TELOS-002\n    - anchor: none")
+        md = textwrap.dedent(md) + self._aux_claim("TELOS-002", "TELOS-001")
+        with tempfile.TemporaryDirectory() as td:
+            with self.assertRaises(tc.TelosError) as ctx:
+                tc.parse_record(_repo(Path(td), md, {"export.py": SRC_EXPORT}))
+        msg = str(ctx.exception)
+        self.assertIn("cycle", msg)
+        self.assertIn("TELOS-001", msg)
+        self.assertIn("TELOS-002", msg)
+
+    def test_three_node_supersession_cycle_raises_with_complete_cycle(self):
+        # R-05: the error must spell out the COMPLETE directed cycle, not just flag one member.
+        md = GOOD_RECORD.replace("- anchor: none", "- superseded-by: TELOS-002\n    - anchor: none")
+        md = (textwrap.dedent(md) + self._aux_claim("TELOS-002", "TELOS-003")
+              + self._aux_claim("TELOS-003", "TELOS-001"))
+        with tempfile.TemporaryDirectory() as td:
+            with self.assertRaises(tc.TelosError) as ctx:
+                tc.parse_record(_repo(Path(td), md, {"export.py": SRC_EXPORT}))
+        msg = str(ctx.exception)
+        self.assertIn("cycle", msg)
+        for cid in ("TELOS-001", "TELOS-002", "TELOS-003"):
+            self.assertIn(cid, msg)
+
+    def test_retirement_chain_to_active_parses(self):
+        # R-05: a linear chain TELOS-003 -> TELOS-002 -> TELOS-001 (active) is legal history. Parse must
+        # accept it, and audit keeps exactly the active head.
+        md = (textwrap.dedent(GOOD_RECORD) + self._aux_claim("TELOS-002", "TELOS-001")
+              + self._aux_claim("TELOS-003", "TELOS-002"))
+        with tempfile.TemporaryDirectory() as td:
+            r = tc.audit(_repo(Path(td), md, {"export.py": SRC_EXPORT}), run_witnesses=False)
+        self.assertEqual({c["id"] for c in r["claims"]}, {"TELOS-001"})
+
+    def test_all_retired_record_never_parses_clean(self):
+        # R-05 floor: with dangling/self refs already rejected, every all-retired shape contains a cycle —
+        # parse must abort so a record with zero active claims can never audit vacuously clean.
+        md = GOOD_RECORD.replace("- anchor: none", "- superseded-by: TELOS-002\n    - anchor: none")
+        md = textwrap.dedent(md) + self._aux_claim("TELOS-002", "TELOS-001")
+        with tempfile.TemporaryDirectory() as td:
+            with self.assertRaises(tc.TelosError):
+                tc.parse_record(_repo(Path(td), md, {"export.py": SRC_EXPORT}))
+
 
 class TestResolver(unittest.TestCase):
     def test_resolve_hit_and_miss(self):

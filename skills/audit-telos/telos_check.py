@@ -246,6 +246,39 @@ def parse_record(repo: Path) -> Record:
         if sup not in seen_ids:
             raise TelosError(f"{c.id}: superseded-by {sup} names no claim in the record "
                              f"(a dangling supersede would silently retire this live claim)")
+    # R-05: the DEF-5 checks above reject a dangling or self-referential target, but a cycle across two or
+    # more claims (TELOS-001 -> TELOS-002 -> TELOS-001) still parsed, and audit() then skipped every claim
+    # in it — zero active claims, a vacuously clean audit. Walk the supersession graph: every retirement
+    # chain must terminate at an active (non-superseded) claim, and any directed cycle aborts with the
+    # complete cycle spelled out.
+    sup_of = {c.id: c.fields.get("superseded-by", "").strip() for c in claims}
+    terminates: set[str] = set()        # ids whose chain is proven to end at an active claim
+    for c in claims:
+        if c.id in terminates or not sup_of[c.id]:
+            continue
+        path: list[str] = []
+        seen_pos: dict[str, int] = {}
+        cur = c.id
+        while True:
+            if cur in terminates:
+                break                   # joins a chain already proven to terminate active
+            if cur in seen_pos:
+                cycle = path[seen_pos[cur]:] + [cur]
+                raise TelosError("supersession cycle: " + " -> ".join(cycle) +
+                                 " — every claim in the cycle would be silently retired, and a retirement "
+                                 "chain must terminate at an active claim, not loop")
+            seen_pos[cur] = len(path)
+            path.append(cur)
+            nxt = sup_of[cur]
+            if not nxt:
+                break                   # active claim — the chain terminates here
+            cur = nxt
+        terminates.update(path)
+    if claims and all(sup_of[c.id] for c in claims):
+        # Unreachable while the cycle + dangling checks hold (a finite graph where every node has a valid
+        # outgoing edge must contain a cycle) — kept as an explicit, independent floor: an audit over zero
+        # active claims is vacuous and must never look clean.
+        raise TelosError("every claim is superseded — zero active claims would make the audit vacuous")
     # evidence-tier B2 (read-time, no record mutation): the author-written `state` is honest only when backed.
     # A `state: DISCHARGED` with no executable `verified-by` witness is an assertion the record cannot prove on
     # its own — an LLM judgment lives in the audit ledger, never here — so demote it to SUSPECT in the PARSED
