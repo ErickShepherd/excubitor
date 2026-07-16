@@ -168,6 +168,67 @@ class TestDenialLogModule(unittest.TestCase):
                     os.environ["EXCUBITOR_DENIAL_LOG"] = env_log
 
 
+class TestLogPathShapes(unittest.TestCase):
+    """R-08: every override shape must actually write. A bare relative filename used to make
+    os.makedirs("") raise inside the swallowing except — telemetry silently disappeared."""
+
+    PAYLOAD = {"tool_name": "Bash", "tool_input": {"command": "x"}, "cwd": "/", "session_id": "s"}
+
+    def _record_with(self, log_value: str, workdir: str) -> tuple[bool, "Path"]:
+        """Run record() with EXCUBITOR_DENIAL_LOG=log_value from inside `workdir`; env/cwd restored."""
+        old_cwd = os.getcwd()
+        old_env = os.environ.get("EXCUBITOR_DENIAL_LOG")
+        os.chdir(workdir)
+        os.environ["EXCUBITOR_DENIAL_LOG"] = log_value
+        self.addCleanup(os.chdir, old_cwd)
+        self.addCleanup(lambda: (os.environ.__setitem__("EXCUBITOR_DENIAL_LOG", old_env)
+                                 if old_env is not None
+                                 else os.environ.pop("EXCUBITOR_DENIAL_LOG", None)))
+        ok = _load_module().record("guard-test", "reason", dict(self.PAYLOAD))
+        resolved = Path(workdir) / log_value if not os.path.isabs(log_value) else Path(log_value)
+        return ok, resolved
+
+    def _assert_one_event(self, ok: bool, log: "Path"):
+        self.assertTrue(ok, "record() must report success")
+        self.assertTrue(log.is_file(), f"{log} must exist")
+        lines = log.read_text().splitlines()
+        self.assertEqual(len(lines), 1)
+        self.assertEqual(json.loads(lines[0])["schema"], "excubitor.denial.v1")
+
+    def test_bare_relative_filename_writes(self):
+        # THE R-08 REPRO: dirname("denials.jsonl") == "" → makedirs("") raised → swallowed → no log.
+        with tempfile.TemporaryDirectory() as td:
+            ok, log = self._record_with("denials.jsonl", td)
+            self._assert_one_event(ok, log)
+
+    def test_relative_nested_path_creates_parents(self):
+        with tempfile.TemporaryDirectory() as td:
+            ok, log = self._record_with(os.path.join("sub", "dir", "denials.jsonl"), td)
+            self._assert_one_event(ok, log)
+
+    def test_absolute_filename_writes(self):
+        with tempfile.TemporaryDirectory() as td:
+            ok, log = self._record_with(os.path.join(td, "denials.jsonl"), td)
+            self._assert_one_event(ok, log)
+
+    def test_absolute_nested_path_creates_parents(self):
+        with tempfile.TemporaryDirectory() as td:
+            ok, log = self._record_with(os.path.join(td, "deep", "er", "denials.jsonl"), td)
+            self._assert_one_event(ok, log)
+
+    def test_relative_blocked_write_times_out_promptly(self):
+        # timeout case for the RELATIVE shape: a FIFO with no reader blocks open(); record() must
+        # abandon the writer on the 1s join and report False — the R-08 fix must not have moved the
+        # blocking I/O out of the abandonable thread.
+        with tempfile.TemporaryDirectory() as td:
+            os.mkfifo(os.path.join(td, "denials.fifo"))
+            start = time.monotonic()
+            ok, _ = self._record_with("denials.fifo", td)
+            elapsed = time.monotonic() - start
+            self.assertFalse(ok, "a hung write must report failure, not success")
+            self.assertLess(elapsed, 5.0, "record() must return promptly, not wait on the FIFO")
+
+
 class TestGuardsLogDenials(unittest.TestCase):
     def test_every_guard_appends_one_event_per_deny(self):
         with tempfile.TemporaryDirectory() as td:
