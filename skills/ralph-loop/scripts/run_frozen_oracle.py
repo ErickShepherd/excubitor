@@ -151,11 +151,32 @@ def _base_pin_refusal(repo: str, base: str) -> str | None:
     return None
 
 
+def _anchor_authored(blob: str, verified_by: str) -> bool:
+    """True iff `verified_by` appears in the anchor blob as a WHOLE authored unit.
+
+    A unit is a whole (stripped) line, or the complete `verify:`-suffix of a line — the two shapes
+    a ledger/plan authors a command in. NOT a substring test (independent review, round 2): a
+    substring match accepts any contiguous slice of an authored command, so a loop could drop a
+    trailing `--strict`/`&& second-check` (or a leading `first-check &&`) and run a WEAKER witness
+    than the author wrote while still earning the permit.
+    """
+    cmd = verified_by.strip()
+    for line in blob.splitlines():
+        line = line.strip()
+        if line == cmd:
+            return True
+        _, marker, tail = line.partition("verify:")
+        if marker and tail.strip() == cmd:
+            return True
+    return False
+
+
 def _anchor_refusal(repo: str, toplevel: str, base: str, anchor: str, verified_by: str) -> str | None:
-    """REFUSE unless the exact witness command appears in the BASE blob of the anchor file.
+    """REFUSE unless the witness command is a whole authored unit in the BASE blob of the anchor.
 
     The blob is read from the base tree, never the worktree, so editing the ledger/plan on the loop
-    branch (committed or not) changes nothing — the command must be baseline-authored."""
+    branch (committed or not) changes nothing — the command must be baseline-authored, and it must
+    match a whole authored line / `verify:` suffix (see _anchor_authored), not a substring of one."""
     abs_anchor = anchor if os.path.isabs(anchor) else os.path.join(repo, anchor)
     rel = os.path.normpath(os.path.relpath(os.path.abspath(abs_anchor), toplevel))
     if rel.startswith(".."):
@@ -163,9 +184,10 @@ def _anchor_refusal(repo: str, toplevel: str, base: str, anchor: str, verified_b
     ok, blob = _git_text(repo, "cat-file", "blob", f"{base}:{rel}")
     if not ok:
         return f"--anchor {rel!r} is not a tracked blob at {base} (fail-deny)"
-    if verified_by.strip() not in blob:
+    if not _anchor_authored(blob, verified_by):
         return (f"the witness command is not baseline-authored: it does not appear in "
-                f"{base}:{rel} — a caller-supplied replacement command earns no permit, no matter "
+                f"{base}:{rel} as a whole authored line or `verify:` suffix — a caller-supplied "
+                f"replacement or a TRUNCATION of an authored command earns no permit, no matter "
                 f"which frozen files it names (fail-deny)")
     return None
 

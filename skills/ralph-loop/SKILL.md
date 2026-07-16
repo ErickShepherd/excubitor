@@ -583,7 +583,9 @@ context the loop read on the way there.
 > continuous immutability); and the gate binds **authorship and bytes, not semantics** — a
 > baseline-authored vacuous or delegating command (`/bin/true x`, a launcher prefix), and the content of
 > a trusted interpreter's system site-packages, are the DoD author's and host administrator's
-> responsibility, not something the gate can verify.
+> responsibility, not something the gate can verify. (Authorship is bound to the **whole authored
+> unit** — a whole anchor line or complete `verify:` suffix — so a truncated slice of an authored
+> command earns no permit.)
 
 ## Notes
 

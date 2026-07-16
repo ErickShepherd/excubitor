@@ -224,6 +224,21 @@ class TestPermitBinding(_RepoCase):
         self.assertEqual(p.returncode, USAGE, f"stdout={p.stdout} stderr={p.stderr}")
         self.assertNotIn("GREEN", p.stdout)
 
+    def test_truncated_authored_command_refused(self):
+        # Independent review (round 2): the anchor binding must match a WHOLE authored unit — a
+        # whole line or a complete `verify:` suffix — never a substring. A substring match accepts
+        # any contiguous slice of an authored command, so a loop could drop the tail (or head) of
+        # what the author wrote and run a WEAKER witness while still earning the permit. Each of
+        # these is a proper substring of an authored anchor line but not itself a whole unit.
+        for cmd in (
+            "python3 tests/witness_ok.py ; python3",   # tail dropped from the authored compound line
+            "pytest tests/witness_ok.py",              # head dropped from the `-m pytest` line
+            "python3 -m pytest tests/witness_ok",      # tail characters dropped mid-token
+        ):
+            p = _run(self.d, "main", cmd)
+            self.assertEqual(p.returncode, REFUSED, f"{cmd!r}: stdout={p.stdout} stderr={p.stderr}")
+            self.assertIn("baseline-authored", p.stderr, f"{cmd!r} must refuse at the anchor binding")
+
     def test_caller_supplied_replacement_command_refused(self):
         # `/bin/true <tracked-file>` names a frozen file but was never baseline-authored: naming an
         # unrelated frozen file must earn nothing. (witness_fail.py IS tracked and frozen here.)
