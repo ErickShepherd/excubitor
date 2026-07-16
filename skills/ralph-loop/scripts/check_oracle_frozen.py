@@ -24,8 +24,12 @@ any point on the loop branch is caught; the current-vs-base type/target/content 
 additionally catches an UNCOMMITTED retarget, type swap, or content weakening in the worktree (R-04
 #1: a three-dot diff compares commits, so an uncommitted regular-file edit is invisible to it — the
 content-hash-vs-base check is what closes that). Stronger than a hash-pin (no manifest to maintain or
-forge) and reuses git. It remains a point-in-time check: binding the checked bytes to the witness's
-exit code atomically is the runner's job (run_frozen_oracle), not this diagnostic's.
+forge) and reuses git. It remains a point-in-time check over the FILES a command names: binding the
+checked bytes to the witness's exit code atomically — and binding the command itself to
+baseline-authored anchor state, the executable/interpreter to trusted state, and the run to a
+sanitized environment — is the runner's job (run_frozen_oracle), not this diagnostic's. On its own,
+this check says nothing about WHO authored the command or WHAT executes it (`/bin/true <tracked
+file>` reads as FROZEN here); never present its exit code as a permit to act.
 
 FAIL-DENY. Any ambiguity is treated as NOT frozen (non-zero exit): a `verified-by:` from which no
 existing oracle file can be extracted (so immutability is unverifiable), or any git error. The
@@ -127,6 +131,34 @@ def _surface_paths(toplevel: str, abs_candidate: str) -> list[str]:
     return hops
 
 
+def _collect_surface(repo: str, base: str, toplevel: str, abs_candidate: str,
+                     files: dict[str, str], tampered: list[str]) -> list[str]:
+    """Fold one candidate's full surface (lexical path, symlink hops, resolved target) into
+    `files`/`tampered`. Returns the candidate's present-but-untracked, never-at-base rel paths —
+    harmless to drop for a verified-by token (an interpreter name is not an oracle), but a
+    REQUIRED path (the runner's executable/config bindings) must refuse on them instead."""
+    loose: list[str] = []
+    for p in _surface_paths(toplevel, abs_candidate):
+        rel = os.path.normpath(os.path.relpath(p, toplevel))
+        if rel.startswith(".."):
+            continue  # outside the work tree → cannot appear in the diff
+        # A path that ISN'T a currently-tracked file/link is dropped — BUT if that same path was a
+        # tracked blob at `base`, its disappearance is exactly the tamper this check exists to
+        # catch (deletion/rename of an oracle file, or of one file of a multi-file witness, must
+        # NOT pass on the survivors). Distinguish deletion (existed at base → tampered) from a
+        # non-file token that was never an oracle (interpreter / bare test-id → never at base →
+        # safely dropped, unless the caller marked it REQUIRED).
+        present = os.path.isfile(p) or os.path.islink(p)  # islink: a dangling link still exists
+        if not present or not _git(repo, "ls-files", "--error-unmatch", "--", rel)[0]:
+            if _existed_at_base(repo, base, rel):
+                tampered.append(rel)
+            elif present:
+                loose.append(rel)
+            continue
+        files[rel] = p
+    return loose
+
+
 def _oracle_files(repo: str, base: str, verified_by: str) -> tuple[dict[str, str], list[str]]:
     """Extract the **tracked, repo-relative** frozen surface a `verified-by:` command refers to.
 
@@ -163,22 +195,7 @@ def _oracle_files(repo: str, base: str, verified_by: str) -> tuple[dict[str, str
         if not candidate or candidate.startswith("-"):
             continue
         abs_candidate = candidate if os.path.isabs(candidate) else os.path.join(repo, candidate)
-        for p in _surface_paths(toplevel, abs_candidate):
-            rel = os.path.normpath(os.path.relpath(p, toplevel))
-            if rel.startswith(".."):
-                continue  # outside the work tree → cannot appear in the diff
-            # A path that ISN'T a currently-tracked file/link is dropped — BUT if that same path was a
-            # tracked blob at `base`, its disappearance is exactly the tamper this check exists to
-            # catch (deletion/rename of an oracle file, or of one file of a multi-file witness, must
-            # NOT pass on the survivors). Distinguish deletion (existed at base → tampered) from a
-            # non-file token that was never an oracle (interpreter / bare test-id → never at base →
-            # safely dropped).
-            present = os.path.isfile(p) or os.path.islink(p)  # islink: a dangling link still exists
-            if not present or not _git(repo, "ls-files", "--error-unmatch", "--", rel)[0]:
-                if _existed_at_base(repo, base, rel):
-                    tampered.append(rel)
-                continue
-            files[rel] = p
+        _collect_surface(repo, base, toplevel, abs_candidate, files, tampered)
     return files, tampered
 
 
@@ -251,23 +268,43 @@ def main() -> int:
     return 0
 
 
-def evaluate(repo: str, base: str, verified_by: str) -> tuple[str | None, dict[str, str]]:
+def evaluate(repo: str, base: str, verified_by: str,
+             extra_required: "list[str] | None" = None) -> tuple[str | None, dict[str, str]]:
     """The full point-in-time freeze evaluation, reusable by the atomic runner (run_frozen_oracle.py).
 
     Returns (refusal_reason, surface): refusal_reason is None iff the complete oracle surface is
     frozen relative to `base`, in which case surface maps each repo-relative frozen path to its
-    absolute path. Every ambiguity is a refusal (fail-deny)."""
+    absolute path. Every ambiguity is a refusal (fail-deny).
+
+    `extra_required` (absolute paths) are verdict-affecting surfaces the CALLER binds — the witness
+    executable, runner configuration, conftest files. Unlike verified-by tokens (where an untracked
+    non-file token is an interpreter name, safely dropped), a required path that exists but is not
+    tracked cannot be bound to the baseline and REFUSES; one tracked joins the frozen surface; one
+    deleted since base is tampering; one that never existed is skipped."""
     if not os.path.isdir(os.path.join(repo, ".git")) and not _git(repo, "rev-parse", "--git-dir")[0]:
         return f"{repo} is not a git repo", {}
 
     oracle_files, tampered = _oracle_files(repo, base, verified_by)
+    witness_named_an_oracle = bool(oracle_files)
+    if extra_required:
+        ok, top = _git(repo, "rev-parse", "--show-toplevel")
+        if not ok or not top.strip():
+            return "cannot resolve the repo toplevel for required surface binding (fail-deny)", {}
+        toplevel = os.path.realpath(top.strip())
+        unbindable: list[str] = []
+        for abs_p in extra_required:
+            unbindable += _collect_surface(repo, base, toplevel, os.path.normpath(abs_p),
+                                           oracle_files, tampered)
+        if unbindable:
+            return ("verdict-affecting path(s) exist but are not tracked, so they cannot be bound "
+                    "to the baseline: " + ", ".join(sorted(set(unbindable))) + " (fail-deny)"), {}
     if tampered:
         # A verified-by oracle file that was tracked at base is now missing/untracked — deleted or
         # renamed away on the loop branch. The survivors alone can't vouch for the ones that vanished
         # (the loop could have removed exactly the assertion that gated it), so fail-deny.
         return (f"oracle file(s) tracked at {base} are now missing/untracked on the loop "
                 f"branch — deleted or renamed (tamper): {', '.join(tampered)} (fail-deny)"), {}
-    if not oracle_files:
+    if not witness_named_an_oracle:
         # No extractable oracle file → immutability is unverifiable → fail-deny.
         return (f"no existing oracle file found in verified-by {verified_by!r}; "
                 f"cannot confirm immutability (fail-deny)"), {}

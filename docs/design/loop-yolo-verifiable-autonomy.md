@@ -194,3 +194,26 @@ build-gate was overridden by an explicit build request — recorded honestly her
   a ticked box is a loop-authored claim, not an oracle, so checklist hard-refuses blanket YOLO; only a
   per-item frozen `verify:` oracle (reusing `check_oracle_frozen.py`) may act. All three anchors now ship.
 - **Default unchanged** — omitting the posture = stop-and-surface. Fully backward compatible.
+
+## Addendum — 2026-07-16: the permit gate binds authorship, not just bytes (P0.13)
+
+*This section is an append-only correction record; the deliberation above is history and stands as
+written.* The 2026-07-16 independent Phase 0 review reproduced two forgeries of the permit-to-act
+gate as then shipped: a **caller-supplied** witness command earned GREEN by merely naming a tracked
+file (`/bin/true <tracked-test>` — the executable was silently dropped from the surface), and the
+repo's real `verify:` commands executed through the untracked, agent-writable `.venv/bin/python`, so
+replacing the interpreter forged any verdict. The premise "the oracle is an unforgeable external
+signal" was therefore not yet mechanically true: the *files* were frozen, but the *command* and the
+*executable* were the loop's to choose.
+
+`run_frozen_oracle.py` now binds the permit on four axes before the freeze envelope runs: the
+command must appear verbatim in a tracked anchor file's **base-tree blob** (`--anchor`, with
+`--base` pinned to the repo's default branch — the one line the loop cannot move); the executable
+must resolve on a fixed trusted PATH and be either tracked-in-repo-and-frozen or non-user-writable
+outside the repo; known verdict-affecting companions (conftest.py, root runner config, `-m`
+repo-root shadowing) join the frozen surface; and the witness runs under a sanitized environment.
+Anything unbindable **refuses** (exit 10). The gate's honest claim is correspondingly narrowed: it
+binds **authorship and bytes, not semantics** — a baseline-authored vacuous or delegating oracle
+remains the DoD author's responsibility (KNOWN-BYPASSES.md), and interpreter site-packages /
+direct-script sys.path shadowing stay outside the surface. Regressions:
+`skills/ralph-loop/tests/test_run_frozen_oracle.py::TestPermitBinding`.

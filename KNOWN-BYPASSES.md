@@ -212,6 +212,39 @@ it means stat-ing inode/nlink and cross-referencing repositories on every edit, 
 a stdlib seatbelt. Likewise a **bind mount** or other kernel-level redirection that `realpath` does
 not see is out of scope. Documented, not chased. See `guard-default-branch.py::_candidate_dirs`.
 
+## ACCEPTED — the frozen-oracle gate binds authorship and bytes, not semantics
+
+`run_frozen_oracle.py` (the YOLO permit-to-act gate) refuses a caller-supplied witness command (it
+must appear verbatim in the anchor file's **base-tree blob**, with `--base` pinned to the default
+branch), refuses an untrusted executable (untracked in-repo — the `.venv/bin/python` class — or
+user-writable outside the repo), and binds conftest/runner-config/module-shadow companions into the
+frozen surface, executing under a sanitized environment. What it deliberately does **not** verify:
+
+- **A baseline-authored command's semantics.** A DoD author who writes `/bin/true <file>` (vacuous),
+  or a launcher/delegating prefix (`env …`, a trusted wrapper), authored that oracle — the gate binds
+  *who authored the command* and *what bytes ran*, not whether the oracle is adequate. Same class as
+  the `verified-by: true` weak-witness residual above. Pinned bidirectionally in
+  `skills/ralph-loop/tests/test_run_frozen_oracle.py::TestPermitBinding::test_baseline_authored_bin_true_is_green_accepted_residual`.
+- **The content of a trusted interpreter's environment beyond the repo:** system site-packages of a
+  root-owned interpreter, and sys.path shadowing from a directly-executed script's own directory,
+  are outside the frozen surface (the `-m` repo-root shadow *is* checked).
+- **The gate's own invocation.** A misbehaving loop can still skip the gate or run it through a
+  forged interpreter — the recipe-level honest limit that has always applied (the guard hooks cannot
+  know which files are "the oracle"). YOLO narrows the trust placed in the loop; it does not
+  eliminate it.
+- A gate run **as root** refuses (every executable is then writable by the invoking user) — the safe
+  direction, documented rather than special-cased.
+
+## CLOSED — the frozen-oracle permit could be forged by a caller-supplied command or interpreter
+
+Before the 2026-07-16 independent review, `run_frozen_oracle.py --verified-by '/bin/true
+<tracked-test>'` returned GREEN without executing the frozen file (any tracked file argument was
+collected as the frozen surface; the executable was silently dropped), and the real checklist
+commands ran through the untracked, agent-writable `.venv/bin/python` — replacing the interpreter
+forged the permit. Closed by the authorship/executable/surface/environment bindings above; the
+reproductions are pinned in
+`skills/ralph-loop/tests/test_run_frozen_oracle.py::TestPermitBinding`.
+
 ## ACCEPTED — the denial-telemetry log is editable by the agent it records
 
 Every guard deny is appended to a local JSONL log (`hooks/_denial_log.py`; default

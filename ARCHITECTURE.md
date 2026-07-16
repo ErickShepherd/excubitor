@@ -35,9 +35,10 @@ cannot forge — a strict parser, an exit code, a denied tool call, or a human.
    unattended loop (skills/ralph-loop, skills/telos-loop)
      CLAUDE_LOOP_GUARD=1    → work + commit only; stop-and-surface
      CLAUDE_LOOP_GUARD=yolo → + --no-ff merge into non-default branch, IFF
-         scripts/run_frozen_oracle.py  returns the witness verdict from a frozen surface
-                                       (precheck → snapshot → shell-less run → recheck;
-                                        check_oracle_frozen.py = check-only diagnostic)
+         scripts/run_frozen_oracle.py  returns the witness verdict from a baseline-bound,
+                                       frozen surface (anchor + base pin → executable trust →
+                                       precheck → snapshot → shell-less sanitized run → recheck;
+                                       check_oracle_frozen.py = check-only diagnostic)
          scripts/check_suite_frozen.py proves the suite wasn't weakened
          scripts/suspend_verdict.py    suspends before the session limit
 
@@ -65,14 +66,20 @@ cannot forge — a strict parser, an exit code, a denied tool call, or a human.
    evidence: it is deliberately not a fenced kill-switch (see KNOWN-BYPASSES.md) and nothing in
    the trust story reads it.
 
-3. **Loop ↔ its own oracle.** YOLO mode's permit-to-act is only sound if the loop cannot edit the
-   oracle that gates it. `run_frozen_oracle.py` is that gate: it validates the full oracle surface
-   (lexical paths, symlink-chain hops, resolved targets) against the loop's baseline, snapshots it,
-   runs the witness without a shell, and rechecks the snapshot before returning the verdict — an
-   exit code produced by frozen bytes, not a promise. Stated precisely: git proves *committed*
-   baseline/final state, never that an unobserved worktree edit didn't happen earlier; the runner's
-   envelope is what binds the checked bytes to the exit code (accepted residual: a mid-run edit
-   restored before the recheck). `check_oracle_frozen.py` remains the check-only diagnostic.
+3. **Loop ↔ its own oracle.** YOLO mode's permit-to-act is only sound if the loop cannot author
+   what gates it. `run_frozen_oracle.py` is that gate: the witness command must be
+   baseline-authored (verbatim in the anchor file's base-tree blob, with the base pinned to the
+   default branch), the executable must be trusted (tracked in-repo and frozen, or non-user-writable
+   outside — the untracked `.venv/bin/python` class refuses), verdict-affecting companions
+   (conftest, runner config, `-m` shadowing) join the surface, and only then does the envelope run:
+   validate the full oracle surface (lexical paths, symlink-chain hops, resolved targets) against
+   the baseline, snapshot it, run the witness without a shell under a sanitized environment, and
+   recheck the snapshot before returning the verdict — an exit code produced by frozen,
+   baseline-bound bytes, not a promise. Stated precisely: git proves *committed* baseline/final
+   state, never that an unobserved worktree edit didn't happen earlier; the runner's envelope is
+   what binds the checked bytes to the exit code. Accepted residuals: a mid-run edit restored
+   before the recheck, and the gate binds authorship/bytes, not semantics (see KNOWN-BYPASSES.md).
+   `check_oracle_frozen.py` remains the check-only diagnostic and performs none of the bindings.
 
 4. **Private ↔ public.** `leak-guard` gates content crossing outward, fail-closed, with explicit
    (never silent) whitelisting.
