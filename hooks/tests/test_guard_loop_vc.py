@@ -103,6 +103,12 @@ class TestGuardLoopVC(unittest.TestCase):
         "git symbolic-ref -m reason refs/remotes/origin/HEAD refs/remotes/origin/develop",
         "git symbolic-ref -d refs/remotes/origin/HEAD",
         "git symbolic-ref --delete refs/remotes/origin/HEAD",
+        # R-02: clustered short options — `-d`/`-D` hidden in a cluster still delete
+        "git branch -vd feature",                              # verbose + delete
+        "git branch -rd origin/feature",                       # remote-tracking delete
+        "git branch -qD feature",                              # quiet + force-delete
+        "git branch -dr origin/feature",                       # delete letter first in the cluster
+        "git symbolic-ref -qd refs/remotes/origin/HEAD",       # quiet + delete
     ]
 
     # --- allow set (guard active): safe reads / non-irreversible writes ---
@@ -136,6 +142,14 @@ class TestGuardLoopVC(unittest.TestCase):
         "git remote -v",
         "git remote show origin",
         "git remote get-url origin",
+        # R-02 read-only near-misses: clusters WITHOUT a delete letter must not false-deny
+        "git branch -v",                       # verbose list
+        "git branch -vv",                      # doubly verbose list
+        "git branch -a",                       # all branches
+        "git branch -r",                       # remote-tracking list
+        "git branch --list -v",                # explicit list
+        "git branch -u origin/main feature",   # -u takes a value; no delete here
+        "git branch -m old new",               # rename (no delete)
         # a dangerous verb QUOTED in an argument is literal text, not a command — must not false-deny
         # (this repo's own commit messages are full of these strings)
         'git commit -m "document the (git push) bypass"',
@@ -394,6 +408,68 @@ def _mkrepo_with_origin_head(default_branch: str) -> str:
     g("symbolic-ref", "refs/remotes/origin/HEAD", f"refs/remotes/origin/{default_branch}")
     g("checkout", default_branch)
     return d
+
+
+class TestGuardClusteredShortOptions(unittest.TestCase):
+    """R-02: clustered short options (`-vd`, `-rd`, `-qD`, `-qd`) must be denied, AND the denied
+    spellings must be REAL Git operations — proven by executing them against a temp repo — so the
+    deny cases can never rot into strawmen that Git would itself reject."""
+
+    def setUp(self) -> None:
+        self._repos: list[str] = []
+
+    def tearDown(self) -> None:
+        for d in self._repos:
+            shutil.rmtree(d, ignore_errors=True)
+
+    def _repo(self) -> str:
+        d = tempfile.mkdtemp(prefix="guardtest-")
+        self._repos.append(d)
+
+        def g(*args: str) -> None:
+            subprocess.run(["git", "-C", d, *args], check=True, capture_output=True, text=True)
+
+        g("init", "-b", "main")
+        g("config", "user.email", "t@t.t")
+        g("config", "user.name", "t")
+        g("commit", "--allow-empty", "-m", "init")
+        return d
+
+    @staticmethod
+    def _branch_exists(d: str, name: str) -> bool:
+        return subprocess.run(
+            ["git", "-C", d, "show-ref", "--verify", "--quiet", f"refs/heads/{name}"]
+        ).returncode == 0
+
+    def test_clustered_branch_delete_denied_and_is_real(self):
+        # For each spelling: the guard denies it, AND (in a real repo) Git accepts it and deletes.
+        for spelling in ("-vd", "-qD", "-dq"):
+            d = self._repo()
+            subprocess.run(["git", "-C", d, "branch", "victim"], check=True, capture_output=True)
+            rc, out = _run(f"git -C {d} branch {spelling} victim")
+            self.assertEqual(rc, 0, "fail-open contract")
+            self.assertTrue(_denied(out), f"clustered branch delete must be denied: branch {spelling}")
+            # prove the spelling is a genuine delete, not a strawman the guard 'catches' for free
+            self.assertTrue(self._branch_exists(d, "victim"))
+            subprocess.run(["git", "-C", d, "branch", spelling, "victim"], check=True, capture_output=True)
+            self.assertFalse(self._branch_exists(d, "victim"), f"git branch {spelling} should have deleted")
+
+    def test_clustered_symbolic_ref_delete_denied_and_is_real(self):
+        d = self._repo()
+        subprocess.run(["git", "-C", d, "symbolic-ref", "refs/test-anchor", "refs/heads/main"],
+                       check=True, capture_output=True)
+        rc, out = _run(f"git -C {d} symbolic-ref -qd refs/test-anchor")
+        self.assertEqual(rc, 0, "fail-open contract")
+        self.assertTrue(_denied(out), "clustered symbolic-ref delete (-qd) must be denied")
+        # prove -qd genuinely deletes the symbolic ref
+        exists = subprocess.run(["git", "-C", d, "symbolic-ref", "refs/test-anchor"],
+                                capture_output=True).returncode == 0
+        self.assertTrue(exists)
+        subprocess.run(["git", "-C", d, "symbolic-ref", "-qd", "refs/test-anchor"],
+                       check=True, capture_output=True)
+        gone = subprocess.run(["git", "-C", d, "symbolic-ref", "refs/test-anchor"],
+                              capture_output=True).returncode != 0
+        self.assertTrue(gone, "git symbolic-ref -qd should have deleted the ref")
 
 
 class TestGuardYoloDefaultBranchParsing(unittest.TestCase):
