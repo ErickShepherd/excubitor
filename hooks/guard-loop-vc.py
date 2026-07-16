@@ -166,8 +166,10 @@ _SHELL_LONG_VALUE_OPTS = {"--rcfile", "--init-file"}
 # command. Only the common value-taking options are enumerated; an unknown value-option whose value
 # is non-git and precedes a real git verb is the same literal-token residual the module documents.
 _LAUNCHER_VALUE_OPTS = {
-    "env": {"-u", "--unset", "-C", "--chdir"},  # NOT -S/--split-string: it re-splits one string
-                                                #  arg (an expansion) → documented residual
+    "env": {"-u", "--unset", "-C", "--chdir", "-a", "--argv0"},  # -a/--argv0 <name> still execs the
+                                                #  command (coreutils 9.x); NOT -S/--split-string,
+                                                #  which re-splits one string arg (an expansion) →
+                                                #  documented residual
     "sudo": {"-u", "--user", "-g", "--group", "-C", "--close-from", "-h", "--host", "-p",
              "--prompt", "-r", "--role", "-t", "--type", "-T", "--command-timeout", "-U",
              "--other-user", "-R", "--chroot", "-D", "--chdir"},

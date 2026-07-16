@@ -112,6 +112,8 @@ class TestGuardLoopVC(unittest.TestCase):
         # exec-prefix launchers run the real command one token deeper — the fenced verb must still
         # be seen (representative cases; the full battery is TestLauncherPrefix)
         "env git push origin main",                            # POSIX launcher, no privilege
+        "env -a x git push",                                    # env -a <argv0> still execs (coreutils 9.x)
+        "env --argv0 x git branch -D main",                    # ... separate long form
         "sudo git branch -D main",                             # launcher + branch delete
         "nice -n 5 git merge --no-ff topic",                   # launcher with a value-option
         "timeout 60 git push",                                 # launcher with a leading DURATION
