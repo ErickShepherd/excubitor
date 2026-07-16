@@ -218,32 +218,84 @@ def _bind_executable(repo: str, toplevel: str, argv0: str) -> tuple[str | None, 
     real = os.path.realpath(lex)
     if not os.path.isfile(real):
         return (f"witness executable {lex!r} does not resolve to a regular file (fail-deny)"), None, []
-    if _under(toplevel, lex) or _under(toplevel, real):
-        # In-repo executable: trustworthy only as part of the frozen surface (tracked at base,
-        # content/type/hops bound). evaluate(extra_required=...) enforces that; an untracked
-        # interpreter (.venv/bin/python) refuses there.
-        return None, lex, [lex]
+    # Trust each component (the lexical path AND the resolved target) by WHERE it lands. An in-repo
+    # component is frozen to base via extra_required (tracked → content/type/hops bound; untracked,
+    # e.g. .venv/bin/python, refuses in evaluate). An out-of-repo component is NOT covered by the
+    # frozen surface, so it must be non-user-writable — otherwise it can be swapped between snapshot
+    # and exec. This closes an in-repo SYMLINK whose resolved target is an external writable binary
+    # (round-3 review, finding 3): the earlier code short-circuited on the in-repo link and never
+    # writability-checked the external target, freezing only the link identity, not the target bytes.
+    in_repo: list[str] = []
     for p in dict.fromkeys([lex, real]):
+        if _under(toplevel, p):
+            in_repo.append(p)
+            continue
         for q in (p, os.path.dirname(p)):
             if os.access(q, os.W_OK):
                 return (f"witness executable path {q!r} is writable by the invoking user — a "
                         f"replaceable executable cannot produce a trusted verdict (fail-deny)"), None, []
-    return None, lex, []
+    # Freeze whichever components ARE in-repo (an in-repo link's own _collect_surface already binds
+    # its hops+target; listing `real` too is harmless dedup). Fully out-of-repo → [] (writability
+    # gate above is the whole guarantee).
+    return None, lex, in_repo
+
+
+# python options that consume a value (attached to the same token, or the next token) — so a `m`
+# appearing in their value (`-Wm`, `-Xm`) is NOT the module switch. Mirrors install_settings.py.
+_PY_M_VALUE_SHORTS = frozenset("WX")
+
+
+def _module_arg(argv: list[str]) -> "str | None":
+    """The module name a python `-m` witness runs, across EVERY spelling, or None if it is not a
+    `-m` run. Sound against the real interpreter grammar (verified vs CPython):
+
+      -m pytest         separate value            -mpytest      attached to the -m token
+      -Bm pytest        -m last in a cluster      -Bmpytest     -m mid-cluster, rest is the module
+
+    `-m`/`-c` terminate option processing and take the REST of their own token as the argument, or —
+    if they are the token's last char — the NEXT token. `-W`/`-X` consume a value first, so a `m` in
+    `-Wm` is that value, not the switch (the earlier `"-m" not in argv` test missed the attached and
+    clustered forms entirely — a live permit-forge: a repo-root `pytest.py`/`pytest/` shadowing a
+    `-mpytest` witness was never frozen). A non-option token is the script operand → no `-m`."""
+    j = 1  # argv[0] is the interpreter
+    while j < len(argv):
+        t = argv[j]
+        if t == "--" or t == "-" or not t.startswith("-"):
+            return None  # end-of-options / script operand reached before any -m
+        if t.startswith("--"):
+            j += 1  # python's long options don't introduce a module; step over
+            continue
+        for idx, ch in enumerate(t[1:]):
+            if ch == "c":
+                return None  # -c code mode: no module (rest of token/next token is code)
+            if ch == "m":
+                rest = t[1 + idx + 1:]
+                if rest:
+                    return rest  # attached / mid-cluster: -mpytest, -Bmpytest
+                return argv[j + 1] if j + 1 < len(argv) else None  # -m last char → next token
+            if ch in _PY_M_VALUE_SHORTS:
+                # value-consuming short: the rest of THIS token is its value (`-Wm` → value 'm'); if
+                # it is the token's last char, the value is the next token (skip it). Either way no
+                # -m lives past it in this token.
+                if idx == len(t[1:]) - 1:
+                    j += 1
+                break
+        j += 1
+    return None
 
 
 def _module_shadow(toplevel: str, argv: list[str]) -> tuple[str | None, list[str]]:
-    """For a `-m <module>` witness, bind the repo-root path that would shadow the module.
+    """For a `-m <module>` witness (any spelling — see `_module_arg`), bind the repo-root path that
+    would shadow the module.
 
     `python -m` puts the cwd (the repo) first on sys.path, so a repo-root `<module>.py` or
     `<module>/` package replaces the intended module wholesale. A shadowing package directory
     cannot be frozen as a blob → refuse; a shadowing file joins the required surface (tracked →
     frozen, untracked → evaluate refuses)."""
-    if "-m" not in argv:
+    mod = _module_arg(argv)
+    if mod is None:
         return None, []
-    k = argv.index("-m")
-    if k + 1 >= len(argv):
-        return None, []
-    top_mod = argv[k + 1].split(".")[0]
+    top_mod = mod.split(".")[0]
     if not top_mod:
         return None, []
     pkg = os.path.join(toplevel, top_mod)

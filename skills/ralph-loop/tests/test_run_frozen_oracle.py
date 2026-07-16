@@ -89,6 +89,9 @@ class _RepoCase(unittest.TestCase):
         runner = Path(self.d) / "tests" / "runner.sh"
         runner.write_text("#!/bin/sh\nexit 0\n")
         os.chmod(runner, 0o755)
+        # a tracked IN-REPO symlink whose target is the EXTERNAL, user-writable executable — the
+        # round-3 finding-3 shape: the frozen surface covers the link identity, not the target bytes.
+        os.symlink(self.ext_exe, Path(self.d) / "tests" / "link-exe")
         (Path(self.d) / "feature.py").write_text("x = 1\n")
         # The anchor: every command a test runs must be BASELINE-AUTHORED here (base-tree blob).
         (Path(self.d) / ANCHOR).write_text(
@@ -106,7 +109,11 @@ class _RepoCase(unittest.TestCase):
             "verify: .venv/bin/python tests/witness_ok.py\n"
             "verify: tests/runner.sh\n"
             "verify: python3 -m pytest tests/witness_ok.py\n"
+            "verify: python3 -mpytest tests/witness_ok.py\n"     # attached -m spelling
+            "verify: python3 -Bmpytest tests/witness_ok.py\n"    # -m mid-cluster, module attached
+            "verify: python3 -Bm pytest tests/witness_ok.py\n"   # -m last in cluster, module next tok
             f"verify: {self.ext_exe} tests/witness_ok.py\n"
+            "verify: tests/link-exe tests/witness_ok.py\n"       # in-repo link → external writable exe
         )
         g("add", "-A")
         g("commit", "-m", "base")
@@ -278,6 +285,17 @@ class TestPermitBinding(_RepoCase):
         self.assertEqual(p.returncode, REFUSED, f"stdout={p.stdout} stderr={p.stderr}")
         self.assertIn("writable", p.stderr)
 
+    def test_in_repo_symlink_to_external_writable_exe_refused(self):
+        # Round-3 review finding 3: a TRACKED in-repo symlink resolving to a user-writable EXTERNAL
+        # binary must refuse. The frozen surface binds the link's identity (its target string), but
+        # the target's bytes live outside the repo and can be swapped between snapshot and exec — so
+        # the external target must pass the same writability gate as a plain out-of-repo executable.
+        # (The link + its command are baseline-authored in the fixture, so the executable binding is
+        # what's under test, not authorship or the frozen surface.)
+        p = _run(self.d, "main", "tests/link-exe tests/witness_ok.py")
+        self.assertEqual(p.returncode, REFUSED, f"stdout={p.stdout} stderr={p.stderr}")
+        self.assertIn("writable", p.stderr)
+
     def test_tracked_in_repo_executable_is_green_then_refused_on_edit(self):
         # Positive control: a TRACKED in-repo executable witness is fine — and it is now part of
         # the frozen surface, so an uncommitted edit to it refuses.
@@ -319,6 +337,22 @@ class TestPermitBinding(_RepoCase):
         p = _run(self.d, "main", "python3 -m pytest tests/witness_ok.py")
         self.assertEqual(p.returncode, REFUSED, f"stdout={p.stdout} stderr={p.stderr}")
         self.assertIn("shadow", p.stderr)
+
+    def test_attached_and_clustered_m_shadow_refuses(self):
+        # Round-3 review finding 1: the shadow binding must catch EVERY `-m` spelling, not just the
+        # spaced `python3 -m pytest`. CPython accepts `-mpytest`, `-Bmpytest`, and `-Bm pytest`, each
+        # of which puts the repo root first on sys.path — so a repo-root pytest.py forges GREEN if the
+        # shadow is not frozen. The pre-fix `"-m" not in argv` test missed all three. (These spellings
+        # are baseline-authored in the anchor above so the binding is what's exercised, not authorship.)
+        (Path(self.d) / "pytest.py").write_text("import sys\nsys.exit(0)\n")
+        for cmd in (
+            "python3 -mpytest tests/witness_ok.py",
+            "python3 -Bmpytest tests/witness_ok.py",
+            "python3 -Bm pytest tests/witness_ok.py",
+        ):
+            p = _run(self.d, "main", cmd)
+            self.assertEqual(p.returncode, REFUSED, f"{cmd!r}: stdout={p.stdout} stderr={p.stderr}")
+            self.assertIn("pytest.py", p.stderr, f"{cmd!r}: attached/clustered -m shadow must refuse")
 
     def test_baseline_authored_bin_true_is_green_accepted_residual(self):
         # ACCEPTED residual, pinned bidirectionally: a command the BASELINE AUTHOR wrote is trusted

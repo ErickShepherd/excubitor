@@ -228,7 +228,8 @@ frozen surface, executing under a sanitized environment. What it deliberately do
   `skills/ralph-loop/tests/test_run_frozen_oracle.py::TestPermitBinding::test_baseline_authored_bin_true_is_green_accepted_residual`.
 - **The content of a trusted interpreter's environment beyond the repo:** system site-packages of a
   root-owned interpreter, and sys.path shadowing from a directly-executed script's own directory,
-  are outside the frozen surface (the `-m` repo-root shadow *is* checked).
+  are outside the frozen surface (the `-m` repo-root shadow *is* checked, across every `-m` spelling —
+  spaced, attached, or clustered).
 - **The gate's own invocation.** A misbehaving loop can still skip the gate or run it through a
   forged interpreter — the recipe-level honest limit that has always applied (the guard hooks cannot
   know which files are "the oracle"). YOLO narrows the trust placed in the loop; it does not
