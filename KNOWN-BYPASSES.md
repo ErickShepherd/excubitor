@@ -29,6 +29,13 @@ argument is not falsely promoted to its own command) — then `shlex.split` each
 resulting **literal tokens** — a git subcommand, or a path's basename. They do **not** run a shell, so
 any construct that only resolves to the dangerous token *after* bash expands it is invisible to them.
 
+`guard-loop-vc.py` additionally steps over **exec-prefix launchers** (`env`, `command`, `exec`,
+`nohup`, `setsid`, `sudo`, `doas`, `nice`, `ionice`, `stdbuf`, `timeout`, `time`, `xargs`): these run
+their argument list as a new command, so it resolves the *delegated* executable (recursing for a chain
+like `sudo nice git push`) instead of anchoring on the launcher's own basename. Every token is still
+literal — this is executable resolution, not shell expansion — so the shell-expansion residuals below
+apply unchanged on top of it.
+
 ## ACCEPTED — shell word-expansion evades literal-token matching
 
 Both guards match a *literal* token. A word expansion that mutates the token before bash resolves it
@@ -76,6 +83,27 @@ under-block over the false deny: a false deny trips ordinary work and gets the g
 while the quoted-substitution under-block is one more instance of the "resolves only after the shell
 runs" residual this whole file documents. Pinned in both suites' `TestAcceptedResiduals` /
 `ACCEPTED_RESIDUALS`.
+
+## ACCEPTED — a launcher with a leading positional or a string-split option
+
+`guard-loop-vc.py` steps over the common exec-prefix launchers (see *How the guards parse*), so
+`env git push`, `sudo git branch -D main`, `nice -n 5 git merge`, and `timeout 60 git push` are all
+caught. What it does **not** parse is a launcher whose grammar puts a **bare positional of its own
+before the delegated command**, or that **re-splits one string argument** — the guard lands on the
+mask/priority/lock-file token, or sees one already-split string, and defers. Same class as an indirect
+wrapper script; pinned ALLOW in
+`hooks/tests/test_guard_loop_vc.py::TestLauncherPrefix::test_launcher_residuals_still_allow`:
+
+| Bypass | What bash runs | Why it slips |
+|---|---|---|
+| `taskset 0x3 git push origin main` | `git push` on cpu 0/1 | `0x3` is a bare cpu-mask positional; the guard lands on it, not `git` |
+| `chrt 10 git push origin main` | `git push` at RT priority 10 | `10` is a bare scheduling-priority positional |
+| `flock /tmp/lock git push origin main` | `git push` under a lock | `flock <file> command` — the lock file is a leading positional |
+| `env -S 'git push origin main'` | `git push` | `env -S` re-splits one string arg — an expansion, like the `$VAR`/brace cases above |
+
+Closing these means parsing each launcher's positional grammar (and, for `-S`, splitting the string
+— i.e. expanding), disproportionate for the niche of prefixing git with a CPU/RT/lock wrapper. The
+common launcher family is caught; these bare-positional variants are documented, not chased.
 
 ## ACCEPTED — the guards see only what the runtime hands them
 
@@ -194,6 +222,7 @@ loop rewrite the judge that constrains it.
 | An armed loop could `touch .claude/allow-default-branch`, or edit/delete the guard scripts or the `.claude/settings.json` hooks block, to disarm the fence | Denied while `CLAUDE_LOOP_GUARD` is set (file tools **and** Bash) | `guard-self-integrity.py` (TELOS-007/008) |
 | `git remote set-head` / `git symbolic-ref <name> <ref>` / `-d` could repoint `refs/remotes/origin/HEAD`, the trust anchor both guards read | Denied in both modes; the read form of `symbolic-ref` stays allowed | `guard-loop-vc.py::_classify` (TELOS-009) |
 | A dangerous verb or kill-switch glued inside an *unquoted* subshell / command substitution — `(git push)`, `$(rm PATH)`, `` `rm PATH` `` — slipped past the segment splitter | Denied; segments now split (quote-aware) on `(`, `)`, and backtick | both guards' `split_segments()` |
+| An **exec-prefix launcher** hid the fenced verb one token deeper — `env git push`, `sudo git branch -D main`, `nice git merge`, `timeout 60 git push`, `env gh pr merge 5` — so the guard anchored on the launcher basename (`env`) and deferred, a trivial no-privilege disarm of the **whole** loop-vc deny set | Denied; `_classify` steps over the launcher family and re-classifies the delegated command (bare-positional launchers remain the ACCEPTED residual above) | `guard-loop-vc.py::_classify` / `_after_launcher` (TELOS-001) |
 
 ## Reporting a bypass
 

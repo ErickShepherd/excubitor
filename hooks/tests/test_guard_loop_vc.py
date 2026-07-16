@@ -109,6 +109,13 @@ class TestGuardLoopVC(unittest.TestCase):
         "git branch -qD feature",                              # quiet + force-delete
         "git branch -dr origin/feature",                       # delete letter first in the cluster
         "git symbolic-ref -qd refs/remotes/origin/HEAD",       # quiet + delete
+        # exec-prefix launchers run the real command one token deeper — the fenced verb must still
+        # be seen (representative cases; the full battery is TestLauncherPrefix)
+        "env git push origin main",                            # POSIX launcher, no privilege
+        "sudo git branch -D main",                             # launcher + branch delete
+        "nice -n 5 git merge --no-ff topic",                   # launcher with a value-option
+        "timeout 60 git push",                                 # launcher with a leading DURATION
+        "env gh pr merge 5",                                   # launcher in front of gh
     ]
 
     # --- allow set (guard active): safe reads / non-irreversible writes ---
@@ -503,6 +510,97 @@ class TestGuardYoloDefaultBranchParsing(unittest.TestCase):
         rc, out = _run(f"git -C {d} merge --no-ff topic", guard="yolo")
         self.assertEqual(rc, 0, "fail-open contract")
         self.assertTrue(_denied(out), "merge into the real default 'team/main' must be denied")
+
+
+class TestLauncherPrefix(unittest.TestCase):
+    """Exec-prefix launchers (`env`/`sudo`/`nice`/`timeout`/…) run their argument list as a new
+    command, so a fenced git/gh verb hides one token past the launcher. Before the fix, the guard
+    anchored on the launcher basename (`env`), saw no `git` executable, and DEFERRED — a trivial,
+    no-privilege disarm of the ENTIRE deny set (`env git push`, `sudo git branch -D main`,
+    `env gh pr merge 5`). These pin that every launcher in the family is now stepped over, that a
+    chain (`sudo nice git push`) is followed, and — bidirectionally — that ordinary launcher uses of
+    a NON-fenced command are not false-denied. Closes the TELOS-001 hole; the whole irreversible set
+    stays fenced regardless of a launcher prefix.
+    """
+
+    # Every one runs a fenced git/gh verb one token deeper → must DENY.
+    LAUNCHER_DENY = [
+        "env git push origin main",
+        "env GIT_AUTHOR_NAME=x git push",       # env's own VAR=val before the command
+        "env -i git push",                       # env clearing the environment
+        "env -u FOO git push",                   # env -u <name> (value-option) then the command
+        "env -- git push",                       # option terminator, then the command
+        "command git push origin main",          # the bash `command` builtin form
+        "exec git push origin main",             # exec replaces the shell with git push
+        "exec -a name git push",                 # exec -a <name> (value-option)
+        "nohup git push origin main",
+        "setsid git push origin main",
+        "nice git merge --no-ff topic",
+        "nice -n 5 git push origin main",        # nice -n <adj> (value-option)
+        "nice -5 git push origin main",          # nice -<adj> attached
+        "ionice -c2 git branch -D main",         # ionice attached class
+        "ionice -c 2 git branch -D main",        # ionice -c <class> (value-option)
+        "stdbuf -oL git push origin main",       # stdbuf attached mode
+        "timeout 60 git push origin main",       # timeout <DURATION> command (leading positional)
+        "timeout -s KILL 60 git push",           # timeout -s <sig> then DURATION then command
+        "time git push origin main",
+        "sudo git push origin main",
+        "sudo -u deploy git branch -D main",     # sudo -u <user> (value-option)
+        "doas git push origin main",
+        "xargs git push origin main",            # xargs with empty stdin runs it once
+        "xargs -I{} git push origin main",       # xargs -I <repl> (value-option)
+        "sudo nice git push origin main",        # a launcher CHAIN is followed to the git verb
+        "env nohup git branch -D main",          # ditto, different chain
+        "/usr/bin/env git push",                 # launcher via absolute path → basename
+    ]
+
+    def test_launcher_prefix_denied(self):
+        for cmd in self.LAUNCHER_DENY:
+            rc, out = _run(cmd)
+            self.assertEqual(rc, 0, f"must exit 0 (fail-open contract): {cmd}")
+            self.assertTrue(_denied(out), f"launcher-hidden VC verb must be DENIED: {cmd}")
+
+    # Ordinary launcher uses whose delegated command is NOT fenced must still DEFER — the step-over
+    # must not manufacture a false deny. `sudo -u git push` is the sharp one: it runs a command
+    # literally named `push` as the user `git`, NOT `git push` — the value-option consumes `git`.
+    LAUNCHER_ALLOW = [
+        "env",                                   # prints the environment; no command
+        "env FOO=bar git status",                # git, but a non-fenced subcommand
+        "time ls -l",
+        "nice -n 10 make",
+        "command -v git",                        # a `command` lookup, not a git run
+        "sudo -u deploy git status",             # non-fenced git subcommand under sudo
+        "timeout 60 make test",
+        "nice git commit -m 'ready to push'",    # 'push' only in the commit message
+        "sudo -u git push",                      # run cmd `push` as user `git` — NOT `git push`
+        "xargs -n1 echo",
+    ]
+
+    def test_launcher_non_fenced_still_allows(self):
+        for cmd in self.LAUNCHER_ALLOW:
+            rc, out = _run(cmd)
+            self.assertEqual((rc, out.strip()), (0, ""), f"must DEFER (no decision): {cmd}")
+
+    # Niche launchers whose grammar puts a bare positional (a cpu mask, a scheduling priority, a lock
+    # file) BEFORE the delegated command, or that re-split one string arg — documented in
+    # KNOWN-BYPASSES.md as the same class as an indirect wrapper. Pinned ALLOW bidirectionally: if a
+    # change starts catching one, this fails and forces an honest SCOPE/LIMITS + KNOWN-BYPASSES update
+    # rather than a silent scope change.
+    LAUNCHER_RESIDUALS = [
+        "taskset 0x3 git push origin main",      # bare cpu-mask positional before the command
+        "chrt 10 git push origin main",          # bare scheduling-priority positional
+        "flock /tmp/lock git push origin main",  # flock <file> command (leading file positional)
+        "env -S 'git push origin main'",         # env re-splits one string arg (an expansion)
+    ]
+
+    def test_launcher_residuals_still_allow(self):
+        for cmd in self.LAUNCHER_RESIDUALS:
+            rc, out = _run(cmd)
+            self.assertEqual(
+                (rc, out.strip()), (0, ""),
+                f"ACCEPTED-RESIDUAL CHANGED: this launcher bypass is documented in KNOWN-BYPASSES.md "
+                f"and used to ALLOW; it is now caught. Update SCOPE/LIMITS + KNOWN-BYPASSES.md and "
+                f"move it out of LAUNCHER_RESIDUALS: {cmd}")
 
 
 if __name__ == "__main__":

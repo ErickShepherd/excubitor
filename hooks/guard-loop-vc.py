@@ -43,6 +43,13 @@ sets no marker of its own and there is no reliable way to auto-detect loop conte
 deliberately opt-in: zero friction for ordinary interactive work, protection when you explicitly
 say "I'm looping."
 
+It also steps over exec-prefix LAUNCHERS (`env git push`, `sudo git branch -D main`,
+`nice`/`nohup`/`setsid`/`stdbuf`/`ionice`/`timeout`/`time`/`command`/`exec`/`doas`/`xargs`) — these
+run their argument list as a new command, so the fenced verb hides one token deeper; `_classify`
+resolves the real executable (recursing for a chain like `sudo nice git push`) rather than anchoring
+on the launcher basename. This is executable resolution, not shell expansion (every token is
+literal), and it closes what was a trivial no-privilege disarm of the whole deny set.
+
 SCOPE / LIMITS (honest). It parses the dangerous git/gh subcommands out of the Bash command string
 as *literal* tokens — it does not expand the shell. String-parsing is NOT airtight, and these are
 ACCEPTED residuals (documented, not chased — closing them would mean reimplementing the shell):
@@ -55,6 +62,11 @@ ACCEPTED residuals (documented, not chased — closing them would mean reimpleme
   * a **live command substitution inside double quotes** (`git commit -m "$(git push)"`) — segments
     split only outside quotes (so a verb literally quoted in a commit message is not a false deny);
     the unquoted `$(git push)` / `` `git push` `` forms stay caught;
+  * a **launcher with a leading positional of its own or a string-splitting option** — the niche
+    `taskset <mask> git push`, `chrt <prio> git push`, `flock <file> git push` (the guard would land
+    on the mask/priority/lock file, not `git`), and `env -S 'git push'` (env re-splits one string
+    arg, an expansion). Same class as an indirect wrapper; pinned in
+    hooks/tests/test_guard_loop_vc.py::TestLauncherPrefix::test_launcher_residuals_still_allow;
   * a `post-commit`/`post-merge` git hook or a filesystem watcher firing an external side effect the
     guard never sees (YOLO presumes a hook-clean working copy).
 This is a seatbelt for the default path, not a sandbox; where possible, also simply don't hand the
@@ -99,6 +111,76 @@ _GIT_VALUE_OPTS = {
 # path, so a flag value isn't mistaken for `pr`/`merge`: e.g. `gh -R owner/repo pr merge`.
 _GH_VALUE_OPTS = {"-R", "--repo", "--hostname"}
 _ENV_ASSIGN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
+
+# Exec-prefix launchers: commands that run their argument list as a NEW command, so a fenced
+# git/gh verb hides one token deeper (`env git push`, `nice git merge`, `sudo git branch -D main`).
+# Without stepping over them the guard anchors on the launcher basename (`env`), sees no `git`
+# executable, and defers — a trivial, no-privilege disarm of the ENTIRE deny set. `_classify`
+# steps over the launcher (and its own options/values) and re-classifies the delegated command;
+# recursion handles a chain (`sudo nice git push`). This is NOT shell expansion — every token is
+# literal; the guard simply resolves the real executable, the same way it already steps over git's
+# global options. The set is the common, well-behaved `[options] command` launchers whose grammar
+# has no required leading positional (except `timeout`'s DURATION, handled below). Niche launchers
+# with a leading positional of their own (`taskset <mask> cmd`, `chrt <prio> cmd`, `flock <file>
+# cmd`) are the documented residual in KNOWN-BYPASSES.md — same class as an indirect wrapper script.
+_LAUNCHERS = {
+    "env", "command", "exec", "nohup", "setsid", "sudo", "doas",
+    "nice", "ionice", "stdbuf", "timeout", "time", "xargs",
+}
+# Per-launcher options that consume the FOLLOWING token as their value, so a value (e.g. the `git`
+# in `sudo -u git ...`, a nice adjustment, a timeout signal) is never mistaken for the delegated
+# command. Only the common value-taking options are enumerated; an unknown value-option whose value
+# is non-git and precedes a real git verb is the same literal-token residual the module documents.
+_LAUNCHER_VALUE_OPTS = {
+    "env": {"-u", "--unset", "-C", "--chdir"},  # NOT -S/--split-string: it re-splits one string
+                                                #  arg (an expansion) → documented residual
+    "sudo": {"-u", "--user", "-g", "--group", "-C", "--close-from", "-h", "--host", "-p",
+             "--prompt", "-r", "--role", "-t", "--type", "-T", "--command-timeout", "-U",
+             "--other-user", "-R", "--chroot", "-D", "--chdir"},
+    "doas": {"-u", "-C"},
+    "nice": {"-n", "--adjustment"},
+    "ionice": {"-c", "--class", "-n", "--classdata", "-p", "--pid"},
+    "stdbuf": {"-i", "--input", "-o", "--output", "-e", "--error"},
+    "timeout": {"-s", "--signal", "-k", "--kill-after"},
+    "exec": {"-a"},
+    "xargs": {"-I", "--replace", "-i", "-n", "--max-args", "-P", "--max-procs", "-s",
+              "--max-chars", "-E", "-d", "--delimiter", "-a", "--arg-file", "-L", "--max-lines"},
+}
+# Launchers whose grammar puts N bare positionals BEFORE the delegated command (`timeout DURATION
+# command`). Skipped after the option scan so the DURATION is not misread as the command.
+_LAUNCHER_POSITIONAL_SKIP = {"timeout": 1}
+_MAX_LAUNCHER_DEPTH = 10  # backstop against a pathological launcher chain (each hop shrinks tokens)
+
+
+def _after_launcher(launcher: str, args: list[str]) -> list[str] | None:
+    """Tokens of the command a launcher delegates to, or None if it names no command.
+
+    Steps over the launcher's own options (consuming the values of `_LAUNCHER_VALUE_OPTS`) and any
+    leading positionals it takes (`_LAUNCHER_POSITIONAL_SKIP`), landing on the delegated command.
+    The caller re-runs `_classify` on the result, so a `VAR=val` prefix (env's assignments) and a
+    nested launcher are handled by that recursion, not here.
+    """
+    value_opts = _LAUNCHER_VALUE_OPTS.get(launcher, frozenset())
+    j = 0
+    while j < len(args):
+        a = args[j]
+        if a == "--" or a == "--end-of-options":
+            j += 1  # option terminator — the very next token is the command
+            break
+        if a in value_opts:
+            j += 2  # option + its value token
+            continue
+        if a.startswith("-") and len(a) > 1:
+            j += 1  # a flag (or attached-value short like `-n5`, `-oL`, `-c2`)
+            continue
+        if a == "-":
+            j += 1  # a bare `-` (env "clear environment") is never the command
+            continue
+        break  # first non-option token
+    for _ in range(_LAUNCHER_POSITIONAL_SKIP.get(launcher, 0)):
+        if j < len(args):
+            j += 1
+    return args[j:] if j < len(args) else None
 
 
 def _subcommand_path(args: list[str], value_opts: set[str], depth: int) -> list[str]:
@@ -355,11 +437,11 @@ def _symbolic_ref_write_reason(rest: list[str]) -> str | None:
     return None
 
 
-def _classify(tokens: list[str], yolo: bool, cwd: str | None) -> str | None:
+def _classify(tokens: list[str], yolo: bool, cwd: str | None, _depth: int = 0) -> str | None:
     """Return a short reason if `tokens` (one command segment) is a forbidden VC mutation.
 
     `yolo` selects the destructive-only deny set; `cwd` is the fallback repo dir used for
-    branch detection when the command carries no `-C`.
+    branch detection when the command carries no `-C`. `_depth` bounds launcher-prefix recursion.
     """
     # Skip leading `VAR=value` env assignments to reach the executable.
     i = 0
@@ -369,6 +451,14 @@ def _classify(tokens: list[str], yolo: bool, cwd: str | None) -> str | None:
         return None
     exe = os.path.basename(tokens[i])
     args = tokens[i + 1 :]
+
+    # Exec-prefix launcher (`env`/`sudo`/`nice`/`timeout`/…): the real command hides in its args.
+    # Step over the launcher and re-classify the delegated command so `env git push` is seen as the
+    # `git push` it runs. Recursion (bounded) handles a chain like `sudo nice git push`; the fenced
+    # git/gh verb is a literal token, so this is executable resolution, not shell expansion.
+    if exe in _LAUNCHERS and _depth < _MAX_LAUNCHER_DEPTH:
+        delegated = _after_launcher(exe, args)
+        return _classify(delegated, yolo, cwd, _depth + 1) if delegated is not None else None
 
     if exe == "gh":
         # Only `gh pr merge` performs the merge server-side (denied in both modes). Resolve the
