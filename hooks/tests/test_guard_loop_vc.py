@@ -557,8 +557,8 @@ class TestLauncherPrefix(unittest.TestCase):
         "eatmydata git push origin main",
         "catchsegv git push origin main",
         "torsocks git push origin main",
-        "firejail git push origin main",
-        "firejail --net=none git push",          # firejail attached-value option
+        "torsocks -u alice git push",            # torsocks -u <user> (SOCKS5 username, value-option)
+        "torsocks --pass pw git branch -D main", # ... and --pass (the username/password pair)
         "doas -a myrole git push",               # doas -a <style> (value-option)
         # a shell running a `-c` command STRING: re-scanned as the command line it is. Only the
         # simple `-c`/`+c` flag-cluster forms (no value-consuming `-o`/`-O`) are modeled; the
@@ -645,6 +645,8 @@ class TestLauncherPrefix(unittest.TestCase):
         "strace git push origin main",           # heavier option grammar, not modeled → not caught
         "ltrace git push origin main",
         "proot -r /rootfs git push",
+        "firejail git push origin main",         # large option surface; can't rule out a sep-value opt
+        "firejail --whitelist /x git push",
         "su -c 'git push'",                      # privileged shell string, different arg grammar
         "runuser -u ci -c 'git push'",
         "sg developers -c 'git push'",

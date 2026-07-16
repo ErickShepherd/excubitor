@@ -45,7 +45,7 @@ say "I'm looping."
 
 It also steps over an enumerated set of exec-prefix LAUNCHERS (`env git push`,
 `sudo git branch -D main`, `nice`/`nohup`/`setsid`/`stdbuf`/`ionice`/`timeout`/`time`/`command`/
-`exec`/`doas`/`unbuffer`/`eatmydata`/`catchsegv`/`torsocks`/`firejail`) — these run their
+`exec`/`doas`/`unbuffer`/`eatmydata`/`catchsegv`/`torsocks`) — these run their
 argument list as a new command, so the fenced verb hides one token deeper; `_classify` resolves the
 real executable (recursing for a chain like `sudo nice git push`) rather than anchoring on the
 launcher basename. A shell running a simple `-c`/`+c` command string
@@ -145,12 +145,13 @@ _ENV_ASSIGN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 # cannot be modeled in the consume-next-token framework at all (`xargs -i`/`--replace` are
 # attached-only, and `--process-slot-var` grows the set), are the documented residual instead: a
 # half-modeled launcher whose option slips is exactly the "claimed catch that slips" failure this
-# fence must not have. (`unbuffer`/`eatmydata`/`catchsegv` are optionless; `firejail` uses attached
-# `--opt=val` options; `torsocks`/`doas`/`time` have tiny fixed value sets.)
+# fence must not have. (`unbuffer`/`eatmydata`/`catchsegv` are optionless; `torsocks`/`doas`/`time`
+# have tiny fixed value sets. `firejail` is NOT here: its option surface is large enough that a
+# separate-value option can't be confidently ruled out, so it is a documented residual.)
 _LAUNCHERS = {
     "env", "command", "exec", "nohup", "setsid", "sudo", "doas",
     "nice", "ionice", "stdbuf", "timeout", "time",
-    "unbuffer", "eatmydata", "catchsegv", "torsocks", "firejail",
+    "unbuffer", "eatmydata", "catchsegv", "torsocks",
 }
 # Shells that run a command STRING passed to `-c` (`bash -c "git push"`). The string is itself a
 # command line, so `_classify` re-scans it with the full segment splitter (catching `sh -c 'env git
@@ -180,7 +181,7 @@ _LAUNCHER_VALUE_OPTS = {
     "timeout": {"-s", "--signal", "-k", "--kill-after"},
     "exec": {"-a"},
     "time": {"-o", "--output", "-f", "--format"},  # GNU /usr/bin/time (the bash keyword ignores these)
-    "torsocks": {"-a", "--address", "-p", "--port", "-P", "--pass"},
+    "torsocks": {"-a", "--address", "-p", "--port", "-P", "--pass", "-u", "--user"},
 }
 # Launchers whose grammar puts N bare positionals BEFORE the delegated command (`timeout DURATION
 # command`). Skipped after the option scan so the DURATION is not misread as the command.

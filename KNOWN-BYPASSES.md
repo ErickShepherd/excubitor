@@ -31,7 +31,7 @@ any construct that only resolves to the dangerous token *after* bash expands it 
 
 `guard-loop-vc.py` additionally steps over an **enumerated set of exec-prefix launchers** (`env`,
 `command`, `exec`, `nohup`, `setsid`, `sudo`, `doas`, `nice`, `ionice`, `stdbuf`, `timeout`, `time`,
-`unbuffer`, `eatmydata`, `catchsegv`, `torsocks`, `firejail`): these run their argument list
+`unbuffer`, `eatmydata`, `catchsegv`, `torsocks`): these run their argument list
 as a new command, so it resolves the *delegated* executable (recursing for a chain like
 `sudo nice git push`) instead of anchoring on the launcher's own basename. A shell running a simple
 `-c`/`+c` command string (`bash`/`sh`/`dash`/`zsh`/`ksh -c "git push"`) is re-scanned as the command
@@ -105,6 +105,7 @@ this is the same residual class as an indirect wrapper script, pinned ALLOW in
 | `taskset 0x3 git push` / `chrt 10 git push` / `flock /tmp/lock git push` | a **leading positional of the launcher's own** (cpu mask / RT priority / lock file) sits before the command; the guard lands on it, not `git` |
 | `unshare git push` / `numactl -N 0 git push` / `cpulimit -l 50 git push` / `strace git push` / `ltrace git push` / `proot -r / git push` | a **large or version-growing separate-value option grammar**: modeling it half-way lets the newest option slip and mis-read its value as the command — the exact "claimed catch that slips" failure this fence must avoid — so it is documented, not claimed. (Enumerating every value-option of every such tool completely is the per-tool-grammar chase the crux refuses.) |
 | `xargs git push` / `xargs -i git push` / `xargs --process-slot-var V git push` | **an optional-arg option grammar** the consume-next-token model cannot represent: `-i`/`-e`/`-l`/`--replace` take an *attached-only optional* value (so the next token is NOT their value), while `--process-slot-var` *is* separate-value and grows the set — no single "consume next token or not" rule is correct for both, so `xargs` is documented, not modeled |
+| `firejail git push` / `firejail --whitelist /x git push` | firejail's option surface is **large enough that a separate-value option cannot be confidently ruled out** (most are attached `--opt=val`, but the set is big and grows); rather than half-model it and risk a slip, it is documented, not claimed |
 | `su -c 'git push'` / `runuser -c 'git push'` / `sg grp -c 'git push'` | a **privileged shell running a `-c` string** with a different arg grammar than the plain `bash`/`sh -c` that *is* re-scanned; also needs privilege |
 | `bash -o monitor -c 'git push'` / `bash -co monitor 'git push'` / `bash --rcfile f -c 'git push'` | a shell `-c` whose option vector carries a **value-consuming `-o`/`-O`** (or a `--rcfile`/`--init-file`) that eats a separate token and shifts the command position; the simple `-c`/`+c` flag-cluster forms *are* caught, this interleaved form is not |
 | `env -S 'git push origin main'` | `env -S` **re-splits one string arg** — an expansion, like the `$VAR`/brace cases above |
