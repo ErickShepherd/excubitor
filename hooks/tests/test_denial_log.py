@@ -219,14 +219,24 @@ class TestLogPathShapes(unittest.TestCase):
     def test_relative_blocked_write_times_out_promptly(self):
         # timeout case for the RELATIVE shape: a FIFO with no reader blocks open(); record() must
         # abandon the writer on the 1s join and report False — the R-08 fix must not have moved the
-        # blocking I/O out of the abandonable thread.
+        # blocking I/O out of the abandonable thread. Run in a SUBPROCESS with cwd=td: the abandoned
+        # thread holds a relative open() that resolves against the process-global cwd, so doing this
+        # in-process races the cleanup chdir and can create a stray file in the test runner's cwd.
         with tempfile.TemporaryDirectory() as td:
             os.mkfifo(os.path.join(td, "denials.fifo"))
+            script = (f"import importlib.util, sys\n"
+                      f"spec = importlib.util.spec_from_file_location('dl', {str(MODULE)!r})\n"
+                      f"m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)\n"
+                      f"ok = m.record('guard-test', 'reason', {self.PAYLOAD!r})\n"
+                      f"print('ok' if ok else 'timeout')\n")
+            env = dict(os.environ, EXCUBITOR_DENIAL_LOG="denials.fifo")
             start = time.monotonic()
-            ok, _ = self._record_with("denials.fifo", td)
+            p = subprocess.run([sys.executable, "-c", script], cwd=td, env=env,
+                               capture_output=True, text=True, timeout=8)
             elapsed = time.monotonic() - start
-            self.assertFalse(ok, "a hung write must report failure, not success")
-            self.assertLess(elapsed, 5.0, "record() must return promptly, not wait on the FIFO")
+            self.assertEqual(p.stdout.strip(), "timeout",
+                             f"a hung write must report failure (stderr={p.stderr})")
+            self.assertLess(elapsed, 6.0, "record() must return promptly, not wait on the FIFO")
 
 
 class TestGuardsLogDenials(unittest.TestCase):
