@@ -552,31 +552,29 @@ class TestLauncherPrefix(unittest.TestCase):
         "sudo nice git push origin main",        # a launcher CHAIN is followed to the git verb
         "env nohup git branch -D main",          # ditto, different chain
         "/usr/bin/env git push",                 # launcher via absolute path → basename
-        # further common direct-exec launchers (the reviewer's population — same class as `env`)
-        "unshare git push origin main",          # bare user-namespace launcher, no privilege
-        "unshare -r git push",                   # unshare with a flag
-        "unshare -R /newroot git push",          # unshare -R <dir> (value-option)
-        "numactl git push origin main",
-        "numactl -N 0 git branch -D main",       # numactl -N <node> (value-option)
+        # further direct-exec launchers with small/stable value grammars (same class as `env`)
         "unbuffer git push origin main",         # fixes the stdbuf<->unbuffer asymmetry
         "eatmydata git push origin main",
         "catchsegv git push origin main",
         "torsocks git push origin main",
         "firejail git push origin main",
         "firejail --net=none git push",          # firejail attached-value option
-        "cpulimit -l 50 git push",               # cpulimit -l <n> (value-option)
-        "cpulimit -l 50 -- git push",            # ... with the -- terminator
-        "unshare numactl git push",              # chain of two new launchers
-        # a shell running a `-c` command string: the string is re-scanned
+        "doas -a myrole git push",               # doas -a <style> (value-option)
+        # a shell running a `-c` command STRING: re-scanned as the command line it is. Only the
+        # simple `-c`/`+c` flag-cluster forms (no value-consuming `-o`/`-O`) are modeled; the
+        # `-o`-interleaved forms are the documented residual (LAUNCHER_RESIDUALS).
         'bash -c "git push"',
         "bash -c 'git push origin main'",
         "sh -c 'git branch -D main'",
         'dash -c "git merge --no-ff topic"',
         "zsh -c 'git push'",
-        'bash -lc "git push"',                   # combined `-lc`: value is the next token
-        'bash -cx "git push"',                   # `-c` NOT last in the cluster still runs the string
+        'bash -lc "git push"',                   # flag cluster `-lc` (no value-consuming letter)
+        'bash -cx "git push"',                   # `-c` need not be last in the cluster
         'bash -cvx "git push"',                  # ... multi-letter cluster
         'bash -xc "git push"',                   # ... `-c` last but not first
+        'bash +c "git push"',                    # `+`-prefixed cluster also runs the string
+        'bash +cx "git push"',
+        'bash --norc -c "git push"',             # a non-value long option before `-c`
         'sh -cx "git branch -D main"',
         'bash -c "env git push"',                # a launcher INSIDE the -c string
         'bash -c "gh pr merge 5"',
@@ -607,12 +605,10 @@ class TestLauncherPrefix(unittest.TestCase):
         "nice git commit -m 'ready to push'",    # 'push' only in the commit message
         "sudo -u git push",                      # run cmd `push` as user `git` — NOT `git push`
         "xargs -n1 echo",
-        "numactl --hardware",                    # a numactl query, no command
-        "unshare --version",
-        "unbuffer git status",                   # new launcher + non-fenced subcommand
-        "numactl -N 0 git status",
+        "unbuffer git status",                   # recognized launcher + non-fenced subcommand
         'bash -c "echo git push is coming"',     # 'git push' only inside an echo string
-        'bash -cx "echo hi"',                     # multi-letter cluster, non-fenced inner
+        'bash -cx "echo hi"',                    # multi-letter cluster, non-fenced inner
+        'bash +c "echo hi"',                     # `+`-prefixed cluster, non-fenced inner
         'sh -c "git status"',                    # shell -c with a non-fenced inner command
         "bash script.sh",                        # a script shell (no -c) → body not scanned, defer
         "/usr/bin/time -o out.txt make",         # GNU time value-option before a non-fenced command
@@ -627,22 +623,32 @@ class TestLauncherPrefix(unittest.TestCase):
     # Exec-prefix mechanisms OUTSIDE the recognized set — an accepted residual, the same class as an
     # indirect wrapper script (KNOWN-BYPASSES.md "an exec-prefix outside the recognized launcher
     # set"). The recognized set is enumerated, not exhaustive; these are the notable ones left out —
-    # a launcher with a leading positional of its own (cpu mask / RT priority / lock file), a
-    # heavier/variable option grammar not modeled (`strace`/`ltrace`/`proot`), a privileged shell
-    # string with a different arg order (`su`/`runuser`/`sg -c`), a string-splitting option
-    # (`env -S`), and a launcher chain past the recursion cap. Pinned ALLOW BIDIRECTIONALLY: if a
-    # change starts catching one, this fails and forces an honest SCOPE/LIMITS + KNOWN-BYPASSES update
-    # (a caught residual should MOVE to LAUNCHER_DENY, not silently change scope).
+    # a launcher with a leading positional of its own (cpu mask / RT priority / lock file); a large
+    # or version-growing separate-value option grammar not confidently modeled (`unshare`, `numactl`,
+    # `cpulimit`, `strace`, `ltrace`, `proot`) — half-modeling one invites the "claimed catch that
+    # slips" defect, so it is documented, not claimed; a privileged shell string with a different arg
+    # order (`su`/`runuser`/`sg -c`); a shell `-c` whose option vector has a value-consuming
+    # `-o`/`-O` (or a `--rcfile`/`--init-file`) that shifts the command position; a string-splitting
+    # option (`env -S`); and a launcher chain past the recursion cap. Pinned ALLOW BIDIRECTIONALLY:
+    # if a change starts catching one, this fails and forces an honest SCOPE/LIMITS + KNOWN-BYPASSES
+    # update (a caught residual should MOVE to LAUNCHER_DENY, not silently change scope).
     LAUNCHER_RESIDUALS = [
         "taskset 0x3 git push origin main",      # bare cpu-mask positional before the command
         "chrt 10 git push origin main",          # bare scheduling-priority positional
         "flock /tmp/lock git push origin main",  # flock <file> command (leading file positional)
+        "unshare git push origin main",          # large/version-growing separate-value option set
+        "unshare --map-user 1000 git push",      # ... e.g. --map-user <uid> (separate value)
+        "numactl -N 0 git push",                 # ditto — value grammar grows across versions
+        "cpulimit -l 50 git push",
         "strace git push origin main",           # heavier option grammar, not modeled → not caught
         "ltrace git push origin main",
         "proot -r /rootfs git push",
         "su -c 'git push'",                      # privileged shell string, different arg grammar
         "runuser -u ci -c 'git push'",
         "sg developers -c 'git push'",
+        "bash -co monitor 'git push'",           # shell `-o` eats a separate token → command shifts
+        "bash -o monitor -c 'git push'",         # ... `-o` before `-c`
+        "bash --rcfile /tmp/rc -c 'git push'",   # a separate-value long shell option before `-c`
         "env -S 'git push origin main'",         # env re-splits one string arg (an expansion)
         "sudo " * 11 + "git push",               # a launcher chain deeper than _MAX_LAUNCHER_DEPTH
     ]

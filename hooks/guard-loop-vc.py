@@ -45,15 +45,18 @@ say "I'm looping."
 
 It also steps over an enumerated set of exec-prefix LAUNCHERS (`env git push`,
 `sudo git branch -D main`, `nice`/`nohup`/`setsid`/`stdbuf`/`ionice`/`timeout`/`time`/`command`/
-`exec`/`doas`/`xargs`/`unshare`/`numactl`/`unbuffer`/`eatmydata`/`catchsegv`/`torsocks`/`firejail`/
-`cpulimit`) — these run their argument list as a new command, so the fenced verb hides one token
-deeper; `_classify` resolves the real executable (recursing for a chain like `sudo nice git push`)
-rather than anchoring on the launcher basename. A shell running a `-c` command string
+`exec`/`doas`/`xargs`/`unbuffer`/`eatmydata`/`catchsegv`/`torsocks`/`firejail`) — these run their
+argument list as a new command, so the fenced verb hides one token deeper; `_classify` resolves the
+real executable (recursing for a chain like `sudo nice git push`) rather than anchoring on the
+launcher basename. A shell running a simple `-c`/`+c` command string
 (`bash`/`sh`/`dash`/`zsh`/`ksh -c "git push"`) is re-scanned as the command line it is. This is
 executable resolution, not shell expansion (every token is literal), and it closes what was a
-trivial no-privilege disarm of the whole deny set. The launcher set is *enumerated, not exhaustive*:
-any exec-prefix NOT in it is an accepted residual (see SCOPE / LIMITS), the same class as a wrapper
-script — the guard recognizes a set, it does not claim to model every launcher on the system.
+trivial no-privilege disarm of the whole deny set. The set holds launchers whose separate-value
+option grammar is small, stable, and confidently complete — so a value is never misread as the
+command. It is *enumerated, not exhaustive*: any exec-prefix NOT in it (an unlisted or
+large-option-grammar launcher — `unshare`/`numactl`/`strace`/…, a leading-positional launcher, a
+value-consuming `-o` shell form) is an accepted residual (see SCOPE / LIMITS), the same class as a
+wrapper script — the guard recognizes a set, it does not model every launcher on the system.
 
 SCOPE / LIMITS (honest). It parses the dangerous git/gh subcommands out of the Bash command string
 as *literal* tokens — it does not expand the shell. String-parsing is NOT airtight, and these are
@@ -71,9 +74,12 @@ ACCEPTED residuals (documented, not chased — closing them would mean reimpleme
     so any other prefix that runs its arguments as a command is an accepted residual, the same class
     as an indirect wrapper script: a launcher with a leading positional of its own (`taskset <mask>`,
     `chrt <prio>`, `flock <file>` — the guard lands on the mask/priority/lock file, not `git`), a
-    heavier/variable option grammar not modeled (`strace`, `ltrace`, `proot`), a privileged shell
-    string with a different arg order (`su -c`, `runuser -c`, `sg -c`), a string-splitting option
-    (`env -S 'git push'`), or a launcher chain deeper than the recursion cap. Pinned in
+    large or version-growing separate-value option grammar not confidently modeled (`unshare`,
+    `numactl`, `cpulimit`, `strace`, `ltrace`, `proot`), a privileged shell string with a different
+    arg order (`su -c`, `runuser -c`, `sg -c`), a shell `-c` whose vector has a value-consuming
+    `-o`/`-O` or a `--rcfile`/`--init-file` (shifting the command position — `bash -o monitor -c
+    "git push"`), a string-splitting option (`env -S 'git push'`), or a launcher chain deeper than
+    the recursion cap. Pinned in
     hooks/tests/test_guard_loop_vc.py::TestLauncherPrefix::test_launcher_residuals_still_allow;
   * a `post-commit`/`post-merge` git hook or a filesystem watcher firing an external side effect the
     guard never sees (YOLO presumes a hook-clean working copy).
@@ -131,18 +137,27 @@ _ENV_ASSIGN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 # has no required leading positional (except `timeout`'s DURATION, handled below). Niche launchers
 # with a leading positional of their own (`taskset <mask> cmd`, `chrt <prio> cmd`, `flock <file>
 # cmd`) are the documented residual in KNOWN-BYPASSES.md — same class as an indirect wrapper script.
+# The recognized launchers are those whose separate-value option grammar is SMALL, STABLE, and
+# confidently complete — so a `<launcher> <value-opt> <val> git push` cannot MISS by mis-reading the
+# value as the command. Launchers with a large or version-growing separate-value option set
+# (`unshare`, `numactl`, `cpulimit`, `strace`, `ltrace`, `proot`) are the documented residual
+# instead: a half-modeled launcher whose newest option slips is exactly the "claimed catch that
+# slips" failure this fence must not have. (`unbuffer`/`eatmydata`/`catchsegv` are optionless;
+# `firejail` uses attached `--opt=val` options; `torsocks`/`doas`/`time` have tiny fixed value sets.)
 _LAUNCHERS = {
     "env", "command", "exec", "nohup", "setsid", "sudo", "doas",
     "nice", "ionice", "stdbuf", "timeout", "time", "xargs",
-    # same direct-exec `[options] command` class, small/stable option grammar → soundly steppable
     "unbuffer", "eatmydata", "catchsegv", "torsocks", "firejail",
-    "numactl", "unshare", "cpulimit",
 }
 # Shells that run a command STRING passed to `-c` (`bash -c "git push"`). The string is itself a
 # command line, so `_classify` re-scans it with the full segment splitter (catching `sh -c 'env git
-# push'` too). Privileged/positional-arg shell forms (`su -c`, `runuser -c`, `sg -c`) have a
-# different arg grammar and are the documented residual, not modeled here.
+# push'` too). `_shell_c_command` models the SIMPLE `-c`/`+c` flag-cluster forms and bails to the
+# residual on the value-consuming `-o`/`-O` forms rather than guess the command position. Privileged
+# positional-arg shell forms (`su -c`, `runuser -c`, `sg -c`) are the documented residual.
 _SHELL_LAUNCHERS = {"bash", "sh", "dash", "zsh", "ksh", "ash", "mksh"}
+# Long shell options that take a SEPARATE value token; their presence shifts the command position, so
+# `_shell_c_command` bails to the residual rather than mis-locate it.
+_SHELL_LONG_VALUE_OPTS = {"--rcfile", "--init-file"}
 # Per-launcher options that consume the FOLLOWING token as their value, so a value (e.g. the `git`
 # in `sudo -u git ...`, a nice adjustment, a timeout signal) is never mistaken for the delegated
 # command. Only the common value-taking options are enumerated; an unknown value-option whose value
@@ -153,7 +168,7 @@ _LAUNCHER_VALUE_OPTS = {
     "sudo": {"-u", "--user", "-g", "--group", "-C", "--close-from", "-h", "--host", "-p",
              "--prompt", "-r", "--role", "-t", "--type", "-T", "--command-timeout", "-U",
              "--other-user", "-R", "--chroot", "-D", "--chdir"},
-    "doas": {"-u", "-C"},
+    "doas": {"-u", "-C", "-a"},  # doas [-a style] [-C config] [-u user] command
     "nice": {"-n", "--adjustment"},
     "ionice": {"-c", "--class", "-n", "--classdata", "-p", "--pid"},
     "stdbuf": {"-i", "--input", "-o", "--output", "-e", "--error"},
@@ -161,10 +176,6 @@ _LAUNCHER_VALUE_OPTS = {
     "exec": {"-a"},
     "xargs": {"-I", "--replace", "-i", "-n", "--max-args", "-P", "--max-procs", "-s",
               "--max-chars", "-E", "-d", "--delimiter", "-a", "--arg-file", "-L", "--max-lines"},
-    "numactl": {"-N", "--cpunodebind", "-m", "--membind", "-C", "--physcpubind",
-                "-i", "--interleave", "-p", "--preferred"},
-    "unshare": {"-R", "--root", "--wd", "-S", "--setuid", "-G", "--setgid", "--setgroups"},
-    "cpulimit": {"-l", "--limit", "-p", "--pid", "-e", "--exe", "-c", "--cpu"},
     "time": {"-o", "--output", "-f", "--format"},  # GNU /usr/bin/time (the bash keyword ignores these)
     "torsocks": {"-a", "--address", "-p", "--port", "-P", "--pass"},
 }
@@ -206,19 +217,37 @@ def _after_launcher(launcher: str, args: list[str]) -> list[str] | None:
 
 
 def _shell_c_command(args: list[str]) -> str | None:
-    """The command STRING a shell's `-c` runs, or None if there is no `-c` (a script/interactive
-    shell — its body is the wrapper-script residual, not scanned). `-c` takes the NEXT arg as the
-    command string, so it matches a bare `-c` and a short cluster containing `c` ANYWHERE
-    (`bash -lc`, `bash -cx`, `bash -cvx` all run the following token — `c` is bash/sh/dash/zsh/ksh's
-    only 'c' short option). The value is that following token."""
+    """The command STRING a shell's `-c` runs, or None if it can't be located SOUNDLY.
+
+    `c` is bash/sh/dash/zsh/ksh's only 'c' short option and, when command mode is set, the command
+    string is the first operand after the option vector. This models the simple, unambiguous forms:
+    a `-`/`+` flag cluster that contains `c` and NO value-consuming letter (`-c`, `-cx`, `-xc`,
+    `+c`, `bash --norc -c`) → the command is the token right after the cluster. It deliberately does
+    NOT model the value-consuming forms: a `-o`/`-O`/`+o`/`+O` letter (which eats a SEPARATE token,
+    shifting the command position — `bash -co monitor "git push"`) or a `--rcfile`/`--init-file`
+    long value option makes the command position ambiguous without faithfully parsing the shell's
+    option vector, so it bails to None (the documented residual) rather than mis-locate the command
+    and either miss the verb or false-deny an option value. Same posture as the leading-positional
+    launchers: model the clean case, document the rest."""
     j = 0
     while j < len(args):
         a = args[j]
-        if a == "-c" or (a.startswith("-") and not a.startswith("--") and "c" in a[1:]):
-            return args[j + 1] if j + 1 < len(args) else None
         if a == "--":
-            break
-        j += 1
+            return None  # end of options with no command-mode operand seen → not a `-c` invocation
+        if a.startswith("--"):
+            if a in _SHELL_LONG_VALUE_OPTS:
+                return None  # a separate-value long option shifts the command position → residual
+            j += 1
+            continue
+        if a and a[0] in "-+" and len(a) > 1:
+            letters = a[1:]
+            if "o" in letters or "O" in letters:
+                return None  # value-consuming letter → command position ambiguous → residual
+            if "c" in letters:
+                return args[j + 1] if j + 1 < len(args) else None
+            j += 1
+            continue
+        return None  # an operand before any `-c` → a script/interactive shell, not `-c` mode
     return None
 
 
