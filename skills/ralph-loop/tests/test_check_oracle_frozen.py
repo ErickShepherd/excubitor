@@ -82,6 +82,25 @@ class TestCheckOracleFrozen(unittest.TestCase):
         self._commit("tests/test_oracle.py", "def test_ok():\n    assert True  # weakened\n")
         self.assertEqual(_run(self.d, "main", self.VB), 1)
 
+    def test_not_frozen_uncommitted_regular_file_edit(self):
+        # R-04 finding #1 (the core hole): the loop weakens a tracked regular oracle file IN THE
+        # WORKTREE and does NOT commit. A three-dot base...HEAD diff compares commits, so the edit is
+        # invisible there; the type/link check never looked at regular-file bytes → the gate used to
+        # report FROZEN and hand out a false permit. The current-vs-base content comparison must catch
+        # it. (Also touch feature code so it isn't a no-op branch.)
+        self._commit("feature.py", "x = 2\n")
+        (Path(self.d) / "tests" / "test_oracle.py").write_text(
+            "def test_ok():\n    assert True  # weakened, UNCOMMITTED\n")
+        self.assertEqual(_run(self.d, "main", self.VB), 1,
+                         "an uncommitted regular-file oracle weakening must be NOT-FROZEN")
+
+    def test_frozen_uncommitted_feature_edit_only(self):
+        # control for the above: an uncommitted edit to NON-oracle code must NOT false-deny — the
+        # content check applies only to the oracle surface, not the whole worktree.
+        (Path(self.d) / "feature.py").write_text("x = 99  # uncommitted, not the oracle\n")
+        self.assertEqual(_run(self.d, "main", self.VB), 0,
+                         "an uncommitted non-oracle edit must stay FROZEN")
+
     def test_not_frozen_when_oracle_deleted(self):
         os.remove(Path(self.d) / "tests" / "test_oracle.py")
         self.g("add", "-A")
@@ -271,6 +290,58 @@ class TestSymlinkSurface(unittest.TestCase):
         self.g("commit", "-m", "retarget link")
         vb = "python3 tests/weak_oracle.py tests/test_oracle.py"
         self.assertEqual(_run(self.d, "main", vb), 1)
+
+
+class TestDirectorySymlinkSurface(unittest.TestCase):
+    """R-04 finding #2: a DIRECTORY symlink in the oracle path is load-bearing too. Retargeting the
+    directory (e.g. `tests -> weak_tests`) swaps which file the witness executes; the prior code
+    realpath-collapsed the directory part before building the surface, so the dir-link was never
+    frozen and an uncommitted retarget read as FROZEN."""
+
+    def setUp(self) -> None:
+        self.d = tempfile.mkdtemp(prefix="oraclefrozen-dir-")
+        self.addCleanup(shutil.rmtree, self.d, ignore_errors=True)
+
+        def g(*args: str) -> None:
+            subprocess.run(["git", "-C", self.d, *args], check=True, capture_output=True, text=True)
+
+        self.g = g
+        g("init", "-b", "main")
+        g("config", "user.email", "t@t.t")
+        g("config", "user.name", "t")
+        (Path(self.d) / "strong_tests").mkdir()
+        (Path(self.d) / "strong_tests" / "oracle.py").write_text("def test_ok():\n    assert False  # strong\n")
+        (Path(self.d) / "weak_tests").mkdir()
+        (Path(self.d) / "weak_tests" / "oracle.py").write_text("def test_ok():\n    assert True  # weak\n")
+        os.symlink("strong_tests", Path(self.d) / "tests")  # DIRECTORY symlink → strong_tests
+        g("add", "-A")
+        g("commit", "-m", "base: tests -> strong_tests")
+        g("checkout", "-b", "loop/telos")
+
+    VB = "python3 tests/oracle.py"
+
+    def test_frozen_when_dir_symlink_untouched(self):
+        # control: the directory symlink is now part of the frozen surface — must not false-deny
+        (Path(self.d) / "feature.py").write_text("x = 1\n")
+        self.g("add", "-A")
+        self.g("commit", "-m", "feature only")
+        self.assertEqual(_run(self.d, "main", self.VB), 0)
+
+    def test_not_frozen_uncommitted_dir_symlink_retarget(self):
+        # THE #2 REPRO: retarget the directory symlink to the weaker tree, uncommitted. The resolved
+        # file path changes (strong_tests/oracle.py → weak_tests/oracle.py) but each of those matches
+        # its own base bytes; only the `tests` dir-link's target changed — which must be in the surface.
+        os.remove(Path(self.d) / "tests")
+        os.symlink("weak_tests", Path(self.d) / "tests")
+        self.assertEqual(_run(self.d, "main", self.VB), 1,
+                         "an uncommitted directory-symlink retarget must be NOT-FROZEN")
+
+    def test_not_frozen_committed_dir_symlink_retarget(self):
+        os.remove(Path(self.d) / "tests")
+        os.symlink("weak_tests", Path(self.d) / "tests")
+        self.g("add", "-A")
+        self.g("commit", "-m", "retarget dir link")
+        self.assertEqual(_run(self.d, "main", self.VB), 1)
 
 
 if __name__ == "__main__":

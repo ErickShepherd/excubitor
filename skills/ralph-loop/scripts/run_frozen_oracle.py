@@ -9,8 +9,9 @@ not proof that the code which produced the trusted exit code is the frozen code.
 This runner closes that gap by binding the checked bytes to the verdict in ONE operation:
 
     1. PRECHECK — evaluate the complete oracle surface against the baseline
-       (check_oracle_frozen.evaluate: lexical paths, symlink-chain hops, resolved targets, path
-       types, link targets, and the committed diff — every ambiguity refuses);
+       (check_oracle_frozen.evaluate: lexical paths, symlink hops — file AND directory — resolved
+       targets, path types, link targets, regular-file content vs the base blob, and the committed
+       diff — every ambiguity refuses);
     2. SNAPSHOT — record each surface path's type, link target, and content hash (sha256);
     3. EXECUTE — run the witness WITHOUT a shell (shlex-split argv, shell=False: no substitution,
        no redirection, no chaining — a metacharacter in verified-by is a literal argument);

@@ -11,17 +11,21 @@ This script is that mechanical check. Given a claim's `verified-by:` command and
 base, it confirms the oracle's frozen surface was NOT modified by the loop on its own branch:
 
     oracle frozen  ⟺  no path in the oracle SURFACE appears in `git diff <base>...HEAD`
-                       AND every surface path's current type/link-target matches the base tree
+                       AND every surface path's current type, symlink target, and (for a regular
+                       file) content matches the base tree
 
-where the SURFACE is each referenced file's lexical path, every hop of its symlink chain, and its
-resolved target (R-04: the resolved target alone had a retarget hole — repoint a tracked oracle
-link at a weaker tracked test and the diff named only the link, the candidate set only the new
-target, empty intersection, false FROZEN). `<base>...HEAD` (three-dot) diffs HEAD against the
-merge-base, i.e. exactly "what the loop changed since it forked" — so an oracle edited at any point
-on the loop branch is caught; the type/link-target comparison additionally catches an UNCOMMITTED
-retarget in the worktree. This is stronger than a hash-pin (no manifest to maintain or forge) and
-reuses git. It remains a point-in-time check: binding the checked bytes to the witness's exit code
-atomically is the runner's job (run_frozen_oracle), not this diagnostic's.
+where the SURFACE is each referenced file's lexical path, every symlink hop along its whole in-repo
+path — file AND directory symlinks (R-04: the resolved target alone had a retarget hole — repoint a
+tracked oracle link at a weaker tracked test and the diff named only the link, the candidate set only
+the new target, empty intersection, false FROZEN; #2: a directory symlink in the path was likewise
+collapsed away) — and its resolved target. `<base>...HEAD` (three-dot) diffs HEAD against the
+merge-base, i.e. exactly "what the loop changed since it forked" — so an oracle COMMITTED-edited at
+any point on the loop branch is caught; the current-vs-base type/target/content comparison
+additionally catches an UNCOMMITTED retarget, type swap, or content weakening in the worktree (R-04
+#1: a three-dot diff compares commits, so an uncommitted regular-file edit is invisible to it — the
+content-hash-vs-base check is what closes that). Stronger than a hash-pin (no manifest to maintain or
+forge) and reuses git. It remains a point-in-time check: binding the checked bytes to the witness's
+exit code atomically is the runner's job (run_frozen_oracle), not this diagnostic's.
 
 FAIL-DENY. Any ambiguity is treated as NOT frozen (non-zero exit): a `verified-by:` from which no
 existing oracle file can be extracted (so immutability is unverifiable), or any git error. The
@@ -30,6 +34,11 @@ caller must refuse the YOLO act on non-zero — never integrate on an unconfirme
 LIMIT (honest). The *check* is mechanical, but the loop's obedience to it is recipe-level — the
 guard hook prevents the default-branch merge mechanically, but it cannot know which file is "the
 oracle", so it cannot run this check itself. Same seatbelt-not-sandbox caveat as guard-loop-vc.py.
+The content comparison trusts git's own OID computation: a loop that can write `.git/config` (beyond
+the tracked-file-edit threat this models) could install a `clean` filter mapping weakened bytes back
+to the base blob and spoof FROZEN — inherent to any git-OID check and out of scope, documented not
+chased. The remaining in-model residual is a witness that mutates its oracle DURING execution and
+restores it before exiting (the runner's recheck sees start==end); see run_frozen_oracle.py.
 
 Exit codes: 0 = oracle frozen (safe to act); 1 = NOT frozen / unverifiable (refuse); 2 = usage error.
 
@@ -75,23 +84,47 @@ def _existed_at_base(repo: str, base: str, rel: str) -> bool:
     return _git(repo, "cat-file", "-e", f"{base}:{rel}")[0]
 
 
-def _link_chain(abs_lex: str) -> list[str]:
-    """The lexical path plus every hop of its final-component symlink chain, ending at the fully
-    resolved target. EVERY hop is load-bearing (R-04): retargeting any link in the chain swaps which
-    bytes the witness executes, so every hop belongs to the frozen surface. Bounded against loops."""
-    chain = [abs_lex]
-    cur = abs_lex
-    for _ in range(40):  # ELOOP guard; a real chain is 1-2 hops
-        if not os.path.islink(cur):
-            break
-        tgt = os.readlink(cur)
-        cur = os.path.normpath(tgt if os.path.isabs(tgt) else os.path.join(os.path.dirname(cur), tgt))
-        chain.append(cur)
-    # realpath additionally resolves DIRECTORY symlinks anywhere in the path
-    real = os.path.realpath(abs_lex)
-    if real not in chain:
-        chain.append(real)
-    return chain
+def _surface_paths(toplevel: str, abs_candidate: str) -> list[str]:
+    """Every path whose retargeting would change which bytes the witness executes: the lexical
+    candidate, every symlink hop along the WHOLE in-repo path — a DIRECTORY symlink in the prefix is
+    load-bearing too (R-04 finding #2), not only the final component — and the fully resolved target.
+
+    The prior approach realpath-collapsed the directory part before walking the final component's
+    chain, so an uncommitted `tests -> weak_tests` directory retarget silently swapped the executed
+    file (the resolved path matched base, the link was never in the surface). Anchoring the walk at
+    the already-canonical repo toplevel and following every symlink component (dir OR file) closes
+    that. Bounded against symlink loops."""
+    abs_candidate = os.path.normpath(abs_candidate)
+    hops: list[str] = []
+
+    def add(p: str) -> None:
+        if p not in hops:
+            hops.append(p)
+
+    add(abs_candidate)
+    # Walk the candidate's in-repo components from the canonical toplevel down, capturing every
+    # symlink hop. Ancestors above toplevel are canonical by construction (toplevel is realpath'd),
+    # so they need no resolution; a candidate resolving outside the tree just keeps lexical+resolved.
+    rel = os.path.relpath(abs_candidate, toplevel)
+    if not rel.startswith(".."):
+        resolved = toplevel
+        guard = 0
+        for part in rel.split(os.sep):
+            if part in ("", "."):
+                continue
+            resolved = os.path.join(resolved, part)
+            while os.path.islink(resolved) and guard < 80:  # ELOOP guard; real chains are 1-2 hops
+                # Freeze the SYMLINK itself (its target string is checked against base); do NOT add its
+                # resolved target here — an intermediate directory target is a tree, not a freezable
+                # blob (and would false-trip the tamper check), while a terminal FILE target is added
+                # once by the realpath below. Only symlink hops + the terminal file belong in the surface.
+                add(resolved)
+                guard += 1
+                tgt = os.readlink(resolved)
+                resolved = os.path.normpath(
+                    tgt if os.path.isabs(tgt) else os.path.join(os.path.dirname(resolved), tgt))
+    add(os.path.realpath(abs_candidate))
+    return hops
 
 
 def _oracle_files(repo: str, base: str, verified_by: str) -> tuple[dict[str, str], list[str]]:
@@ -130,11 +163,7 @@ def _oracle_files(repo: str, base: str, verified_by: str) -> tuple[dict[str, str
         if not candidate or candidate.startswith("-"):
             continue
         abs_candidate = candidate if os.path.isabs(candidate) else os.path.join(repo, candidate)
-        # Lexical form: resolve the DIRECTORY part (git paths are worktree-real), but keep the final
-        # component unresolved — that final component IS the retargetable surface.
-        d, b = os.path.split(abs_candidate)
-        abs_lex = os.path.join(os.path.realpath(d), b)
-        for p in _link_chain(abs_lex):
+        for p in _surface_paths(toplevel, abs_candidate):
             rel = os.path.normpath(os.path.relpath(p, toplevel))
             if rel.startswith(".."):
                 continue  # outside the work tree → cannot appear in the diff
@@ -154,19 +183,27 @@ def _oracle_files(repo: str, base: str, verified_by: str) -> tuple[dict[str, str
 
 
 def _base_state_mismatch(repo: str, base: str, rel: str, abs_path: str) -> str | None:
-    """Compare the CURRENT lexical path's type — and, for a symlink, its target — with the base tree.
+    """Compare the CURRENT lexical path against the base tree — its TYPE, and its BYTES.
 
-    A committed retarget is caught by the diff intersection; this catches the UNCOMMITTED one: the
-    loop can point a tracked oracle link at weaker bytes (or swap a regular file for a link) in the
-    worktree without committing, and a committed-diff-only check would still say FROZEN. Git's blob
-    for a 120000 entry is the link-target string, so the base side needs no filesystem state.
-    Returns a human-readable mismatch (→ fail-deny) or None."""
+    A committed change is caught by the diff intersection; this catches the UNCOMMITTED one: the loop
+    can weaken a tracked oracle in the worktree without committing — retarget a link, swap a regular
+    file for a link, OR edit a regular file's assertions (`assert real()` → `assert True`) — and a
+    committed-diff-only check (three-dot `base...HEAD` compares COMMITS, so worktree edits are
+    invisible) would still say FROZEN. That regular-file content case was R-04 finding #1: the type
+    and link-target checks below never looked at a regular file's bytes.
+
+    Git's blob for a 120000 entry is the link-target string, and for a regular file the content OID,
+    so the base side needs no filesystem state: compare the base OID (from ls-tree) against a
+    `git hash-object` of the current worktree file (`--path` applies the same gitattributes filters
+    git used to compute the base OID, so a filter can't provoke a false mismatch). Any read failure or
+    difference is a mismatch → fail-deny. Returns a human-readable mismatch or None."""
     ok, out = _git(repo, "ls-tree", base, "--", rel)
     if not ok:
         return f"{rel}: cannot read {base} tree state (fail-deny)"
     if not out.strip():
         return None  # not in the base tree — an added path; the diff intersection owns that case
-    mode = out.split(None, 1)[0]
+    header = out.split("\t", 1)[0].split()  # "<mode> <type> <oid>" before the tab-separated path
+    mode, base_oid = header[0], header[2]
     if mode == "120000":
         if not os.path.islink(abs_path):
             return f"{rel}: a symlink at {base} is no longer a symlink (type change)"
@@ -177,6 +214,14 @@ def _base_state_mismatch(repo: str, base: str, rel: str, abs_path: str) -> str |
             return f"{rel}: symlink retargeted from {blob!r} to {os.readlink(abs_path)!r}"
     elif os.path.islink(abs_path):
         return f"{rel}: a regular file at {base} is now a symlink (type change)"
+    else:
+        # Regular file at base, still a regular file: its BYTES must match the base blob (R-04 #1 —
+        # an uncommitted content weakening is invisible to both the type check and the committed diff).
+        ok, cur_oid = _git(repo, "hash-object", "--path", rel, "--", abs_path)
+        if not ok:
+            return f"{rel}: cannot hash current oracle content (fail-deny)"
+        if cur_oid.strip() != base_oid:
+            return f"{rel}: regular-file oracle content changed vs {base} (weakened without commit)"
     return None
 
 
