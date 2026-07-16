@@ -28,11 +28,11 @@ Never resolve an open `DECIDE:` item by guessing. Never mark live-host trust, ma
 remote repository policy, credentials, administrator configuration, cross-platform evidence, or final
 security sign-off complete without the named external evidence. Stop and surface those items.
 
-If Claude Opus 4.6 is required, launch Claude Code with the exact model ID rather than the moving `opus`
+If Claude Opus 4.8 is required, launch Claude Code with the exact model ID rather than the moving `opus`
 alias:
 
 ```bash
-CLAUDE_LOOP_GUARD=1 claude --model claude-opus-4-6
+CLAUDE_LOOP_GUARD=1 claude --model claude-opus-4-8
 ```
 
 Then start the repo plan from the Claude Code session:
