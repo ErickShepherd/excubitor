@@ -45,7 +45,7 @@ say "I'm looping."
 
 It also steps over an enumerated set of exec-prefix LAUNCHERS (`env git push`,
 `sudo git branch -D main`, `nice`/`nohup`/`setsid`/`stdbuf`/`ionice`/`timeout`/`time`/`command`/
-`exec`/`doas`/`xargs`/`unbuffer`/`eatmydata`/`catchsegv`/`torsocks`/`firejail`) — these run their
+`exec`/`doas`/`unbuffer`/`eatmydata`/`catchsegv`/`torsocks`/`firejail`) — these run their
 argument list as a new command, so the fenced verb hides one token deeper; `_classify` resolves the
 real executable (recursing for a chain like `sudo nice git push`) rather than anchoring on the
 launcher basename. A shell running a simple `-c`/`+c` command string
@@ -75,7 +75,8 @@ ACCEPTED residuals (documented, not chased — closing them would mean reimpleme
     as an indirect wrapper script: a launcher with a leading positional of its own (`taskset <mask>`,
     `chrt <prio>`, `flock <file>` — the guard lands on the mask/priority/lock file, not `git`), a
     large or version-growing separate-value option grammar not confidently modeled (`unshare`,
-    `numactl`, `cpulimit`, `strace`, `ltrace`, `proot`), a privileged shell string with a different
+    `numactl`, `cpulimit`, `strace`, `ltrace`, `proot`), or an optional-arg option grammar that the
+    consume-next-token model cannot represent (`xargs -i`/`--replace`), a privileged shell string with a different
     arg order (`su -c`, `runuser -c`, `sg -c`), a shell `-c` whose vector has a value-consuming
     `-o`/`-O` or a `--rcfile`/`--init-file` (shifting the command position — `bash -o monitor -c
     "git push"`), a string-splitting option (`env -S 'git push'`), or a launcher chain deeper than
@@ -140,13 +141,15 @@ _ENV_ASSIGN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 # The recognized launchers are those whose separate-value option grammar is SMALL, STABLE, and
 # confidently complete — so a `<launcher> <value-opt> <val> git push` cannot MISS by mis-reading the
 # value as the command. Launchers with a large or version-growing separate-value option set
-# (`unshare`, `numactl`, `cpulimit`, `strace`, `ltrace`, `proot`) are the documented residual
-# instead: a half-modeled launcher whose newest option slips is exactly the "claimed catch that
-# slips" failure this fence must not have. (`unbuffer`/`eatmydata`/`catchsegv` are optionless;
-# `firejail` uses attached `--opt=val` options; `torsocks`/`doas`/`time` have tiny fixed value sets.)
+# (`unshare`, `numactl`, `cpulimit`, `strace`, `ltrace`, `proot`), or an OPTIONAL-arg option that
+# cannot be modeled in the consume-next-token framework at all (`xargs -i`/`--replace` are
+# attached-only, and `--process-slot-var` grows the set), are the documented residual instead: a
+# half-modeled launcher whose option slips is exactly the "claimed catch that slips" failure this
+# fence must not have. (`unbuffer`/`eatmydata`/`catchsegv` are optionless; `firejail` uses attached
+# `--opt=val` options; `torsocks`/`doas`/`time` have tiny fixed value sets.)
 _LAUNCHERS = {
     "env", "command", "exec", "nohup", "setsid", "sudo", "doas",
-    "nice", "ionice", "stdbuf", "timeout", "time", "xargs",
+    "nice", "ionice", "stdbuf", "timeout", "time",
     "unbuffer", "eatmydata", "catchsegv", "torsocks", "firejail",
 }
 # Shells that run a command STRING passed to `-c` (`bash -c "git push"`). The string is itself a
@@ -174,8 +177,6 @@ _LAUNCHER_VALUE_OPTS = {
     "stdbuf": {"-i", "--input", "-o", "--output", "-e", "--error"},
     "timeout": {"-s", "--signal", "-k", "--kill-after"},
     "exec": {"-a"},
-    "xargs": {"-I", "--replace", "-i", "-n", "--max-args", "-P", "--max-procs", "-s",
-              "--max-chars", "-E", "-d", "--delimiter", "-a", "--arg-file", "-L", "--max-lines"},
     "time": {"-o", "--output", "-f", "--format"},  # GNU /usr/bin/time (the bash keyword ignores these)
     "torsocks": {"-a", "--address", "-p", "--port", "-P", "--pass"},
 }

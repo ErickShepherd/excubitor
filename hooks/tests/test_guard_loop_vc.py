@@ -547,8 +547,6 @@ class TestLauncherPrefix(unittest.TestCase):
         "sudo git push origin main",
         "sudo -u deploy git branch -D main",     # sudo -u <user> (value-option)
         "doas git push origin main",
-        "xargs git push origin main",            # xargs with empty stdin runs it once
-        "xargs -I{} git push origin main",       # xargs -I <repl> (value-option)
         "sudo nice git push origin main",        # a launcher CHAIN is followed to the git verb
         "env nohup git branch -D main",          # ditto, different chain
         "/usr/bin/env git push",                 # launcher via absolute path → basename
@@ -604,7 +602,6 @@ class TestLauncherPrefix(unittest.TestCase):
         "timeout 60 make test",
         "nice git commit -m 'ready to push'",    # 'push' only in the commit message
         "sudo -u git push",                      # run cmd `push` as user `git` — NOT `git push`
-        "xargs -n1 echo",
         "unbuffer git status",                   # recognized launcher + non-fenced subcommand
         'bash -c "echo git push is coming"',     # 'git push' only inside an echo string
         'bash -cx "echo hi"',                    # multi-letter cluster, non-fenced inner
@@ -640,6 +637,9 @@ class TestLauncherPrefix(unittest.TestCase):
         "unshare --map-user 1000 git push",      # ... e.g. --map-user <uid> (separate value)
         "numactl -N 0 git push",                 # ditto — value grammar grows across versions
         "cpulimit -l 50 git push",
+        "xargs git push origin main",            # optional-arg opts (-i/--replace) unmodelable here
+        "xargs --process-slot-var V git push",   # ... plus version-growing separate-value opts
+        "echo x | xargs -i git push",            # -i is attached-only; runs git push per input line
         "strace git push origin main",           # heavier option grammar, not modeled → not caught
         "ltrace git push origin main",
         "proot -r /rootfs git push",
