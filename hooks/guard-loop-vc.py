@@ -203,7 +203,12 @@ def _default_branch(repo_dir: str | None) -> str | None:
     """
     ok, out = _git(repo_dir, "symbolic-ref", "--quiet", "refs/remotes/origin/HEAD")
     if ok and out.startswith("refs/remotes/origin/"):
-        return out.rsplit("/", 1)[-1]
+        # Strip the fixed ref prefix, NOT rsplit("/") — a branch name can itself contain slashes
+        # (release/2.0, team/main), and rsplit would keep only the last segment ("2.0", "main"),
+        # resolving a DIFFERENT default than the one checked out and letting a YOLO merge into the
+        # real default slip through. removeprefix keeps the full name. (This mirrors the sibling
+        # fix in guard-default-branch.py, which resolves the same trust anchor.)
+        return out.removeprefix("refs/remotes/origin/")
     has_main = _git(repo_dir, "show-ref", "--verify", "--quiet", "refs/heads/main")[0]
     has_master = _git(repo_dir, "show-ref", "--verify", "--quiet", "refs/heads/master")[0]
     if has_main and not has_master:
@@ -279,6 +284,47 @@ def _clean_is_dry_run(rest: list[str]) -> bool:
     return False
 
 
+def _has_delete_flag(
+    rest: list[str],
+    delete_letters: tuple[str, ...],
+    value_taking: tuple[str, ...],
+    long_forms: tuple[str, ...] = ("--delete",),
+) -> bool:
+    """True iff `rest` carries a DELETE flag, honoring CLUSTERED short options.
+
+    Git accepts clustered shorts, so `-d`/`-D` hide in ordinary forms — `git branch -vd feature`,
+    `-rd origin/feature`, `git symbolic-ref -qd ...`. A bare `"-d" in rest` membership test misses
+    every one of those and waves a real delete through. Scan each short cluster left-to-right;
+    a `delete_letter` anywhere in it (before a value-taking option) is a delete. A `value_taking`
+    short consumes the cluster remainder — and, if it is the cluster's last letter, the NEXT token —
+    as its value, so letters/tokens after it are NOT flags (mirrors `_clean_is_dry_run`'s `-e`
+    handling). Stop at the `--`/`--end-of-options` terminator; long forms match as whole tokens.
+    """
+    i = 0
+    while i < len(rest):
+        t = rest[i]
+        if t == "--" or t == "--end-of-options":
+            break  # everything after is a positional (a ref/pathspec), never a flag
+        if t in long_forms:
+            return True
+        if t.startswith("--"):
+            i += 1
+            continue
+        if t.startswith("-") and len(t) > 1:
+            consumes_next = False
+            for idx, ch in enumerate(t[1:]):
+                if ch in delete_letters:
+                    return True
+                if ch in value_taking:
+                    consumes_next = idx == len(t) - 2  # value-taking short is the cluster's last char
+                    break
+            if consumes_next:
+                i += 2  # the next token is this option's value — skip it, never read it as a flag
+                continue
+        i += 1
+    return False
+
+
 def _symbolic_ref_write_reason(rest: list[str]) -> str | None:
     """Deny reason for a WRITE-form `git symbolic-ref`, or None for the read form.
 
@@ -288,7 +334,9 @@ def _symbolic_ref_write_reason(rest: list[str]) -> str | None:
     mutate the ref — that is how refs/remotes/origin/HEAD gets repointed. `-m <reason>` consumes
     the following token as its value, so a reason string is never counted as a positional.
     """
-    if any(d in rest for d in ("-d", "--delete")):
+    # `-d`/`--delete`, including clustered forms (`-qd`). symbolic-ref's only value-taking short is
+    # `-m <reason>`, so a `-md`/`-qm` cluster's trailing letters are the reason value, not a delete.
+    if _has_delete_flag(rest, ("d",), ("m",)):
         return "delete a symbolic ref (git symbolic-ref -d)"
     positionals = 0
     j = 0
@@ -366,7 +414,9 @@ def _classify(tokens: list[str], yolo: bool, cwd: str | None) -> str | None:
         return "hard-reset the working tree (git reset --hard)"
     if sub == "clean" and not _clean_is_dry_run(rest):
         return "delete untracked files (git clean)"
-    if sub == "branch" and any(d in rest for d in ("-d", "-D", "--delete")):
+    # `-d`/`-D`/`--delete`, including clustered forms (`-vd`, `-rd`, `-qD`). branch's value-taking
+    # short is `-u <upstream>`, so an `-ud` cluster's `d` is the upstream name, not a delete.
+    if sub == "branch" and _has_delete_flag(rest, ("d", "D"), ("u",)):
         return "delete a branch (git branch -d/-D)"
     # position-aware (like `remote set-head` / `gh pr merge` below), NOT a bare `"remove" in rest`
     # membership — else `git worktree add ../wt remove` (a branch/path literally named `remove`) would

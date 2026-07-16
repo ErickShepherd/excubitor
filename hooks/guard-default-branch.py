@@ -97,37 +97,48 @@ def _nearest_existing_dir(path: str, fallback: str) -> str:
     return candidate if os.path.isdir(candidate) else fallback
 
 
-def main() -> None:
+def _candidate_dirs(cwd: str, logical_target: str) -> "list[str] | None":
+    """The existing directories to test for protected-repo membership.
+
+    Both the LOGICAL target's container AND the realpath-resolved container, because a symlink can
+    launder a write across a repo boundary: a symlink in a feature-branch repo can point at a
+    tracked file in a *different* repo checked out on its default branch. Inspecting only the
+    logical container (as the original code did) misses that — the resolved path lands in the
+    protected repo. `realpath` resolves symlinks in every existing path component even when the
+    leaf does not exist yet (a Write creating a new file through a symlinked directory).
+
+    Returns a de-duplicated, order-preserving list, or None on malformed input (embedded NUL, etc.)
+    so the caller fails OPEN — never wedge the editor on a crafted-but-broken path.
+    """
     try:
-        payload = json.load(sys.stdin)
-    except ValueError:  # JSONDecodeError is a ValueError subclass — one catch suffices
-        _allow()  # unparseable input → fail open, never wedge the tool
-    if not isinstance(payload, dict):
-        _allow()  # valid-JSON-but-not-an-object → fail open; payload.get(...) must never raise AttributeError
+        abs_target = os.path.abspath(os.path.join(cwd, logical_target))
+        dirs = [_nearest_existing_dir(abs_target, cwd)]
+        real_target = os.path.realpath(abs_target)
+        if real_target != abs_target:  # a symlink (or /./ , .. , etc.) actually moved the path
+            dirs.append(_nearest_existing_dir(real_target, cwd))
+    except (ValueError, OSError):
+        return None
+    seen: set[str] = set()
+    out: list[str] = []
+    for d in dirs:
+        if d not in seen:
+            seen.add(d)
+            out.append(d)
+    return out
 
-    # Blanket off-switch (set via settings.json "env" to disable globally).
-    if os.environ.get("CLAUDE_ALLOW_DEFAULT_BRANCH"):
-        _allow()
 
-    ti = payload.get("tool_input")
-    tool_input = ti if isinstance(ti, dict) else {}
-    cwd = payload.get("cwd") or os.getcwd()
-    # Edit/Write use file_path; NotebookEdit uses notebook_path.
-    target = tool_input.get("file_path") or tool_input.get("notebook_path") or cwd
-    # Resolve a relative target against the payload cwd, else it resolves against the process cwd and the
-    # repo detection lands on the wrong directory (e.g. a sibling repo). abspath is a no-op if already absolute.
-    target = os.path.abspath(os.path.join(cwd, target))
-    target_dir = _nearest_existing_dir(target, cwd)
-
+def _protected_repo_deny(target_dir: str, payload: dict) -> "str | None":
+    """If `target_dir` is inside a git repo checked out on its (un-opted-out) default branch,
+    return the deny reason; else None (not a repo / opted out / on a feature branch)."""
     top = _git(["rev-parse", "--show-toplevel"], target_dir)
     if top.returncode != 0:
-        _allow()  # not a git repo → not our concern
+        return None  # not a git repo → not our concern
     repo = top.stdout.strip()
 
     # Per-repo opt-out: bless main-only repos (or a one-off) with a marker file. isfile (not exists) so a
     # stray directory / dangling symlink of that name can't silently disable the guard.
     if os.path.isfile(os.path.join(repo, ".claude", "allow-default-branch")):
-        _allow()
+        return None
 
     branch = _git(["rev-parse", "--abbrev-ref", "HEAD"], repo).stdout.strip()
 
@@ -145,15 +156,50 @@ def main() -> None:
         # un-protect the real default branch. removeprefix keeps the full name.
         protected.add(origin_head.removeprefix("refs/remotes/origin/"))
 
-    if branch in protected:
-        _deny(
-            f"On the default branch '{branch}' in {repo} — branch before editing. "
-            f"`git switch -c <type>/<slug>` carries your current changes onto a new "
-            f"branch (branching-strategy: feature/, fix/, docs/, chore/, refactor/, …). "
-            f"To intentionally allow the default branch in this repo, create the marker: "
-            f"touch {os.path.join(repo, '.claude', 'allow-default-branch')}",
-            payload,
-        )
+    if branch not in protected:
+        return None
+    return (
+        f"On the default branch '{branch}' in {repo} — branch before editing. "
+        f"`git switch -c <type>/<slug>` carries your current changes onto a new "
+        f"branch (branching-strategy: feature/, fix/, docs/, chore/, refactor/, …). "
+        f"To intentionally allow the default branch in this repo, create the marker: "
+        f"touch {os.path.join(repo, '.claude', 'allow-default-branch')}"
+    )
+
+
+def main() -> None:
+    try:
+        payload = json.load(sys.stdin)
+    except ValueError:  # JSONDecodeError is a ValueError subclass — one catch suffices
+        _allow()  # unparseable input → fail open, never wedge the tool
+    if not isinstance(payload, dict):
+        _allow()  # valid-JSON-but-not-an-object → fail open; payload.get(...) must never raise AttributeError
+
+    # Blanket off-switch (set via settings.json "env" to disable globally).
+    if os.environ.get("CLAUDE_ALLOW_DEFAULT_BRANCH"):
+        _allow()
+
+    ti = payload.get("tool_input")
+    tool_input = ti if isinstance(ti, dict) else {}
+    cwd = payload.get("cwd") or os.getcwd()
+    # Edit/Write use file_path; NotebookEdit uses notebook_path. Resolve a relative target against the
+    # payload cwd, else repo detection lands on the wrong directory (e.g. a sibling repo).
+    logical_target = tool_input.get("file_path") or tool_input.get("notebook_path") or cwd
+
+    candidates = _candidate_dirs(cwd, logical_target)
+    if candidates is None:
+        _allow()  # malformed target → fail open
+
+    # Deny if ANY candidate (logical container OR symlink-resolved container) is a protected repo.
+    # A safe logical container must NOT override an unsafe physical target — so we never short-circuit
+    # to allow on the first non-protected candidate; only after every candidate has cleared.
+    # NOTE (residual): a hard link is indistinguishable from an ordinary file at the path layer (no
+    # link to resolve), so a hard link into a protected repo is NOT caught here — documented in
+    # KNOWN-BYPASSES.md, not chased (detecting it means stat-ing inode/nlink across repos).
+    for target_dir in candidates:
+        reason = _protected_repo_deny(target_dir, payload)
+        if reason is not None:
+            _deny(reason, payload)
     _allow()
 
 

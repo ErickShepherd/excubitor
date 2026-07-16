@@ -141,6 +141,19 @@ hardcode-protected regardless, YOLO mode fails **deny** on ambiguity, and the on
 into the mis-resolved branch is a revertable `--no-ff` merge (push stays denied). See
 `hooks/guard-loop-vc.py::_default_branch` and `TELOS-006`.
 
+## ACCEPTED — guard-default-branch resolves symlinks but not hard links
+
+`guard-default-branch.py` checks **both** the logical edit target's container and its
+`realpath`-resolved container, so a **symlink** — a symlinked file, or a new file created through a
+symlinked directory — can no longer launder an `Edit`/`Write` from a feature-branch repo into a
+*different* repo checked out on its default branch (this was a real bypass, closed by R-03; pinned in
+`hooks/tests/test_guard_default_branch.py::TestGuardSymlinkLaundering`). A **hard link**, however, is
+indistinguishable from an ordinary file at the path layer — there is no link for `realpath` to
+resolve — so a hard link whose inode is a tracked file in a protected repo is **not** caught. Closing
+it means stat-ing inode/nlink and cross-referencing repositories on every edit, out of proportion for
+a stdlib seatbelt. Likewise a **bind mount** or other kernel-level redirection that `realpath` does
+not see is out of scope. Documented, not chased. See `guard-default-branch.py::_candidate_dirs`.
+
 ## ACCEPTED — the denial-telemetry log is editable by the agent it records
 
 Every guard deny is appended to a local JSONL log (`hooks/_denial_log.py`; default
