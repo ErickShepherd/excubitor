@@ -549,13 +549,16 @@ context the loop read on the way there.
 > the DoD oracle is a *true*, *complete* definition (oracle/suite incompleteness — Goodhart — is the DoD
 > author's responsibility, not something YOLO can verify).
 >
-> **What the gate proves — stated precisely.** Git evidence proves *committed* baseline and final states;
-> it can never prove an unobserved worktree edit didn't happen at some earlier moment. What binds the
-> checked bytes to the trusted exit code is the atomic runner's envelope: precheck → snapshot → shell-less
-> run → recheck, so the returned verdict was produced by a run whose start and end state both matched the
-> frozen baseline. Accepted residual: a witness that mutates an oracle file *during* execution and restores
-> it before exiting defeats the recheck — snapshot equality is start==end, not continuous immutability
-> (that would need an immutable filesystem, which this deliberately is not).
+> **What the gate proves — stated precisely.** At precheck *and* recheck, every oracle-surface path's
+> current state is compared against the **base blob** — a regular file by content hash (`git hash-object`
+> vs the base OID), a symlink by its target string, plus its type and every symlink hop (file *and*
+> directory). So an oracle weakened in the worktree *without committing* (the R-04 #1 hole) is refused,
+> not only a committed edit. The atomic runner's envelope — precheck → snapshot → shell-less run → recheck
+> — then binds those checked bytes to the trusted exit code: the returned verdict was produced by a run
+> whose start and end state both matched the frozen baseline. Accepted residual: a witness that mutates an
+> oracle *during* execution and restores it before exiting defeats the recheck — snapshot equality is
+> start==end, not continuous immutability (that would need an immutable filesystem, which this deliberately
+> is not).
 
 ## Notes
 

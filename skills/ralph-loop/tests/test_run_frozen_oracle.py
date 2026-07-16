@@ -81,12 +81,25 @@ class TestRunFrozenOracle(unittest.TestCase):
         self.assertEqual(p.returncode, REFUSED)
         self.assertIn("precheck", p.stderr)
 
+    def test_refused_on_precheck_uncommitted_content_weakening(self):
+        # R-04 finding #1 at the permit-to-act gate: the loop weakens a regular witness IN THE
+        # WORKTREE without committing (here a would-fail witness rewritten to exit 0). Pre-fix the
+        # precheck reported FROZEN (three-dot diff blind to worktree edits) and the runner then ran
+        # the now-passing witness and returned GREEN — a false permit. Precheck must REFUSE.
+        (Path(self.d) / "tests" / "witness_fail.py").write_text("import sys\nsys.exit(0)  # weakened, UNCOMMITTED\n")
+        p = _run(self.d, "main", "python3 tests/witness_fail.py")
+        self.assertEqual(p.returncode, REFUSED, f"stdout={p.stdout} stderr={p.stderr}")
+        self.assertIn("precheck", p.stderr)
+
     def test_refused_on_recheck_when_witness_mutates_its_oracle(self):
         # THE RACE: precheck passes (surface pristine), the witness itself rewrites the oracle during
-        # execution and exits 0 — the runner must NOT return that green; the snapshot recheck refuses.
+        # execution and exits 0 — the runner must NOT return that green. The recheck refuses: since
+        # R-04 #1, the post-execution evaluate() also compares each oracle's content to base, so a
+        # non-restored mutation is caught there; the snapshot before/after diff remains as an
+        # independent, git-free backstop (defense in depth). Either way the mutation cannot pass.
         p = _run(self.d, "main", "python3 tests/witness_selfmut.py")
         self.assertEqual(p.returncode, REFUSED, f"stdout={p.stdout} stderr={p.stderr}")
-        self.assertIn("changed across witness execution", p.stderr)
+        self.assertIn("recheck", p.stderr)
 
     def test_refused_on_uncommitted_retarget(self):
         # symlinked oracle repointed in the worktree (uncommitted) → precheck's state comparison refuses
