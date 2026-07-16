@@ -295,6 +295,26 @@ class TestGuardLoopVC(unittest.TestCase):
         rc, out = _run("", raw=json.dumps({"tool_name": "Bash", "tool_input": "not-a-dict"}))
         self.assertEqual((rc, out.strip()), (0, ""))
 
+    # --- P0.16 sibling hardening: truthy NON-string field types must fail OPEN, never exit 1 ---
+    def test_non_string_command_fails_open(self):
+        # A truthy non-string command pre-fix reached split_segments (len() on an int/list) →
+        # TypeError → exit 1, against the never-exit-non-zero contract. Must defer.
+        for command in (123, ["git", "push"], {"c": "git push"}, True):
+            rc, out = _run("", raw=json.dumps(
+                {"tool_name": "Bash", "tool_input": {"command": command}}))
+            self.assertEqual((rc, out.strip()), (0, ""),
+                             f"non-string command must fail open, not crash: {command!r}")
+
+    def test_non_string_cwd_falls_back_and_still_denies(self):
+        # A truthy non-string cwd pre-fix crashed in os.path.join composing a relative -C (exit 1).
+        # Post-fix it falls back to the process cwd — and the conservative merge deny still fires:
+        # the malformed cwd degrades gracefully instead of dropping the fence.
+        rc, out = _run("", raw=json.dumps(
+            {"tool_name": "Bash", "cwd": 123,
+             "tool_input": {"command": "git -C rel merge topic"}}))
+        self.assertEqual(rc, 0, "non-string cwd must never exit non-zero")
+        self.assertTrue(_denied(out), "the merge deny must survive a malformed cwd")
+
 
 def _mkrepo(
     branches: "tuple[str, ...]" = (),

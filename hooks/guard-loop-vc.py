@@ -807,9 +807,16 @@ def main() -> None:
     if payload.get("tool_name") != "Bash":
         _allow()  # matcher should restrict to Bash, but never assume
 
+    # Same P0.16 posture as guard-default-branch.py: a truthy NON-string command/cwd (a crafted or
+    # buggy payload) must fail OPEN, not TypeError inside split_segments/os.path.join and exit 1
+    # against the never-exit-non-zero contract.
     tool_input = payload.get("tool_input")
-    command = (tool_input if isinstance(tool_input, dict) else {}).get("command") or ""
-    cwd = payload.get("cwd") or os.getcwd()
+    command = (tool_input if isinstance(tool_input, dict) else {}).get("command")
+    if not isinstance(command, str):
+        _allow()  # absent or malformed command → nothing parseable to fence
+    cwd = payload.get("cwd")
+    if not isinstance(cwd, str) or not cwd:
+        cwd = os.getcwd()
     reason = _dangerous(command, yolo, cwd)
     if reason:
         _deny(_deny_message(reason, yolo), payload)
