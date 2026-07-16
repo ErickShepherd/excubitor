@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -21,6 +22,7 @@ import unittest
 from pathlib import Path
 
 HOOK = Path(__file__).resolve().parents[1] / "guard-default-branch.py"
+INSTALL_SH = Path(__file__).resolve().parents[2] / "scripts" / "install.sh"
 
 
 def _git(args: list[str], cwd: str) -> None:
@@ -193,6 +195,52 @@ class TestGuardSymlinkLaundering(unittest.TestCase):
             rc, out = _run({"tool_input": {"file_path": str(prot) + "/\x00bad"}, "cwd": str(feat)})
             self.assertEqual(rc, 0, "malformed NUL target must fail open, not crash")
             self.assertFalse(_denied(out))
+
+
+class TestR06RegistrationBoundary(unittest.TestCase):
+    """R-06: the guard's enforceable claim is its REGISTRATION — it fences the runtime's direct
+    file-edit tools (`Edit|Write|NotebookEdit`) and nothing else. A Bash mutation never reaches it.
+    These pin BOTH sides of that boundary end-to-end, so the honest-narrow claim in README /
+    THREAT-MODEL / KNOWN-BYPASSES stays true: if the residual test ever fails (a shell mutation got
+    blocked), the boundary strengthened and those documents must be rewritten first."""
+
+    def _registered_matcher(self) -> str:
+        text = INSTALL_SH.read_text(encoding="utf-8")
+        m = re.search(r'\("guard-default-branch\.py",\s*"([^"]+)"\)', text)
+        assert m is not None, "install.sh must register guard-default-branch.py"
+        return m.group(1)
+
+    def test_registered_matcher_is_direct_file_edit_tools_only(self):
+        # The claim side: the installer registers exactly the direct file-edit tools — and the
+        # matcher must NOT capture Bash, or the guard (which falls back to the payload cwd when
+        # there is no file path) would deny every shell command run from a protected repo.
+        matcher = self._registered_matcher()
+        self.assertEqual(matcher, "Edit|Write|NotebookEdit")
+        for tool in ("Edit", "Write", "NotebookEdit"):
+            self.assertIsNotNone(re.fullmatch(matcher, tool), f"{tool} must route to the guard")
+        self.assertIsNone(re.fullmatch(matcher, "Bash"), "Bash must NOT route to this guard")
+
+    def test_bash_mutation_bypasses_the_guard_end_to_end(self):
+        # The residual side, pinned honestly: a shell mutation on the default branch is dispatched
+        # under tool_name=Bash, the matcher misses, the hook is never invoked, the mutation lands.
+        with tempfile.TemporaryDirectory() as td:
+            repo = _repo(td)  # checked out on main — maximally protected state
+            dispatched_to_guard = re.fullmatch(self._registered_matcher(), "Bash") is not None
+            self.assertFalse(dispatched_to_guard)
+            # host dispatch semantics: matcher missed → the command runs unguarded
+            target = Path(repo, "seed.txt")
+            subprocess.run(["bash", "-c", f"echo mutated >> '{target}'"], check=True)
+            self.assertIn("mutated", target.read_text(),
+                          "the documented R-06 residual: Bash mutates the default branch unimpeded")
+
+    def test_direct_edit_tool_still_denied_control(self):
+        # The control: the claim the docs DO make keeps holding — a direct Edit on main is denied.
+        with tempfile.TemporaryDirectory() as td:
+            repo = _repo(td)
+            code, out = _run({"tool_name": "Edit", "cwd": repo,
+                              "tool_input": {"file_path": str(Path(repo, "seed.txt"))}})
+            self.assertEqual(code, 0)
+            self.assertTrue(_denied(out))
 
 
 if __name__ == "__main__":

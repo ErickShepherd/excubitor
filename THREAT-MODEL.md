@@ -101,7 +101,7 @@ it for Tier 3 must add a real boundary (container/VM isolation, capability restr
 
 | Control | What it is | Tier it addresses | Honest limit |
 |---|---|---|---|
-| `guard-default-branch.py` | deny Edit/Write on `main`/`master` — branch first | 1 (mostly), 2 | disarmable marker → now fenced by self-integrity |
+| `guard-default-branch.py` | deny the direct file-edit tools (Edit/Write/NotebookEdit) on `main`/`master` — branch first | 1 (mostly), 2 | registration boundary: Bash mutations bypass (R-06, accepted — see KNOWN-BYPASSES); disarmable marker → now fenced by self-integrity |
 | `guard-loop-vc.py` (`=1`) | deny the irreversible VC set while looping | 1, 2 | literal-token parse; shell-expansion evades (Tier 3) |
 | `guard-loop-vc.py` (`=yolo`) | permit only a revertable `--no-ff` merge into a non-default branch, fail-deny on ambiguity | 1, 2 | presumes a hook-clean working copy |
 | `guard-one-unit.py` | cap a headless worker at one unit/session (fresh-context re-read) | 1, 2 | opt-in; a determined loop can be re-armed |

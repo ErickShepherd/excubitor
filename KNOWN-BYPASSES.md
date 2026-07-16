@@ -141,6 +141,22 @@ hardcode-protected regardless, YOLO mode fails **deny** on ambiguity, and the on
 into the mis-resolved branch is a revertable `--no-ff` merge (push stays denied). See
 `hooks/guard-loop-vc.py::_default_branch` and `TELOS-006`.
 
+## ACCEPTED — guard-default-branch fences the direct file-edit tools, not Bash (R-06)
+
+`guard-default-branch.py` is registered for `Edit|Write|NotebookEdit` only. Its enforceable claim is
+therefore **"blocks the runtime's direct file-edit tools on the default branch"** — NOT "no file
+mutations": a shell redirection, `sed -i`, a formatter, a generator, or `git apply` runs under the
+`Bash` tool, which the registration never routes to this guard, and mutates the default branch
+unimpeded. This is a *registration* boundary, not a parsing gap — the guard, handed a Bash payload,
+would deny **every** command whose `cwd` is a protected repo (it falls back to `cwd` when there is no
+file path), which is why registering it for `Bash` is not the fix: the honest alternatives are the
+disruptive all-shell-deny or an OS-level sandbox, both declined (decision recorded 2026-07-16 in
+`the build checklist`, R-06). A Bash-string *mutation parser* is not a
+credible complete solution (see the expansion residuals above). Pinned bidirectionally in
+`hooks/tests/test_guard_default_branch.py::TestR06RegistrationBoundary` — the matcher excludes
+`Bash`, a shell mutation on the default branch succeeds (the residual, so the docs must change if the
+boundary ever strengthens), and a direct `Edit` stays denied (the claim).
+
 ## ACCEPTED — guard-default-branch resolves symlinks but not hard links
 
 `guard-default-branch.py` checks **both** the logical edit target's container and its
