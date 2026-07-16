@@ -370,5 +370,64 @@ class TestGuardYoloMode(unittest.TestCase):
         self.assertTrue(_denied(out))
 
 
+def _mkrepo_with_origin_head(default_branch: str) -> str:
+    """A throwaway repo whose AUTHORITATIVE default is a slash-containing `default_branch`.
+
+    Fabricates the remote trust anchor without a real remote: creates a local branch of that
+    name, mirrors it into `refs/remotes/origin/<name>`, points `refs/remotes/origin/HEAD` at it,
+    and checks the branch out — so the checked-out branch IS the resolved default. This is the
+    R-01 shape (`release/2.0`, `team/main`): before the fix, `_default_branch` kept only the last
+    slash segment and mis-resolved the default, waving a YOLO merge into the real trunk through.
+    """
+    d = tempfile.mkdtemp(prefix="guardtest-")
+
+    def g(*args: str) -> None:
+        subprocess.run(["git", "-C", d, *args], check=True, capture_output=True, text=True)
+
+    g("init", "-b", "main")
+    g("config", "user.email", "t@t.t")
+    g("config", "user.name", "t")
+    g("commit", "--allow-empty", "-m", "init")
+    g("branch", default_branch)
+    sha = subprocess.run(["git", "-C", d, "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+    g("update-ref", f"refs/remotes/origin/{default_branch}", sha)
+    g("symbolic-ref", "refs/remotes/origin/HEAD", f"refs/remotes/origin/{default_branch}")
+    g("checkout", default_branch)
+    return d
+
+
+class TestGuardYoloDefaultBranchParsing(unittest.TestCase):
+    """R-01: a slash-containing authoritative default branch must be resolved WHOLE, so a YOLO
+    merge while checked out on it is denied (it is the real trunk, not a non-default branch)."""
+
+    def setUp(self) -> None:
+        self._repos: list[str] = []
+
+    def tearDown(self) -> None:
+        for d in self._repos:
+            shutil.rmtree(d, ignore_errors=True)
+
+    def _repo(self, default_branch: str) -> str:
+        d = _mkrepo_with_origin_head(default_branch)
+        self._repos.append(d)
+        return d
+
+    def test_denies_yolo_merge_on_slash_default_release(self):
+        # origin/HEAD -> origin/release/2.0; checked out on release/2.0 (the real default).
+        # Pre-fix: default mis-resolved to "2.0" != "release/2.0" and not a literal main/master → ALLOWED.
+        d = self._repo("release/2.0")
+        rc, out = _run(f"git -C {d} merge --no-ff topic", guard="yolo")
+        self.assertEqual(rc, 0, "fail-open contract")
+        self.assertTrue(_denied(out), "merge into the real default 'release/2.0' must be denied")
+
+    def test_denies_yolo_merge_on_slash_default_team_main(self):
+        # 'team/main' proves the CLASS, not the main/master hardcode: pre-fix it mis-resolved to
+        # "main", and the literal-name guard does NOT catch "team/main" (!= "main") → ALLOWED.
+        d = self._repo("team/main")
+        rc, out = _run(f"git -C {d} merge --no-ff topic", guard="yolo")
+        self.assertEqual(rc, 0, "fail-open contract")
+        self.assertTrue(_denied(out), "merge into the real default 'team/main' must be denied")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

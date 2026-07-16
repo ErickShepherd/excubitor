@@ -203,7 +203,12 @@ def _default_branch(repo_dir: str | None) -> str | None:
     """
     ok, out = _git(repo_dir, "symbolic-ref", "--quiet", "refs/remotes/origin/HEAD")
     if ok and out.startswith("refs/remotes/origin/"):
-        return out.rsplit("/", 1)[-1]
+        # Strip the fixed ref prefix, NOT rsplit("/") — a branch name can itself contain slashes
+        # (release/2.0, team/main), and rsplit would keep only the last segment ("2.0", "main"),
+        # resolving a DIFFERENT default than the one checked out and letting a YOLO merge into the
+        # real default slip through. removeprefix keeps the full name. (This mirrors the sibling
+        # fix in guard-default-branch.py, which resolves the same trust anchor.)
+        return out.removeprefix("refs/remotes/origin/")
     has_main = _git(repo_dir, "show-ref", "--verify", "--quiet", "refs/heads/main")[0]
     has_master = _git(repo_dir, "show-ref", "--verify", "--quiet", "refs/heads/master")[0]
     if has_main and not has_master:
