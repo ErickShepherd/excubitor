@@ -34,6 +34,11 @@ caller must refuse the YOLO act on non-zero — never integrate on an unconfirme
 LIMIT (honest). The *check* is mechanical, but the loop's obedience to it is recipe-level — the
 guard hook prevents the default-branch merge mechanically, but it cannot know which file is "the
 oracle", so it cannot run this check itself. Same seatbelt-not-sandbox caveat as guard-loop-vc.py.
+The content comparison trusts git's own OID computation: a loop that can write `.git/config` (beyond
+the tracked-file-edit threat this models) could install a `clean` filter mapping weakened bytes back
+to the base blob and spoof FROZEN — inherent to any git-OID check and out of scope, documented not
+chased. The remaining in-model residual is a witness that mutates its oracle DURING execution and
+restores it before exiting (the runner's recheck sees start==end); see run_frozen_oracle.py.
 
 Exit codes: 0 = oracle frozen (safe to act); 1 = NOT frozen / unverifiable (refuse); 2 = usage error.
 
