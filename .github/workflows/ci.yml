@@ -28,6 +28,10 @@ jobs:
           python3 - <<'EOF'
           import json
           claims = json.load(open("telos-audit.json"))["claims"]
+          if not claims:
+              # R-05: an all-retired/cycled record audits zero claims; an empty list must FAIL, not pass
+              print("telos audit produced ZERO active claims — a vacuous pass is a failure")
+              raise SystemExit(1)
           bad = [c for c in claims if c["state"] != "DISCHARGED" or c["tier"] != "witness"]
           for c in bad:
               print(f'{c["id"]}: state={c["state"]} tier={c["tier"]} — {c["rationale"]}')

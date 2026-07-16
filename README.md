@@ -17,7 +17,8 @@ falsifiable intent-record system for letting an LLM agent work unattended withou
 bless its own work. The watcher that stays awake while the loop runs and nobody else is looking.
 
 Stdlib-only Python hooks + [Agent Skills](https://code.claude.com/docs/en/skills)-format capability
-packets, with 194 tests and the design rationale that produced them. Built for and battle-tested
+packets, each mechanism pinned by executed regressions and shipped with the design rationale that
+produced it. Built for and battle-tested
 with Claude Code; the VC-guard's decision core is runtime-neutral — a second, non-Claude-Code adapter
 drives the *same* code with an equivalence test to prove it ([`SPEC.md`](SPEC.md)), so its portability
 to any runtime that can intercept tool calls is demonstrated, not just asserted.
@@ -88,8 +89,8 @@ helped).
 |---|---|---|
 | 1. Declare intent | [`skills/telos/`](skills/telos/SKILL.md) | A repo's purpose as *falsifiable claims* — each with a decidable one-line `contract:`, a single `discharged-by: path::symbol`, and optionally an executable `verified-by:` witness whose exit code is trusted over the LLM. |
 | 2. Audit against intent | [`skills/audit-telos/`](skills/audit-telos/SKILL.md) + [`telos_check.py`](skills/audit-telos/telos_check.py) | Read-only conformance audit with **evidence tiers**: a claim marked DISCHARGED without a backing witness is mechanically demoted to SUSPECT. The auditor deliberately has no write access to the record it audits. |
-| 3. Fence the loop | [`hooks/`](hooks/) — four PreToolUse guards | `guard-default-branch.py`: no file mutations on `main`/`master` — branch first. `guard-loop-vc.py`: while `CLAUDE_LOOP_GUARD` is set, block the irreversible VC set (merge/push/branch-delete/hard-reset/`git clean`/worktree-remove/`gh pr merge`, plus the `origin/HEAD` trust-anchor rewrites `remote set-head`/`symbolic-ref`); in `=yolo` mode, additionally *allow* a `--no-ff` merge into a confirmed non-default branch (fail-deny on ambiguity). `guard-one-unit.py`: cap a headless loop worker at one unit of work per session, forcing a fresh-context re-read between units. `guard-self-integrity.py`: while armed, deny writes to the guards' own kill-switches (the `.claude/allow-default-branch` marker, the hook scripts, the `settings.json` hooks block) — a judge the model can rewrite is not a judge. Every deny is also appended, best-effort after the decision is emitted, to a local JSONL telemetry log (`hooks/_denial_log.py`, default `~/.claude/excubitor/denials.jsonl`) — an audit trail of what an agent *tried* while fenced; observability, not tamper-evident (see [`KNOWN-BYPASSES.md`](KNOWN-BYPASSES.md)). |
-| 4. Loop discipline + boundary | [`skills/ralph-loop/`](skills/ralph-loop/SKILL.md), [`skills/telos-loop/`](skills/telos-loop/SKILL.md), [`skills/leak-guard/`](skills/leak-guard/SKILL.md) | The unattended-loop recipes that use layers 1–3: charter-driven iteration, frozen-oracle verification (`check_oracle_frozen.py` proves the loop never edited the oracle that gates it), session-limit suspend, and a fail-closed guard for content crossing a private→public boundary. |
+| 3. Fence the loop | [`hooks/`](hooks/) — four PreToolUse guards | `guard-default-branch.py`: blocks the runtime's **direct file-edit tools** (`Edit`/`Write`/`NotebookEdit`) on `main`/`master` — branch first. Bash-driven mutations (`sed -i`, redirections, formatters) are outside its registration and are a named residual in [`KNOWN-BYPASSES.md`](KNOWN-BYPASSES.md). `guard-loop-vc.py`: while `CLAUDE_LOOP_GUARD` is set, block the irreversible VC set (merge/push/branch-delete/hard-reset/`git clean`/worktree-remove/`gh pr merge`, plus the `origin/HEAD` trust-anchor rewrites `remote set-head`/`symbolic-ref`); in `=yolo` mode, additionally *allow* a `--no-ff` merge into a confirmed non-default branch (fail-deny on ambiguity). `guard-one-unit.py`: cap a headless loop worker at one unit of work per session, forcing a fresh-context re-read between units. `guard-self-integrity.py`: while armed, deny writes to the guards' own kill-switches (the `.claude/allow-default-branch` marker, the hook scripts, the `settings.json` hooks block) — a judge the model can rewrite is not a judge. Every deny is also appended, best-effort after the decision is emitted, to a local JSONL telemetry log (`hooks/_denial_log.py`, default `~/.claude/excubitor/denials.jsonl`) — an audit trail of what an agent *tried* while fenced; observability, not tamper-evident (see [`KNOWN-BYPASSES.md`](KNOWN-BYPASSES.md)). |
+| 4. Loop discipline + boundary | [`skills/ralph-loop/`](skills/ralph-loop/SKILL.md), [`skills/telos-loop/`](skills/telos-loop/SKILL.md), [`skills/leak-guard/`](skills/leak-guard/SKILL.md) | The unattended-loop recipes that use layers 1–3: charter-driven iteration, frozen-oracle verification (`run_frozen_oracle.py` binds the witness verdict to a frozen oracle surface — precheck, snapshot, shell-less run, recheck; `check_oracle_frozen.py` is the check-only diagnostic), session-limit suspend, and a fail-closed guard for content crossing a private→public boundary. |
 
 The design docs under [`docs/design/`](docs/design/) are not an afterthought — they are the
 recorded deliberations (alternatives, rejected options, honest limits) behind each mechanism.
@@ -101,17 +102,18 @@ must never discharge its own claims).
 ## What's in the box
 
 ```
-hooks/                     # 4 stdlib-only PreToolUse guards + denial-telemetry log + 62 tests
+hooks/                     # 4 stdlib-only PreToolUse guards + denial-telemetry log + tests
 skills/
   telos/                   # intent-record authoring (write side)
-  audit-telos/             # conformance audit (read side) + strict parser + 73 tests
+  audit-telos/             # conformance audit (read side) + strict parser + tests
   telos-loop/              # telos-anchored unattended loop recipe
-  ralph-loop/              # charter-driven loop + oracle-freeze/suspend scripts + 44 tests
-  leak-guard/              # private→public boundary guard + leak_check.py + 17 tests
-runtime/                   # runtime-neutral adapter (portability, proven) + 8 tests — see SPEC.md
-docs/design/               # 10 design/deliberation records
+  ralph-loop/              # charter-driven loop + oracle freeze/run + suspend scripts + tests
+  leak-guard/              # private→public boundary guard + leak_check.py + tests
+runtime/                   # runtime-neutral adapter (portability, proven) + tests — see SPEC.md
+docs/design/               # design/deliberation records
 docs/telos/                # this repo's own intent record (audited by its own tooling)
 scripts/install.sh         # symlink skills+hooks into ~/.claude, register the hooks
+scripts/install_settings.py # tested exact-tuple settings.json registration (used by install.sh)
 scripts/demo.sh            # 60-second zero-install crash test (drives the real guard)
 ```
 
@@ -155,13 +157,13 @@ Interactive work is unaffected until you explicitly say "I'm looping."
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install pytest
-.venv/bin/pytest -q        # 194 tests: 52 hooks, 73 audit-telos, 44 ralph-loop, 17 leak-guard, 8 runtime
-                           # (191 pass; 3 audit-telos ledger round-trip tests skip — they
-                           #  need a private sibling module that did not ship, see the extraction notes)
+.venv/bin/pytest -q        # the full suite: hooks, installer, audit-telos, ralph-loop, leak-guard,
+                           # runtime (a few audit-telos ledger round-trip tests skip — they need a
+                           #  private sibling module that did not ship, see the extraction notes)
 ```
 
 CI runs the same suite on a stock GitHub runner (`.github/workflows/ci.yml`), plus this repo's
-own telos audit — the eleven claims in [`docs/telos/app.md`](docs/telos/app.md) must all resolve
+own telos audit — every claim in [`docs/telos/app.md`](docs/telos/app.md) must resolve
 DISCHARGED at the `witness` evidence tier, i.e. every safety claim this README makes about the
 guards is re-proven by an executed test on every CI run.
 

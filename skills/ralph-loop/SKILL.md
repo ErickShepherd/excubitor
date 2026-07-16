@@ -385,10 +385,11 @@ done-signal by design, so it can't bind a future pass) — keep the *why* of a f
 paths:
 - **Anticipated fork (carries `forbid:` predicates) → oracle-elimination.** An anticipated fork carries, in its
   `## Key decisions` entry (or inline on a checklist/sidecar `- [ ] DECIDE:` item), **one `forbid: <command>`
-  predicate per option** — an exit-code check that *rules that option out*. For each option's predicate,
-  confirm it is **frozen / loop-immutable** (reuse `check_oracle_frozen.py` **unchanged**:
-  `python3 ~/.claude/skills/ralph-loop/scripts/check_oracle_frozen.py --repo "$R" --base <default-branch> --verified-by "<the forbid command>"`,
-  require exit 0), then run it. The loop may only **rule options out**. **Exactly one survivor →
+  predicate per option** — an exit-code check that *rules that option out*. Run each option's predicate
+  through the atomic runner (reuse `run_frozen_oracle.py` **unchanged**:
+  `python3 ~/.claude/skills/ralph-loop/scripts/run_frozen_oracle.py --repo "$R" --base <default-branch> --verified-by "<the forbid command>"`
+  — exit 10 means the predicate is not frozen / changed across execution → defer; 0/1 is the predicate's
+  own verdict produced under a frozen surface). The loop may only **rule options out**. **Exactly one survivor →
   oracle-backed resolution** (no self-bless — an exit code, not the LLM judging itself; YOLO-eligible under the
   usual act-fence). **More than one survivor, or any predicate not frozen → defer.**
 - **Everything else → the reversibility rubric decides *whether to defer* (it does NOT pick the fork).** Reuse
@@ -504,10 +505,15 @@ work hard-refuses YOLO — no override — and routes to the normal out-of-loop 
 
 - **telos unit:**
   - the claim has an executable `verified-by:` oracle (test-expressible);
-  - the oracle is **frozen / loop-immutable** —
-    `python3 ~/.claude/skills/ralph-loop/scripts/check_oracle_frozen.py --repo "$R" --base <default-branch> --verified-by "<the claim's verified-by command>"`
-    exits 0 (non-zero → the loop edited its oracle, or none is extractable → refuse, surface);
-  - the oracle is **green** — run the `verified-by:` command, require exit 0.
+  - the oracle is **frozen AND green in ONE atomic operation** — the permit-to-act gate is
+    `python3 ~/.claude/skills/ralph-loop/scripts/run_frozen_oracle.py --repo "$R" --base <default-branch> --verified-by "<the claim's verified-by command>"`
+    exiting 0 (GREEN). The runner prechecks the complete oracle surface (lexical paths, symlink-chain
+    hops, resolved targets, path types, link targets) against the base, snapshots it, runs the witness
+    **without a shell**, and rechecks the same snapshot before returning the verdict — closing the
+    check-then-run window in which a loop could edit its oracle between two separate commands. Exit 1 =
+    witness RED; exit 10 = REFUSED (surface not frozen / unverifiable / changed across execution) →
+    refuse, surface. (`check_oracle_frozen.py` remains available as the check-only **diagnostic** for a
+    quick freeze query; it is a point-in-time check and is **not** the permit-to-act gate.)
 - **green-the-suite unit:**
   - the loop touched **zero test-surface files** on its branch —
     `python3 ~/.claude/skills/ralph-loop/scripts/check_suite_frozen.py --repo "$R" --base <default-branch> --test-path <each test/config pathspec>`
@@ -520,18 +526,17 @@ work hard-refuses YOLO — no override — and routes to the normal out-of-loop 
   - a **bare-prose item HARD-REFUSES YOLO — no override.** A ticked box is a loop-authored claim, not an
     oracle, so it routes to the normal out-of-loop falsifier (stop-and-surface). This is the default.
   - an item with a frozen `verify:` oracle is **test-expressible** and degrades to the **telos-unit gate
-    verbatim**: extract the item's `verify:` command, require it **frozen / loop-immutable** —
-    `python3 ~/.claude/skills/ralph-loop/scripts/check_oracle_frozen.py --repo "$R" --base <default-branch> --verified-by "<the item's verify command>"`
-    exits 0 (non-zero → the loop edited its oracle, or none is extractable → refuse, surface) — **and**
-    green (run the `verify:` command, require exit 0). No new mechanism: a `verify:` item *is* a `verified-by:`
-    claim.
+    verbatim**: extract the item's `verify:` command and require the atomic runner GREEN —
+    `python3 ~/.claude/skills/ralph-loop/scripts/run_frozen_oracle.py --repo "$R" --base <default-branch> --verified-by "<the item's verify command>"`
+    exits 0 (exit 10 → the surface is not frozen or changed across execution, exit 1 → the witness is
+    red — either way refuse, surface). No new mechanism: a `verify:` item *is* a `verified-by:` claim.
 
 **The YOLO act (only after the gate passes):** mark the unit done (its frozen green oracle backs it) and you
 MAY integrate via `git merge --no-ff` into a **non-default** integration branch. Never the default branch,
 never push (the guard blocks both); the final default-branch merge stays a human / out-of-loop step.
 
 **Unchanged under YOLO:** prose/judgment work (still stop-and-surface); the no-author-then-pass rule
-(`check_oracle_frozen` / `check_suite_frozen` enforce it mechanically); the merge-to-default and push
+(`run_frozen_oracle` / `check_suite_frozen` enforce it mechanically); the merge-to-default and push
 prohibitions; one-unit-per-iteration; re-read the spec each fire. The **learnings log** is also unchanged
 under YOLO: it is loop-mutable by design, so it is **never** a frozen surface (never list it as an oracle/suite
 path — writing to it must not affect any immutability verdict) and **never** the thing a `verify:`/`verified-by:`
@@ -543,6 +548,17 @@ context the loop read on the way there.
 > oracle"/"the suite". YOLO *narrows* the trust placed in the loop; it does not eliminate it, and it presumes
 > the DoD oracle is a *true*, *complete* definition (oracle/suite incompleteness — Goodhart — is the DoD
 > author's responsibility, not something YOLO can verify).
+>
+> **What the gate proves — stated precisely.** At precheck *and* recheck, every oracle-surface path's
+> current state is compared against the **base blob** — a regular file by content hash (`git hash-object`
+> vs the base OID), a symlink by its target string, plus its type and every symlink hop (file *and*
+> directory). So an oracle weakened in the worktree *without committing* (the R-04 #1 hole) is refused,
+> not only a committed edit. The atomic runner's envelope — precheck → snapshot → shell-less run → recheck
+> — then binds those checked bytes to the trusted exit code: the returned verdict was produced by a run
+> whose start and end state both matched the frozen baseline. Accepted residual: a witness that mutates an
+> oracle *during* execution and restores it before exiting defeats the recheck — snapshot equality is
+> start==end, not continuous immutability (that would need an immutable filesystem, which this deliberately
+> is not).
 
 ## Notes
 
@@ -579,8 +595,10 @@ context the loop read on the way there.
   `skills/telos/SKILL.md` (telos write side), `skills/audit-telos/SKILL.md` (telos read/stop signal),
   `hooks/guard-loop-vc.py` (the act-fence seatbelt; `=yolo` mode),
   `hooks/guard-one-unit.py` (the one-unit-per-session PreToolUse gate — *The loop body*'s
-  invariant), `skills/ralph-loop/scripts/check_oracle_frozen.py` + `skills/ralph-loop/scripts/check_suite_frozen.py`
-  (the YOLO immutability checks — reused as-is by a checklist item's `verify:` oracle),
+  invariant), `skills/ralph-loop/scripts/run_frozen_oracle.py` (the atomic permit-to-act gate: precheck,
+  snapshot, shell-less run, recheck), `skills/ralph-loop/scripts/check_oracle_frozen.py` +
+  `skills/ralph-loop/scripts/check_suite_frozen.py`
+  (the freeze diagnostics — the oracle surface model is reused as-is by a checklist item's `verify:` oracle),
   `skills/ralph-loop/scripts/suspend_verdict.py` (the session-limit suspend/surface/proceed verdict, over
   the vendored `claude_usage.py`), and the design records: `docs/design/ralph-loop-green-the-suite.md`,
   `docs/design/ralph-loop-checklist-anchor.md`, `docs/design/loop-telos-anchor-deliberation.md`,

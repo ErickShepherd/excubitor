@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
-"""PreToolUse guard: block file mutations while on a repo's default branch.
+"""PreToolUse guard: block the direct file-edit tools while on a repo's default branch.
 
 Enforces a branch-first workflow (see this repo's README, "The workflow these
-fences assume"): no editing on main/master — branch first. Registered
-in settings.json for the Edit|Write|NotebookEdit tools.
+fences assume"): no editing on main/master — branch first. Registered in
+settings.json for the Edit|Write|NotebookEdit tools ONLY — a Bash mutation
+(redirection, `sed -i`, …) is out of this guard's surface (R-06 accepted
+residual, named in KNOWN-BYPASSES.md); the honest claim is "the direct
+file-edit tools", not "all file mutations".
 
 Defers to the normal permission flow (no decision) when:
   - the target file isn't inside a git repo,

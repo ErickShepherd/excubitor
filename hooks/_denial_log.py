@@ -83,7 +83,12 @@ def _cap(value):
 def _write(path: str, line: str, done: list) -> None:
     """The blockable filesystem I/O, isolated so the caller can abandon it on timeout."""
     try:
-        os.makedirs(os.path.dirname(path), exist_ok=True)
+        # R-08: a bare relative filename override (EXCUBITOR_DENIAL_LOG=denials.jsonl) has an empty
+        # dirname, and os.makedirs("") raises — which the broad except then swallowed, so telemetry
+        # silently vanished. Only create a parent when there is one to create.
+        parent = os.path.dirname(path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
         # A single write of one pre-serialized line in append mode — the closest stdlib gets to
         # an atomic append; concurrent guard processes interleave whole lines, not fragments.
         with open(path, "a", encoding="utf-8") as fh:

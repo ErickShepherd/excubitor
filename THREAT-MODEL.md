@@ -101,13 +101,13 @@ it for Tier 3 must add a real boundary (container/VM isolation, capability restr
 
 | Control | What it is | Tier it addresses | Honest limit |
 |---|---|---|---|
-| `guard-default-branch.py` | deny Edit/Write on `main`/`master` — branch first | 1 (mostly), 2 | disarmable marker → now fenced by self-integrity |
+| `guard-default-branch.py` | deny the direct file-edit tools (Edit/Write/NotebookEdit) on `main`/`master` — branch first | 1 (mostly), 2 | registration boundary: Bash mutations bypass (R-06, accepted — see KNOWN-BYPASSES); disarmable marker → now fenced by self-integrity |
 | `guard-loop-vc.py` (`=1`) | deny the irreversible VC set while looping | 1, 2 | literal-token parse; shell-expansion evades (Tier 3) |
 | `guard-loop-vc.py` (`=yolo`) | permit only a revertable `--no-ff` merge into a non-default branch, fail-deny on ambiguity | 1, 2 | presumes a hook-clean working copy |
 | `guard-one-unit.py` | cap a headless worker at one unit/session (fresh-context re-read) | 1, 2 | opt-in; a determined loop can be re-armed |
 | `guard-self-integrity.py` | while armed, deny writes to the guards' own kill-switches | 2, and Tier-3 *default paths* | literal-token parse; same expansion residual |
 | `audit-telos` evidence tier | demote an unbacked DISCHARGED to SUSPECT; trust witness exit codes over the LLM | 1, 2 | cannot judge a *backed-but-weak* witness |
-| `check_oracle_frozen.py` / `check_suite_frozen.py` | prove, from git history, the loop never edited the oracle/suite that gates it | 2 (forged done-signal) | proves *untouched*, not *adequate* |
+| `run_frozen_oracle.py` (+ `check_oracle_frozen.py` / `check_suite_frozen.py` diagnostics) | bind the witness verdict to a frozen oracle surface: precheck vs base, snapshot, shell-less run, recheck — git proves committed baseline/final state, the envelope binds the bytes to the exit code | 2 (forged done-signal) | proves start==end state, not *adequate*; a mid-run edit restored before the recheck remains |
 
 The proportionality logic: **the assets are high-value but reversible-except-at-a-few-edges, and the
 realistic adversary is Tiers 1–2.** So the controls concentrate on those few irreversible edges
