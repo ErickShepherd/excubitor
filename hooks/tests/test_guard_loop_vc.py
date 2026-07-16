@@ -114,6 +114,12 @@ class TestGuardLoopVC(unittest.TestCase):
         "env git push origin main",                            # POSIX launcher, no privilege
         "env -a x git push",                                    # env -a <argv0> still execs (coreutils 9.x)
         "env --argv0 x git branch -D main",                    # ... separate long form
+        # value options CLUSTERED behind other short flags still consume their value (not read as
+        # the command) — a `-u`→`-vu` cluster must not reopen the bypass
+        "env -vu FOO git push",                                # -vu = -v (flag) + -u <var>; env intact
+        "sudo -knu deploy git branch -D main",                 # -knu = -k -n -u <user>
+        "ionice -tc 2 git push",                               # -tc = -t (flag) + -c <class>
+        "timeout -fs KILL 30 git push",                        # -fs = -f + -s <sig>, then DURATION
         "sudo git branch -D main",                             # launcher + branch delete
         "nice -n 5 git merge --no-ff topic",                   # launcher with a value-option
         "timeout 60 git push",                                 # launcher with a leading DURATION
@@ -604,6 +610,8 @@ class TestLauncherPrefix(unittest.TestCase):
         "timeout 60 make test",
         "nice git commit -m 'ready to push'",    # 'push' only in the commit message
         "sudo -u git push",                      # run cmd `push` as user `git` — NOT `git push`
+        "env -uv FOO git push",                  # -uv = -u with ATTACHED value 'v' → runs cmd FOO, not git
+        "env -vu FOO git status",                # clustered value-opt, but a non-fenced subcommand
         "unbuffer git status",                   # recognized launcher + non-fenced subcommand
         'bash -c "echo git push is coming"',     # 'git push' only inside an echo string
         'bash -cx "echo hi"',                    # multi-letter cluster, non-fenced inner

@@ -198,17 +198,30 @@ def _after_launcher(launcher: str, args: list[str]) -> list[str] | None:
     nested launcher are handled by that recursion, not here.
     """
     value_opts = _LAUNCHER_VALUE_OPTS.get(launcher, frozenset())
+    # The value-taking SHORT letters, so a value option CLUSTERED behind other short flags
+    # (`env -vu FOO ...`, `sudo -knu user ...`, `ionice -tc 2 ...`) still consumes its value token
+    # instead of being read as a valueless flag — the same clustered-short walk `_has_delete_flag`
+    # and `_clean_is_dry_run` already do. Without it a modeled value option's value is mis-read as
+    # the command (a 3-char cluster reopens the whole bypass). Long `--opt` forms stay exact-match.
+    value_letters = {opt[1] for opt in value_opts if len(opt) == 2 and opt[0] == "-"}
     j = 0
     while j < len(args):
         a = args[j]
         if a == "--" or a == "--end-of-options":
             j += 1  # option terminator — the very next token is the command
             break
-        if a in value_opts:
-            j += 2  # option + its value token
+        if a.startswith("--"):
+            j += 2 if a in value_opts else 1  # long value-opt consumes its token; else a flag
             continue
         if a.startswith("-") and len(a) > 1:
-            j += 1  # a flag (or attached-value short like `-n5`, `-oL`, `-c2`)
+            # a short cluster: a value letter consumes the cluster remainder as an attached value
+            # (`-n5`, `-oL`) or, if it is the cluster's LAST letter, the next separate token.
+            consumes_next = False
+            for idx, ch in enumerate(a[1:]):
+                if ch in value_letters:
+                    consumes_next = idx == len(a) - 2  # value letter is the cluster's last char
+                    break
+            j += 2 if consumes_next else 1
             continue
         if a == "-":
             j += 1  # a bare `-` (env "clear environment") is never the command
