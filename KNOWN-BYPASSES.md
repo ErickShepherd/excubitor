@@ -29,12 +29,15 @@ argument is not falsely promoted to its own command) — then `shlex.split` each
 resulting **literal tokens** — a git subcommand, or a path's basename. They do **not** run a shell, so
 any construct that only resolves to the dangerous token *after* bash expands it is invisible to them.
 
-`guard-loop-vc.py` additionally steps over **exec-prefix launchers** (`env`, `command`, `exec`,
-`nohup`, `setsid`, `sudo`, `doas`, `nice`, `ionice`, `stdbuf`, `timeout`, `time`, `xargs`): these run
-their argument list as a new command, so it resolves the *delegated* executable (recursing for a chain
-like `sudo nice git push`) instead of anchoring on the launcher's own basename. Every token is still
-literal — this is executable resolution, not shell expansion — so the shell-expansion residuals below
-apply unchanged on top of it.
+`guard-loop-vc.py` additionally steps over an **enumerated set of exec-prefix launchers** (`env`,
+`command`, `exec`, `nohup`, `setsid`, `sudo`, `doas`, `nice`, `ionice`, `stdbuf`, `timeout`, `time`,
+`xargs`, `unshare`, `numactl`, `unbuffer`, `eatmydata`, `catchsegv`, `torsocks`, `firejail`,
+`cpulimit`): these run their argument list as a new command, so it resolves the *delegated* executable
+(recursing for a chain like `sudo nice git push`) instead of anchoring on the launcher's own basename.
+A shell running a `-c` command string (`bash`/`sh`/`dash`/`zsh`/`ksh -c "git push"`) is re-scanned as
+the command line it is. Every token is still literal — this is executable resolution, not shell
+expansion — so the shell-expansion residuals below apply unchanged on top of it. The set is
+**enumerated, not exhaustive**: an exec-prefix outside it is an accepted residual (below).
 
 ## ACCEPTED — shell word-expansion evades literal-token matching
 
@@ -84,26 +87,30 @@ while the quoted-substitution under-block is one more instance of the "resolves 
 runs" residual this whole file documents. Pinned in both suites' `TestAcceptedResiduals` /
 `ACCEPTED_RESIDUALS`.
 
-## ACCEPTED — a launcher with a leading positional or a string-split option
+## ACCEPTED — an exec-prefix outside the recognized launcher set
 
-`guard-loop-vc.py` steps over the common exec-prefix launchers (see *How the guards parse*), so
-`env git push`, `sudo git branch -D main`, `nice -n 5 git merge`, and `timeout 60 git push` are all
-caught. What it does **not** parse is a launcher whose grammar puts a **bare positional of its own
-before the delegated command**, or that **re-splits one string argument** — the guard lands on the
-mask/priority/lock-file token, or sees one already-split string, and defers. Same class as an indirect
-wrapper script; pinned ALLOW in
-`hooks/tests/test_guard_loop_vc.py::TestLauncherPrefix::test_launcher_residuals_still_allow`:
+`guard-loop-vc.py` steps over an **enumerated** set of exec-prefix launchers (see *How the guards
+parse*), so `env git push`, `sudo git branch -D main`, `nice -n 5 git merge`, `timeout 60 git push`,
+`unshare git push`, `numactl -N 0 git push`, and `bash -c "git push"` are all caught. The set is a
+curated list of common launchers whose invocation grammar is modeled — it is **not a claim to
+recognize every launcher on the system.** An exec-prefix *outside* the set still runs the fenced verb
+one token deeper and defers; this is the same residual class as an indirect wrapper script, pinned
+ALLOW in `hooks/tests/test_guard_loop_vc.py::TestLauncherPrefix::test_launcher_residuals_still_allow`:
 
-| Bypass | What bash runs | Why it slips |
-|---|---|---|
-| `taskset 0x3 git push origin main` | `git push` on cpu 0/1 | `0x3` is a bare cpu-mask positional; the guard lands on it, not `git` |
-| `chrt 10 git push origin main` | `git push` at RT priority 10 | `10` is a bare scheduling-priority positional |
-| `flock /tmp/lock git push origin main` | `git push` under a lock | `flock <file> command` — the lock file is a leading positional |
-| `env -S 'git push origin main'` | `git push` | `env -S` re-splits one string arg — an expansion, like the `$VAR`/brace cases above |
+| Bypass | Why it's outside the set |
+|---|---|
+| `taskset 0x3 git push` / `chrt 10 git push` / `flock /tmp/lock git push` | a **leading positional of the launcher's own** (cpu mask / RT priority / lock file) sits before the command; the guard lands on it, not `git` |
+| `strace git push` / `ltrace git push` / `proot -r /rootfs git push` | a **heavier, variable option grammar** not modeled — enumerating each tool's value-options completely is the per-tool-grammar chase the crux refuses; left as a documented residual rather than a claimed-but-incompletely-parsed catch |
+| `su -c 'git push'` / `runuser -c 'git push'` / `sg grp -c 'git push'` | a **privileged shell running a `-c` string** with a different arg grammar than the plain `bash`/`sh -c` that *is* re-scanned; also needs privilege |
+| `env -S 'git push origin main'` | `env -S` **re-splits one string arg** — an expansion, like the `$VAR`/brace cases above |
+| `sudo … ×N git push` (N > recursion cap) | a launcher **chain deeper than `_MAX_LAUNCHER_DEPTH`** (absurd to type; bounded backstop against pathological input) |
 
-Closing these means parsing each launcher's positional grammar (and, for `-S`, splitting the string
-— i.e. expanding), disproportionate for the niche of prefixing git with a CPU/RT/lock wrapper. The
-common launcher family is caught; these bare-positional variants are documented, not chased.
+Closing the whole class means either recognizing every launcher binary on every host, or parsing each
+one's positional/option grammar (and, for `-S` and the `-c` strings, expanding) — the deny-set /
+shell-reimplementation race the crux refuses. The recognized set covers the common, no-privilege
+prefixes; the rest is enumerated here, not chased. **Adding a launcher to the recognized set is the
+right move when it is common and its grammar is modelable** — do that and move its row to
+`TestLauncherPrefix.LAUNCHER_DENY`, rather than growing this table.
 
 ## ACCEPTED — the guards see only what the runtime hands them
 
@@ -222,7 +229,7 @@ loop rewrite the judge that constrains it.
 | An armed loop could `touch .claude/allow-default-branch`, or edit/delete the guard scripts or the `.claude/settings.json` hooks block, to disarm the fence | Denied while `CLAUDE_LOOP_GUARD` is set (file tools **and** Bash) | `guard-self-integrity.py` (TELOS-007/008) |
 | `git remote set-head` / `git symbolic-ref <name> <ref>` / `-d` could repoint `refs/remotes/origin/HEAD`, the trust anchor both guards read | Denied in both modes; the read form of `symbolic-ref` stays allowed | `guard-loop-vc.py::_classify` (TELOS-009) |
 | A dangerous verb or kill-switch glued inside an *unquoted* subshell / command substitution — `(git push)`, `$(rm PATH)`, `` `rm PATH` `` — slipped past the segment splitter | Denied; segments now split (quote-aware) on `(`, `)`, and backtick | both guards' `split_segments()` |
-| An **exec-prefix launcher** hid the fenced verb one token deeper — `env git push`, `sudo git branch -D main`, `nice git merge`, `timeout 60 git push`, `env gh pr merge 5` — so the guard anchored on the launcher basename (`env`) and deferred, a trivial no-privilege disarm of the **whole** loop-vc deny set | Denied; `_classify` steps over the launcher family and re-classifies the delegated command (bare-positional launchers remain the ACCEPTED residual above) | `guard-loop-vc.py::_classify` / `_after_launcher` (TELOS-001) |
+| An **exec-prefix launcher** hid the fenced verb one token deeper — `env git push`, `sudo git branch -D main`, `nice git merge`, `timeout 60 git push`, `env gh pr merge 5`, `unshare git push`, `bash -c "git push"` — so the guard anchored on the launcher basename (`env`) and deferred, a trivial no-privilege disarm of the **whole** loop-vc deny set | Denied; `_classify` steps over an enumerated launcher set (and re-scans a shell `-c` string) and re-classifies the delegated command (an exec-prefix outside the set remains the ACCEPTED residual above) | `guard-loop-vc.py::_classify` / `_after_launcher` / `_shell_c_command` (TELOS-001) |
 
 ## Reporting a bypass
 

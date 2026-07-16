@@ -552,6 +552,31 @@ class TestLauncherPrefix(unittest.TestCase):
         "sudo nice git push origin main",        # a launcher CHAIN is followed to the git verb
         "env nohup git branch -D main",          # ditto, different chain
         "/usr/bin/env git push",                 # launcher via absolute path → basename
+        # further common direct-exec launchers (the reviewer's population — same class as `env`)
+        "unshare git push origin main",          # bare user-namespace launcher, no privilege
+        "unshare -r git push",                   # unshare with a flag
+        "unshare -R /newroot git push",          # unshare -R <dir> (value-option)
+        "numactl git push origin main",
+        "numactl -N 0 git branch -D main",       # numactl -N <node> (value-option)
+        "unbuffer git push origin main",         # fixes the stdbuf<->unbuffer asymmetry
+        "eatmydata git push origin main",
+        "catchsegv git push origin main",
+        "torsocks git push origin main",
+        "firejail git push origin main",
+        "firejail --net=none git push",          # firejail attached-value option
+        "cpulimit -l 50 git push",               # cpulimit -l <n> (value-option)
+        "cpulimit -l 50 -- git push",            # ... with the -- terminator
+        "unshare numactl git push",              # chain of two new launchers
+        # a shell running a `-c` command string: the string is re-scanned
+        'bash -c "git push"',
+        "bash -c 'git push origin main'",
+        "sh -c 'git branch -D main'",
+        'dash -c "git merge --no-ff topic"',
+        "zsh -c 'git push'",
+        'bash -lc "git push"',                   # combined `-lc`: value is the next token
+        'bash -c "env git push"',                # a launcher INSIDE the -c string
+        'bash -c "gh pr merge 5"',
+        'env bash -c "git push"',                # launcher in front of the shell
     ]
 
     def test_launcher_prefix_denied(self):
@@ -574,6 +599,13 @@ class TestLauncherPrefix(unittest.TestCase):
         "nice git commit -m 'ready to push'",    # 'push' only in the commit message
         "sudo -u git push",                      # run cmd `push` as user `git` — NOT `git push`
         "xargs -n1 echo",
+        "numactl --hardware",                    # a numactl query, no command
+        "unshare --version",
+        "unbuffer git status",                   # new launcher + non-fenced subcommand
+        "numactl -N 0 git status",
+        'bash -c "echo git push is coming"',     # 'git push' only inside an echo string
+        'sh -c "git status"',                    # shell -c with a non-fenced inner command
+        "bash script.sh",                        # a script shell (no -c) → body not scanned, defer
     ]
 
     def test_launcher_non_fenced_still_allows(self):
@@ -581,16 +613,27 @@ class TestLauncherPrefix(unittest.TestCase):
             rc, out = _run(cmd)
             self.assertEqual((rc, out.strip()), (0, ""), f"must DEFER (no decision): {cmd}")
 
-    # Niche launchers whose grammar puts a bare positional (a cpu mask, a scheduling priority, a lock
-    # file) BEFORE the delegated command, or that re-split one string arg — documented in
-    # KNOWN-BYPASSES.md as the same class as an indirect wrapper. Pinned ALLOW bidirectionally: if a
+    # Exec-prefix mechanisms OUTSIDE the recognized set — an accepted residual, the same class as an
+    # indirect wrapper script (KNOWN-BYPASSES.md "an exec-prefix outside the recognized launcher
+    # set"). The recognized set is enumerated, not exhaustive; these are the notable ones left out —
+    # a launcher with a leading positional of its own (cpu mask / RT priority / lock file), a
+    # heavier/variable option grammar not modeled (`strace`/`ltrace`/`proot`), a privileged shell
+    # string with a different arg order (`su`/`runuser`/`sg -c`), a string-splitting option
+    # (`env -S`), and a launcher chain past the recursion cap. Pinned ALLOW BIDIRECTIONALLY: if a
     # change starts catching one, this fails and forces an honest SCOPE/LIMITS + KNOWN-BYPASSES update
-    # rather than a silent scope change.
+    # (a caught residual should MOVE to LAUNCHER_DENY, not silently change scope).
     LAUNCHER_RESIDUALS = [
         "taskset 0x3 git push origin main",      # bare cpu-mask positional before the command
         "chrt 10 git push origin main",          # bare scheduling-priority positional
         "flock /tmp/lock git push origin main",  # flock <file> command (leading file positional)
+        "strace git push origin main",           # heavier option grammar, not modeled → not caught
+        "ltrace git push origin main",
+        "proot -r /rootfs git push",
+        "su -c 'git push'",                      # privileged shell string, different arg grammar
+        "runuser -u ci -c 'git push'",
+        "sg developers -c 'git push'",
         "env -S 'git push origin main'",         # env re-splits one string arg (an expansion)
+        "sudo " * 11 + "git push",               # a launcher chain deeper than _MAX_LAUNCHER_DEPTH
     ]
 
     def test_launcher_residuals_still_allow(self):

@@ -43,12 +43,17 @@ sets no marker of its own and there is no reliable way to auto-detect loop conte
 deliberately opt-in: zero friction for ordinary interactive work, protection when you explicitly
 say "I'm looping."
 
-It also steps over exec-prefix LAUNCHERS (`env git push`, `sudo git branch -D main`,
-`nice`/`nohup`/`setsid`/`stdbuf`/`ionice`/`timeout`/`time`/`command`/`exec`/`doas`/`xargs`) — these
-run their argument list as a new command, so the fenced verb hides one token deeper; `_classify`
-resolves the real executable (recursing for a chain like `sudo nice git push`) rather than anchoring
-on the launcher basename. This is executable resolution, not shell expansion (every token is
-literal), and it closes what was a trivial no-privilege disarm of the whole deny set.
+It also steps over an enumerated set of exec-prefix LAUNCHERS (`env git push`,
+`sudo git branch -D main`, `nice`/`nohup`/`setsid`/`stdbuf`/`ionice`/`timeout`/`time`/`command`/
+`exec`/`doas`/`xargs`/`unshare`/`numactl`/`unbuffer`/`eatmydata`/`catchsegv`/`torsocks`/`firejail`/
+`cpulimit`) — these run their argument list as a new command, so the fenced verb hides one token
+deeper; `_classify` resolves the real executable (recursing for a chain like `sudo nice git push`)
+rather than anchoring on the launcher basename. A shell running a `-c` command string
+(`bash`/`sh`/`dash`/`zsh`/`ksh -c "git push"`) is re-scanned as the command line it is. This is
+executable resolution, not shell expansion (every token is literal), and it closes what was a
+trivial no-privilege disarm of the whole deny set. The launcher set is *enumerated, not exhaustive*:
+any exec-prefix NOT in it is an accepted residual (see SCOPE / LIMITS), the same class as a wrapper
+script — the guard recognizes a set, it does not claim to model every launcher on the system.
 
 SCOPE / LIMITS (honest). It parses the dangerous git/gh subcommands out of the Bash command string
 as *literal* tokens — it does not expand the shell. String-parsing is NOT airtight, and these are
@@ -62,10 +67,13 @@ ACCEPTED residuals (documented, not chased — closing them would mean reimpleme
   * a **live command substitution inside double quotes** (`git commit -m "$(git push)"`) — segments
     split only outside quotes (so a verb literally quoted in a commit message is not a false deny);
     the unquoted `$(git push)` / `` `git push` `` forms stay caught;
-  * a **launcher with a leading positional of its own or a string-splitting option** — the niche
-    `taskset <mask> git push`, `chrt <prio> git push`, `flock <file> git push` (the guard would land
-    on the mask/priority/lock file, not `git`), and `env -S 'git push'` (env re-splits one string
-    arg, an expansion). Same class as an indirect wrapper; pinned in
+  * an **exec-prefix OUTSIDE the recognized launcher set** — the set is enumerated, not exhaustive,
+    so any other prefix that runs its arguments as a command is an accepted residual, the same class
+    as an indirect wrapper script: a launcher with a leading positional of its own (`taskset <mask>`,
+    `chrt <prio>`, `flock <file>` — the guard lands on the mask/priority/lock file, not `git`), a
+    heavier/variable option grammar not modeled (`strace`, `ltrace`, `proot`), a privileged shell
+    string with a different arg order (`su -c`, `runuser -c`, `sg -c`), a string-splitting option
+    (`env -S 'git push'`), or a launcher chain deeper than the recursion cap. Pinned in
     hooks/tests/test_guard_loop_vc.py::TestLauncherPrefix::test_launcher_residuals_still_allow;
   * a `post-commit`/`post-merge` git hook or a filesystem watcher firing an external side effect the
     guard never sees (YOLO presumes a hook-clean working copy).
@@ -126,7 +134,15 @@ _ENV_ASSIGN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 _LAUNCHERS = {
     "env", "command", "exec", "nohup", "setsid", "sudo", "doas",
     "nice", "ionice", "stdbuf", "timeout", "time", "xargs",
+    # same direct-exec `[options] command` class, small/stable option grammar → soundly steppable
+    "unbuffer", "eatmydata", "catchsegv", "torsocks", "firejail",
+    "numactl", "unshare", "cpulimit",
 }
+# Shells that run a command STRING passed to `-c` (`bash -c "git push"`). The string is itself a
+# command line, so `_classify` re-scans it with the full segment splitter (catching `sh -c 'env git
+# push'` too). Privileged/positional-arg shell forms (`su -c`, `runuser -c`, `sg -c`) have a
+# different arg grammar and are the documented residual, not modeled here.
+_SHELL_LAUNCHERS = {"bash", "sh", "dash", "zsh", "ksh", "ash", "mksh"}
 # Per-launcher options that consume the FOLLOWING token as their value, so a value (e.g. the `git`
 # in `sudo -u git ...`, a nice adjustment, a timeout signal) is never mistaken for the delegated
 # command. Only the common value-taking options are enumerated; an unknown value-option whose value
@@ -145,6 +161,10 @@ _LAUNCHER_VALUE_OPTS = {
     "exec": {"-a"},
     "xargs": {"-I", "--replace", "-i", "-n", "--max-args", "-P", "--max-procs", "-s",
               "--max-chars", "-E", "-d", "--delimiter", "-a", "--arg-file", "-L", "--max-lines"},
+    "numactl": {"-N", "--cpunodebind", "-m", "--membind", "-C", "--physcpubind",
+                "-i", "--interleave", "-p", "--preferred"},
+    "unshare": {"-R", "--root", "--wd", "-S", "--setuid", "-G", "--setgid", "--setgroups"},
+    "cpulimit": {"-l", "--limit", "-p", "--pid", "-e", "--exe", "-c", "--cpu"},
 }
 # Launchers whose grammar puts N bare positionals BEFORE the delegated command (`timeout DURATION
 # command`). Skipped after the option scan so the DURATION is not misread as the command.
@@ -181,6 +201,22 @@ def _after_launcher(launcher: str, args: list[str]) -> list[str] | None:
         if j < len(args):
             j += 1
     return args[j:] if j < len(args) else None
+
+
+def _shell_c_command(args: list[str]) -> str | None:
+    """The command STRING a shell's `-c` runs, or None if there is no `-c` (a script/interactive
+    shell — its body is the wrapper-script residual, not scanned). Matches a bare `-c` and a short
+    cluster ending in `c` (`bash -lc "…"`); the value is the following token."""
+    j = 0
+    while j < len(args):
+        a = args[j]
+        if a == "-c" or (a.startswith("-") and not a.startswith("--")
+                         and a.endswith("c") and len(a) > 1):
+            return args[j + 1] if j + 1 < len(args) else None
+        if a == "--":
+            break
+        j += 1
+    return None
 
 
 def _subcommand_path(args: list[str], value_opts: set[str], depth: int) -> list[str]:
@@ -460,6 +496,13 @@ def _classify(tokens: list[str], yolo: bool, cwd: str | None, _depth: int = 0) -
         delegated = _after_launcher(exe, args)
         return _classify(delegated, yolo, cwd, _depth + 1) if delegated is not None else None
 
+    # A shell running a `-c` command string: the string is another command line, so re-scan it with
+    # the full segment splitter (`bash -c "git push"`, `sh -c 'env git push'`). No `-c` → a script or
+    # interactive shell whose body the guard does not read (the wrapper-script residual).
+    if exe in _SHELL_LAUNCHERS and _depth < _MAX_LAUNCHER_DEPTH:
+        inner = _shell_c_command(args)
+        return _dangerous(inner, yolo, cwd, _depth + 1) if inner is not None else None
+
     if exe == "gh":
         # Only `gh pr merge` performs the merge server-side (denied in both modes). Resolve the
         # subcommand path while stepping over value-taking flags (so `gh -R o/r pr merge` /
@@ -570,14 +613,17 @@ def split_segments(command: str) -> list[str]:
     return [s for s in (seg.strip() for seg in segments) if s]
 
 
-def _dangerous(command: str, yolo: bool, cwd: str | None) -> str | None:
-    """Scan a full Bash command (possibly compound) for a forbidden VC mutation."""
+def _dangerous(command: str, yolo: bool, cwd: str | None, _depth: int = 0) -> str | None:
+    """Scan a full Bash command (possibly compound) for a forbidden VC mutation.
+
+    `_depth` is threaded from a shell `-c` re-scan (`bash -c "git push"`) so a nested-shell chain
+    shares the launcher recursion cap and cannot loop unbounded."""
     for segment in split_segments(command):
         try:
             tokens = shlex.split(segment)
         except ValueError:
             tokens = segment.split()  # unbalanced quotes etc. → best-effort
-        reason = _classify(tokens, yolo, cwd)
+        reason = _classify(tokens, yolo, cwd, _depth)
         if reason:
             return reason
     return None
