@@ -198,55 +198,51 @@ def main() -> int:
     ap.add_argument("--verified-by", required=True, help="the claim's verified-by command string")
     args = ap.parse_args()
 
-    repo = args.repo
-    if not os.path.isdir(os.path.join(repo, ".git")) and not _git(repo, "rev-parse", "--git-dir")[0]:
-        print(f"NOT-FROZEN: {repo} is not a git repo", file=sys.stderr)
+    reason, oracle_files = evaluate(args.repo, args.base, args.verified_by)
+    if reason is not None:
+        print(f"NOT-FROZEN: {reason}", file=sys.stderr)
         return 1
+    print("FROZEN: oracle untouched on the loop branch — " + ", ".join(sorted(oracle_files)))
+    return 0
 
-    oracle_files, tampered = _oracle_files(repo, args.base, args.verified_by)
+
+def evaluate(repo: str, base: str, verified_by: str) -> tuple[str | None, dict[str, str]]:
+    """The full point-in-time freeze evaluation, reusable by the atomic runner (run_frozen_oracle.py).
+
+    Returns (refusal_reason, surface): refusal_reason is None iff the complete oracle surface is
+    frozen relative to `base`, in which case surface maps each repo-relative frozen path to its
+    absolute path. Every ambiguity is a refusal (fail-deny)."""
+    if not os.path.isdir(os.path.join(repo, ".git")) and not _git(repo, "rev-parse", "--git-dir")[0]:
+        return f"{repo} is not a git repo", {}
+
+    oracle_files, tampered = _oracle_files(repo, base, verified_by)
     if tampered:
         # A verified-by oracle file that was tracked at base is now missing/untracked — deleted or
         # renamed away on the loop branch. The survivors alone can't vouch for the ones that vanished
         # (the loop could have removed exactly the assertion that gated it), so fail-deny.
-        print(
-            f"NOT-FROZEN: oracle file(s) tracked at {args.base} are now missing/untracked on the loop "
-            f"branch — deleted or renamed (tamper): {', '.join(tampered)} (fail-deny)",
-            file=sys.stderr,
-        )
-        return 1
+        return (f"oracle file(s) tracked at {base} are now missing/untracked on the loop "
+                f"branch — deleted or renamed (tamper): {', '.join(tampered)} (fail-deny)"), {}
     if not oracle_files:
         # No extractable oracle file → immutability is unverifiable → fail-deny.
-        print(
-            f"NOT-FROZEN: no existing oracle file found in verified-by {args.verified_by!r}; "
-            f"cannot confirm immutability (fail-deny)",
-            file=sys.stderr,
-        )
-        return 1
+        return (f"no existing oracle file found in verified-by {verified_by!r}; "
+                f"cannot confirm immutability (fail-deny)"), {}
 
     # R-04: the current lexical state (path type; link target) must match the base tree — this is
     # what catches an UNCOMMITTED retarget/type-swap that a committed-diff intersection never sees.
     for rel, abs_path in sorted(oracle_files.items()):
-        mismatch = _base_state_mismatch(repo, args.base, rel, abs_path)
+        mismatch = _base_state_mismatch(repo, base, rel, abs_path)
         if mismatch:
-            print(f"NOT-FROZEN: {mismatch}", file=sys.stderr)
-            return 1
+            return mismatch, {}
 
-    changed = _changed_files(repo, args.base)
+    changed = _changed_files(repo, base)
     if changed is None:
-        print(f"NOT-FROZEN: could not diff {args.base}...HEAD (fail-deny)", file=sys.stderr)
-        return 1
+        return f"could not diff {base}...HEAD (fail-deny)", {}
 
-    tampered = sorted(set(oracle_files) & changed)
-    if tampered:
-        print(
-            "NOT-FROZEN: the loop modified its own gating oracle on this branch: "
-            + ", ".join(tampered),
-            file=sys.stderr,
-        )
-        return 1
+    modified = sorted(set(oracle_files) & changed)
+    if modified:
+        return ("the loop modified its own gating oracle on this branch: " + ", ".join(modified)), {}
 
-    print("FROZEN: oracle untouched on the loop branch — " + ", ".join(oracle_files))
-    return 0
+    return None, oracle_files
 
 
 if __name__ == "__main__":
