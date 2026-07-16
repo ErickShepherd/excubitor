@@ -165,6 +165,8 @@ _LAUNCHER_VALUE_OPTS = {
                 "-i", "--interleave", "-p", "--preferred"},
     "unshare": {"-R", "--root", "--wd", "-S", "--setuid", "-G", "--setgid", "--setgroups"},
     "cpulimit": {"-l", "--limit", "-p", "--pid", "-e", "--exe", "-c", "--cpu"},
+    "time": {"-o", "--output", "-f", "--format"},  # GNU /usr/bin/time (the bash keyword ignores these)
+    "torsocks": {"-a", "--address", "-p", "--port", "-P", "--pass"},
 }
 # Launchers whose grammar puts N bare positionals BEFORE the delegated command (`timeout DURATION
 # command`). Skipped after the option scan so the DURATION is not misread as the command.
@@ -205,13 +207,14 @@ def _after_launcher(launcher: str, args: list[str]) -> list[str] | None:
 
 def _shell_c_command(args: list[str]) -> str | None:
     """The command STRING a shell's `-c` runs, or None if there is no `-c` (a script/interactive
-    shell — its body is the wrapper-script residual, not scanned). Matches a bare `-c` and a short
-    cluster ending in `c` (`bash -lc "…"`); the value is the following token."""
+    shell — its body is the wrapper-script residual, not scanned). `-c` takes the NEXT arg as the
+    command string, so it matches a bare `-c` and a short cluster containing `c` ANYWHERE
+    (`bash -lc`, `bash -cx`, `bash -cvx` all run the following token — `c` is bash/sh/dash/zsh/ksh's
+    only 'c' short option). The value is that following token."""
     j = 0
     while j < len(args):
         a = args[j]
-        if a == "-c" or (a.startswith("-") and not a.startswith("--")
-                         and a.endswith("c") and len(a) > 1):
+        if a == "-c" or (a.startswith("-") and not a.startswith("--") and "c" in a[1:]):
             return args[j + 1] if j + 1 < len(args) else None
         if a == "--":
             break

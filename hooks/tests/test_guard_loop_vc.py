@@ -574,9 +574,17 @@ class TestLauncherPrefix(unittest.TestCase):
         'dash -c "git merge --no-ff topic"',
         "zsh -c 'git push'",
         'bash -lc "git push"',                   # combined `-lc`: value is the next token
+        'bash -cx "git push"',                   # `-c` NOT last in the cluster still runs the string
+        'bash -cvx "git push"',                  # ... multi-letter cluster
+        'bash -xc "git push"',                   # ... `-c` last but not first
+        'sh -cx "git branch -D main"',
         'bash -c "env git push"',                # a launcher INSIDE the -c string
         'bash -c "gh pr merge 5"',
         'env bash -c "git push"',                # launcher in front of the shell
+        "/usr/bin/time -o /tmp/x git push",      # GNU time -o <file> (value-option)
+        "/usr/bin/time -f %e git push",          # GNU time -f <fmt> (value-option)
+        "torsocks -p 9050 git push",             # torsocks -p <port> (value-option)
+        "torsocks -a 127.0.0.1 git branch -D main",
     ]
 
     def test_launcher_prefix_denied(self):
@@ -604,8 +612,11 @@ class TestLauncherPrefix(unittest.TestCase):
         "unbuffer git status",                   # new launcher + non-fenced subcommand
         "numactl -N 0 git status",
         'bash -c "echo git push is coming"',     # 'git push' only inside an echo string
+        'bash -cx "echo hi"',                     # multi-letter cluster, non-fenced inner
         'sh -c "git status"',                    # shell -c with a non-fenced inner command
         "bash script.sh",                        # a script shell (no -c) → body not scanned, defer
+        "/usr/bin/time -o out.txt make",         # GNU time value-option before a non-fenced command
+        "torsocks -p 9050 curl https://x",       # torsocks value-option before a non-git command
     ]
 
     def test_launcher_non_fenced_still_allows(self):
