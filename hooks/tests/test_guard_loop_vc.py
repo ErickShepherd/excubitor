@@ -706,6 +706,46 @@ class TestGuardYoloRepoSelector(unittest.TestCase):
         self.assertTrue(self._deferred(f"env -C {target} git status", cwd))
         self.assertTrue(self._deferred(f"GIT_DIR={target}/.git git status", cwd))
 
+    def test_denies_cross_segment_dir_change_merge(self):
+        # Independent-review finding (re-review round 2): a PRECEDING segment can relocate the repo
+        # context — `cd /protected && git merge --no-ff topic` merges in /protected while detection
+        # read the payload cwd. Same class as `env -C`, so the same fail-deny.
+        target, cwd = self._protected(), self._innocent()
+        for cmd in (
+            f"cd {target} && git merge --no-ff topic",
+            f"cd {target}; git merge --no-ff topic",
+            f"pushd {target} && git merge --no-ff topic",
+            f"cd {target} && echo ok && git merge --no-ff topic",  # flag persists across segments
+            f"builtin cd {target} && git merge --no-ff topic",     # bash builtin-prefix spelling
+            f"command cd {target} && git merge --no-ff topic",
+            "popd && git merge --no-ff topic",
+        ):
+            self.assertTrue(self._denied(cmd, cwd),
+                            f"cross-segment dir change must fail-deny a YOLO merge: {cmd}")
+
+    def test_denies_cross_segment_git_env_export_merge(self):
+        target, cwd = self._protected(), self._innocent()
+        for cmd in (
+            f"export GIT_DIR={target}/.git; git merge --no-ff topic",
+            f"export GIT_DIR={target}/.git && git merge --no-ff topic",
+            f"declare -x GIT_DIR={target}/.git; git merge --no-ff topic",
+            f"GIT_DIR={target}/.git; export GIT_DIR; git merge --no-ff topic",  # bare-name promotion
+            f"GIT_DIR={target}/.git; git merge --no-ff topic",  # assignments-only segment (conservative)
+        ):
+            self.assertTrue(self._denied(cmd, cwd),
+                            f"cross-segment GIT_DIR export must fail-deny a YOLO merge: {cmd}")
+
+    def test_cross_segment_marking_is_one_directional(self):
+        # A dir change AFTER the merge cannot retroactively move it — the merge still targets the
+        # payload cwd (non-default here), so it must stay allowed. Pins the in-order semantics.
+        target, cwd = self._protected(), self._innocent()
+        self.assertTrue(self._deferred(f"git merge --no-ff topic && cd {target}", cwd))
+        # And a preceding dir change before a NON-fenced command manufactures no deny.
+        self.assertTrue(self._deferred(f"cd {target} && git status", cwd))
+        self.assertTrue(self._deferred(f"export GIT_DIR={target}/.git; git status", cwd))
+        # A non-selector export must not trip the flag either.
+        self.assertTrue(self._deferred("export GIT_PAGER=cat; git merge --no-ff topic", cwd))
+
 
 class TestLauncherPrefix(unittest.TestCase):
     """Exec-prefix launchers (`env`/`sudo`/`nice`/`timeout`/…) run their argument list as a new

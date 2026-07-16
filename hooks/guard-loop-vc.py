@@ -127,6 +127,15 @@ _GIT_VALUE_OPTS = {
 # they are not modeled — their presence marks the segment's repo selection UNMODELED, which
 # _yolo_merge_reason turns into a fail-deny. (GIT_NAMESPACE etc. don't move HEAD; not selectors.)
 _GIT_ENV_SELECTORS = {"GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR"}
+# Shell builtins that CHANGE THE WORKING DIRECTORY of every LATER segment (`cd /p && git merge
+# --no-ff t` merges in /p while branch detection would read the payload cwd) — the cross-segment
+# sibling of the launcher chdir options above. Same posture: not modeled; a preceding segment headed
+# by one of these marks later segments' repo selection UNMODELED → YOLO merge fail-deny.
+_DIR_BUILTINS = {"cd", "pushd", "popd"}
+# Builtins that can EXPORT a GIT_DIR-family variable into every later segment
+# (`export GIT_DIR=/p/.git; git merge --no-ff t`) — the cross-segment sibling of the same-segment
+# `GIT_DIR=x git merge` prefix _classify already flags.
+_EXPORT_BUILTINS = {"export", "declare", "typeset", "local"}
 # gh options that consume the following token as their value and may precede the subcommand
 # path, so a flag value isn't mistaken for `pr`/`merge`: e.g. `gh -R owner/repo pr merge`.
 _GH_VALUE_OPTS = {"-R", "--repo", "--hostname"}
@@ -426,15 +435,16 @@ def _yolo_merge_reason(selectors: list[str], rest: list[str], unmodeled_selector
     confirmed NON-default branch. Any uncertainty about the current/default branch fails DENY —
     including `unmodeled_selector`: the command carries a repository/directory selector spelling the
     guard did not model (attached `-C<path>`, a `GIT_DIR`/`GIT_WORK_TREE`/`GIT_COMMON_DIR` env
-    assignment, a launcher chdir option), so branch detection would interrogate the WRONG repo (P0.14).
+    assignment, a launcher chdir option, or a preceding `cd`/`pushd`/`export` segment), so branch
+    detection would interrogate the WRONG repo (P0.14).
     """
     if "--no-ff" not in rest:
         return "fast-forward merge in YOLO (only --no-ff merges are allowed, so the merge is revertable)"
     if unmodeled_selector:
         return (
             "merge behind a repository/directory selector the guard does not model "
-            "(attached -C, GIT_DIR-family environment variable, or launcher chdir option) — "
-            "branch detection can't be trusted (fail-deny)"
+            "(attached -C, GIT_DIR-family environment variable, launcher chdir option, or a "
+            "preceding cd/pushd/export segment) — branch detection can't be trusted (fail-deny)"
         )
     current = _current_branch(selectors)
     if not current or current == "HEAD":
@@ -746,6 +756,35 @@ def split_segments(command: str) -> list[str]:
     return [s for s in (seg.strip() for seg in segments) if s]
 
 
+def _segment_changes_repo_context(tokens: list[str]) -> bool:
+    """True iff this segment relocates the repo context of LATER segments (P0.14, cross-segment).
+
+    Three shapes, all fail-deny-marked rather than modeled: a directory-changing builtin (`cd`,
+    `pushd`, `popd` — also behind the `builtin`/`command` prefixes bash accepts); an export-style
+    builtin naming a GIT_DIR-family variable (`export GIT_DIR=/p/.git`, `declare -x GIT_DIR=…`,
+    bare `export GIT_DIR` promoting an earlier assignment); and an assignments-only segment that
+    assigns one (`GIT_DIR=/p/.git; git merge …` — only live if exported earlier/later, but the
+    conservative flag costs nothing real). Marking is one-directional: segments BEFORE this one are
+    unaffected (`git merge …; cd /p` merges in the payload cwd, so it stays modeled).
+    """
+    if not tokens:
+        return False
+    head = tokens[0]
+    if head in ("builtin", "command") and len(tokens) > 1:
+        head = tokens[1]
+    if head in _DIR_BUILTINS:
+        return True
+    if tokens[0] in _EXPORT_BUILTINS and any(
+        t.partition("=")[0] in _GIT_ENV_SELECTORS for t in tokens[1:]
+    ):
+        return True
+    if all(_ENV_ASSIGN.match(t) for t in tokens) and any(
+        t.partition("=")[0] in _GIT_ENV_SELECTORS for t in tokens
+    ):
+        return True
+    return False
+
+
 def _dangerous(
     command: str, yolo: bool, cwd: str | None, _depth: int = 0, _unmodeled_sel: bool = False
 ) -> str | None:
@@ -753,15 +792,23 @@ def _dangerous(
 
     `_depth` and `_unmodeled_sel` are threaded from a shell `-c` re-scan (`bash -c "git push"`) so a
     nested-shell chain shares the launcher recursion cap, and an unmodeled directory selector seen
-    OUTSIDE the shell (`env -C /p bash -c "git merge --no-ff t"`) still fail-denies the inner merge."""
+    OUTSIDE the shell (`env -C /p bash -c "git merge --no-ff t"`) still fail-denies the inner merge.
+
+    Segments are scanned IN ORDER, carrying the unmodeled-selector flag forward: a segment that
+    relocates the repo context (`cd /p`, `export GIT_DIR=…`) marks every LATER segment, so
+    `cd /p && git merge --no-ff t` fail-denies the merge in YOLO instead of evaluating the payload
+    cwd's branches (P0.14, cross-segment)."""
+    unmodeled_sel = _unmodeled_sel
     for segment in split_segments(command):
         try:
             tokens = shlex.split(segment)
         except ValueError:
             tokens = segment.split()  # unbalanced quotes etc. → best-effort
-        reason = _classify(tokens, yolo, cwd, _depth, _unmodeled_sel)
+        reason = _classify(tokens, yolo, cwd, _depth, unmodeled_sel)
         if reason:
             return reason
+        if not unmodeled_sel and _segment_changes_repo_context(tokens):
+            unmodeled_sel = True
     return None
 
 
