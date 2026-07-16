@@ -173,6 +173,105 @@ class TestCheckOracleFrozen(unittest.TestCase):
         self._commit("feature.py", "x = 7\n")
         self.assertEqual(_run(self.d, "main", "python3 untracked_oracle.py"), 1)
 
+    def test_not_frozen_when_oracle_renamed(self):
+        # R-04 family: a rename is a delete at the old path — the verified-by still names the old
+        # path, which was tracked at base and is now gone → tamper, fail-deny.
+        self.g("mv", "tests/test_oracle.py", "tests/renamed_oracle.py")
+        self.g("commit", "-m", "rename oracle")
+        self.assertEqual(_run(self.d, "main", self.VB), 1)
+
+
+class TestSymlinkSurface(unittest.TestCase):
+    """R-04: the frozen surface is lexical path + every chain hop + resolved target — a retarget of
+    ANY of them (committed or not) must fail-deny, while an untouched symlinked oracle stays FROZEN."""
+
+    def setUp(self) -> None:
+        self.d = tempfile.mkdtemp(prefix="oraclefrozen-sym-")
+        self.addCleanup(shutil.rmtree, self.d, ignore_errors=True)
+
+        def g(*args: str) -> None:
+            subprocess.run(["git", "-C", self.d, *args], check=True, capture_output=True, text=True)
+
+        self.g = g
+        g("init", "-b", "main")
+        g("config", "user.email", "t@t.t")
+        g("config", "user.name", "t")
+        tests = Path(self.d) / "tests"
+        tests.mkdir()
+        (tests / "strong_oracle.py").write_text("def test_ok():\n    assert False  # strong\n")
+        (tests / "weak_oracle.py").write_text("def test_ok():\n    assert True  # weak\n")
+        os.symlink("strong_oracle.py", tests / "test_oracle.py")  # link → strong
+        g("add", "-A")
+        g("commit", "-m", "base: link -> strong, weak available")
+        g("checkout", "-b", "loop/telos")
+
+    VB = "python3 tests/test_oracle.py"
+
+    def _retarget(self, link: str, new_target: str) -> None:
+        p = Path(self.d) / link
+        os.remove(p)
+        os.symlink(new_target, p)
+
+    def test_frozen_symlinked_oracle_untouched(self):
+        # control: surface now includes the link itself — must NOT false-deny when nothing changed
+        (Path(self.d) / "feature.py").write_text("x = 1\n")
+        self.g("add", "-A")
+        self.g("commit", "-m", "feature only")
+        self.assertEqual(_run(self.d, "main", self.VB), 0)
+
+    def test_not_frozen_committed_retarget(self):
+        # THE R-04 REPRO: repoint the tracked link at a weaker tracked test and COMMIT. The diff
+        # names the link; pre-fix the candidate set held only the new target → false FROZEN.
+        self._retarget("tests/test_oracle.py", "weak_oracle.py")
+        self.g("add", "-A")
+        self.g("commit", "-m", "retarget link")
+        self.assertEqual(_run(self.d, "main", self.VB), 1)
+
+    def test_not_frozen_uncommitted_retarget(self):
+        # the same retarget left UNCOMMITTED in the worktree — invisible to base...HEAD, caught by
+        # the current-vs-base type/link-target comparison
+        self._retarget("tests/test_oracle.py", "weak_oracle.py")
+        self.assertEqual(_run(self.d, "main", self.VB), 1)
+
+    def test_not_frozen_uncommitted_file_to_symlink_swap(self):
+        # a regular oracle file swapped for a link to weaker bytes, uncommitted → type change → deny
+        p = Path(self.d) / "tests" / "strong_oracle.py"
+        os.remove(p)
+        os.symlink("weak_oracle.py", p)
+        self.assertEqual(_run(self.d, "main", "python3 tests/strong_oracle.py"), 1)
+
+    def test_not_frozen_intermediate_chain_hop_retargeted(self):
+        # chain link_a -> link_b -> strong; retarget the MIDDLE hop to weak and commit. The diff
+        # names link_b only — the surface must include every hop, not just lexical + resolved.
+        tests = Path(self.d) / "tests"
+        os.symlink("test_oracle.py", tests / "entry_oracle.py")  # entry -> link -> strong
+        self.g("add", "-A")
+        self.g("commit", "-m", "add entry link")
+        # re-fork so the entry link is part of base
+        self.g("checkout", "main")
+        self.g("merge", "--ff-only", "loop/telos")
+        self.g("checkout", "loop/telos")
+        self._retarget("tests/test_oracle.py", "weak_oracle.py")  # middle hop
+        self.g("add", "-A")
+        self.g("commit", "-m", "retarget middle hop")
+        self.assertEqual(_run(self.d, "main", "python3 tests/entry_oracle.py"), 1)
+
+    def test_not_frozen_absolute_path_retarget(self):
+        # absolute-path verified-by naming the link must not dodge the surface normalization
+        self._retarget("tests/test_oracle.py", "weak_oracle.py")
+        self.g("add", "-A")
+        self.g("commit", "-m", "retarget link")
+        self.assertEqual(_run(self.d, "main", f"python3 {self.d}/tests/test_oracle.py"), 1)
+
+    def test_not_frozen_multi_file_one_link_retargeted(self):
+        # multi-file witness: one plain file untouched, one link retargeted → the survivors must not
+        # vouch for the retargeted member
+        self._retarget("tests/test_oracle.py", "weak_oracle.py")
+        self.g("add", "-A")
+        self.g("commit", "-m", "retarget link")
+        vb = "python3 tests/weak_oracle.py tests/test_oracle.py"
+        self.assertEqual(_run(self.d, "main", vb), 1)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
