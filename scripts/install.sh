@@ -53,51 +53,11 @@ for hook in guard-default-branch.py guard-loop-vc.py guard-one-unit.py guard-sel
   link "$REPO/hooks/$hook" "$HOOKS_DIR/$hook"
 done
 
-# --- settings.json hook registration (idempotent merge) --------------------
-python3 - <<'PY' || echo "settings.json registration skipped (python3 unavailable?)" >&2
-import json
-import sys
-from pathlib import Path
-
-p = Path.home() / ".claude" / "settings.json"
-try:
-    data = json.loads(p.read_text()) if p.exists() else {}
-except (OSError, ValueError):
-    print("settings.json unreadable — skipping hook registration", file=sys.stderr)
-    raise SystemExit(0)
-
-# An existing settings.json can carry an unexpected shape (`"hooks": null`, a non-list PreToolUse).
-# setdefault only fills an ABSENT key, so a present-but-wrong-typed one would crash .setdefault/.append
-# with a confusing "python3 unavailable?" message. Validate the shape and skip cleanly instead — never
-# corrupt or crash on someone else's config.
-if not isinstance(data, dict) or not isinstance(data.get("hooks", {}), dict) \
-        or not isinstance(data.get("hooks", {}).get("PreToolUse", []), list):
-    print("settings.json has an unexpected hooks shape — skipping hook registration (resolve by hand)",
-          file=sys.stderr)
-    raise SystemExit(0)
-pre = data.setdefault("hooks", {}).setdefault("PreToolUse", [])
-changed = False
-WANTED = [
-    ("guard-default-branch.py", "Edit|Write|NotebookEdit"),
-    ("guard-loop-vc.py", "Bash"),
-    ("guard-one-unit.py", "*"),
-    ("guard-self-integrity.py", "Bash|Edit|Write|NotebookEdit"),
-]
-for script, matcher in WANTED:
-    if any(script in h.get("command", "") for e in pre for h in e.get("hooks", [])):
-        print(f"ok      {script} already registered")
-        continue
-    pre.append({"matcher": matcher,
-                "hooks": [{"type": "command",
-                           "command": f"python3 ~/.claude/hooks/{script}",
-                           "timeout": 10}]})
-    changed = True
-    print(f"added   {script} (matcher: {matcher})")
-
-if changed:
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps(data, indent=2) + "\n")
-    print(f"wrote   {p}")
-PY
+# --- settings.json hook registration (idempotent, exact-tuple merge) -------
+# The merge is a tested module (R-07): full nested validation before reading, ownership by parsed
+# command target (never a substring), semantic matcher comparison, and repair of stale/mismatched
+# Excubitor-owned entries without touching unrelated user entries.
+python3 "$REPO/scripts/install_settings.py" \
+  || echo "settings.json registration skipped (python3 unavailable?)" >&2
 
 echo "done — restart or reload Claude Code sessions to pick up newly linked skills"

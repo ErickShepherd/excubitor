@@ -22,7 +22,8 @@ import unittest
 from pathlib import Path
 
 HOOK = Path(__file__).resolve().parents[1] / "guard-default-branch.py"
-INSTALL_SH = Path(__file__).resolve().parents[2] / "scripts" / "install.sh"
+# The registration tuples live in the tested installer module (R-07 moved them out of install.sh).
+INSTALL_SETTINGS = Path(__file__).resolve().parents[2] / "scripts" / "install_settings.py"
 
 
 def _git(args: list[str], cwd: str) -> None:
@@ -205,9 +206,9 @@ class TestR06RegistrationBoundary(unittest.TestCase):
     blocked), the boundary strengthened and those documents must be rewritten first."""
 
     def _registered_matcher(self) -> str:
-        text = INSTALL_SH.read_text(encoding="utf-8")
+        text = INSTALL_SETTINGS.read_text(encoding="utf-8")
         m = re.search(r'\("guard-default-branch\.py",\s*"([^"]+)"\)', text)
-        assert m is not None, "install.sh must register guard-default-branch.py"
+        assert m is not None, "install_settings.py must register guard-default-branch.py"
         return m.group(1)
 
     def test_registered_matcher_is_direct_file_edit_tools_only(self):
