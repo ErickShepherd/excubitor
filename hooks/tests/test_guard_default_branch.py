@@ -125,5 +125,75 @@ class TestGuardDefaultBranch(unittest.TestCase):
             self.assertEqual((rc, out.strip()), (0, ""), f"non-object payload must defer: {payload!r}")
 
 
+class TestGuardSymlinkLaundering(unittest.TestCase):
+    """R-03: a symlink must not launder an Edit/Write into a protected repo. The guard evaluates BOTH
+    the logical target's container and the realpath-resolved container; a protected hit in EITHER denies."""
+
+    def _two_repos(self, td: str) -> "tuple[Path, Path]":
+        """A feature-branch repo and a separate protected (main) repo under `td`."""
+        feat = Path(td, "feature")
+        prot = Path(td, "protected")
+        feat.mkdir()
+        prot.mkdir()
+        _repo(str(feat), branch="main")
+        _git(["switch", "-qc", "feature/x"], str(feat))
+        _repo(str(prot), branch="main")
+        return feat, prot
+
+    def test_file_symlink_into_protected_repo_denied(self):
+        # /feature/link.txt -> /protected/victim.txt; /feature is on a feature branch, /protected on main.
+        # Pre-fix the logical container (/feature) was the only thing inspected → ALLOWED. The realpath
+        # lands in /protected (default branch) → must DENY.
+        with tempfile.TemporaryDirectory() as td:
+            feat, prot = self._two_repos(td)
+            victim = Path(prot, "victim.txt")
+            victim.write_text("x")
+            link = Path(feat, "link.txt")
+            os.symlink(victim, link)
+            rc, out = _run({"tool_input": {"file_path": str(link)}, "cwd": str(feat)})
+            self.assertEqual(rc, 0)
+            self.assertTrue(_denied(out), "a symlink resolving into a protected repo must be denied")
+
+    def test_symlinked_dir_new_file_into_protected_denied(self):
+        # A Write creating a NEW file through a symlinked directory: /feature/dir -> /protected/sub.
+        # realpath resolves the existing symlink component even though the leaf file does not exist yet.
+        with tempfile.TemporaryDirectory() as td:
+            feat, prot = self._two_repos(td)
+            sub = Path(prot, "sub")
+            sub.mkdir()
+            linkdir = Path(feat, "dir")
+            os.symlink(sub, linkdir)
+            newfile = Path(linkdir, "new.txt")  # not created yet
+            rc, out = _run({"tool_input": {"file_path": str(newfile)}, "cwd": str(feat)})
+            self.assertEqual(rc, 0)
+            self.assertTrue(_denied(out), "a new file through a symlinked dir into a protected repo must deny")
+
+    def test_ordinary_feature_file_still_defers(self):
+        # No symlink: an ordinary edit on a feature branch must still DEFER (the common path is unchanged).
+        with tempfile.TemporaryDirectory() as td:
+            feat, _ = self._two_repos(td)
+            rc, out = _run({"tool_input": {"file_path": str(Path(feat, "real.py"))}, "cwd": str(feat)})
+            self.assertEqual((rc, out.strip()), (0, ""), "an ordinary feature-branch edit must defer")
+
+    def test_dangling_symlink_fails_open(self):
+        # A symlink whose target does not exist must not crash and must not false-deny (feature branch).
+        with tempfile.TemporaryDirectory() as td:
+            feat, _ = self._two_repos(td)
+            link = Path(feat, "dangling")
+            os.symlink(Path(td, "nonexistent", "x"), link)
+            rc, out = _run({"tool_input": {"file_path": str(link)}, "cwd": str(feat)})
+            self.assertEqual(rc, 0, "a dangling symlink must not crash the guard")
+            self.assertFalse(_denied(out))
+
+    def test_nul_in_target_fails_open(self):
+        # An embedded NUL makes os.stat/realpath raise ValueError; the guard must fail OPEN, never crash —
+        # even though the (malformed) path points under the protected repo.
+        with tempfile.TemporaryDirectory() as td:
+            feat, prot = self._two_repos(td)
+            rc, out = _run({"tool_input": {"file_path": str(prot) + "/\x00bad"}, "cwd": str(feat)})
+            self.assertEqual(rc, 0, "malformed NUL target must fail open, not crash")
+            self.assertFalse(_denied(out))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
