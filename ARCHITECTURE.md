@@ -84,7 +84,7 @@ hooks/                    # the guards + _denial_log.py telemetry helper + tests
                           # no imports across components — the helper is within-component)
 skills/<name>/SKILL.md    # open Agent Skills format: frontmatter trigger + instructions
 skills/<name>/scripts/    # executable helpers (ralph-loop's oracle/suite/suspend checks)
-skills/<name>/tests/      # per-component pytest suites (194 total)
+skills/<name>/tests/      # per-component pytest suites
 docs/design/              # the deliberation records behind each mechanism
 docs/telos/               # this repo's own claims, audited by its own audit-telos
 scripts/install.sh        # symlinks + idempotent settings.json hook registration

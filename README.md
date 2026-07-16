@@ -17,7 +17,8 @@ falsifiable intent-record system for letting an LLM agent work unattended withou
 bless its own work. The watcher that stays awake while the loop runs and nobody else is looking.
 
 Stdlib-only Python hooks + [Agent Skills](https://code.claude.com/docs/en/skills)-format capability
-packets, with 194 tests and the design rationale that produced them. Built for and battle-tested
+packets, each mechanism pinned by executed regressions and shipped with the design rationale that
+produced it. Built for and battle-tested
 with Claude Code; the VC-guard's decision core is runtime-neutral — a second, non-Claude-Code adapter
 drives the *same* code with an equivalence test to prove it ([`SPEC.md`](SPEC.md)), so its portability
 to any runtime that can intercept tool calls is demonstrated, not just asserted.
@@ -101,17 +102,18 @@ must never discharge its own claims).
 ## What's in the box
 
 ```
-hooks/                     # 4 stdlib-only PreToolUse guards + denial-telemetry log + 62 tests
+hooks/                     # 4 stdlib-only PreToolUse guards + denial-telemetry log + tests
 skills/
   telos/                   # intent-record authoring (write side)
-  audit-telos/             # conformance audit (read side) + strict parser + 73 tests
+  audit-telos/             # conformance audit (read side) + strict parser + tests
   telos-loop/              # telos-anchored unattended loop recipe
-  ralph-loop/              # charter-driven loop + oracle-freeze/suspend scripts + 44 tests
-  leak-guard/              # private→public boundary guard + leak_check.py + 17 tests
-runtime/                   # runtime-neutral adapter (portability, proven) + 8 tests — see SPEC.md
-docs/design/               # 10 design/deliberation records
+  ralph-loop/              # charter-driven loop + oracle freeze/run + suspend scripts + tests
+  leak-guard/              # private→public boundary guard + leak_check.py + tests
+runtime/                   # runtime-neutral adapter (portability, proven) + tests — see SPEC.md
+docs/design/               # design/deliberation records
 docs/telos/                # this repo's own intent record (audited by its own tooling)
 scripts/install.sh         # symlink skills+hooks into ~/.claude, register the hooks
+scripts/install_settings.py # tested exact-tuple settings.json registration (used by install.sh)
 scripts/demo.sh            # 60-second zero-install crash test (drives the real guard)
 ```
 
@@ -155,13 +157,13 @@ Interactive work is unaffected until you explicitly say "I'm looping."
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install pytest
-.venv/bin/pytest -q        # 194 tests: 52 hooks, 73 audit-telos, 44 ralph-loop, 17 leak-guard, 8 runtime
-                           # (191 pass; 3 audit-telos ledger round-trip tests skip — they
-                           #  need a private sibling module that did not ship, see the extraction notes)
+.venv/bin/pytest -q        # the full suite: hooks, installer, audit-telos, ralph-loop, leak-guard,
+                           # runtime (a few audit-telos ledger round-trip tests skip — they need a
+                           #  private sibling module that did not ship, see the extraction notes)
 ```
 
 CI runs the same suite on a stock GitHub runner (`.github/workflows/ci.yml`), plus this repo's
-own telos audit — the eleven claims in [`docs/telos/app.md`](docs/telos/app.md) must all resolve
+own telos audit — every claim in [`docs/telos/app.md`](docs/telos/app.md) must resolve
 DISCHARGED at the `witness` evidence tier, i.e. every safety claim this README makes about the
 guards is re-proven by an executed test on every CI run.
 
