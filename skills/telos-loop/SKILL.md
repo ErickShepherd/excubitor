@@ -31,7 +31,7 @@ section.
 Set the seatbelt **before** launching the session (`CLAUDE_LOOP_GUARD=1 claude`, or `=yolo` for the
 verifiable-autonomy posture). Everything else — preconditions, the per-iteration loop body, the claim
 priority order (`DRIFTED` > `UNMET`/`TODO`/`none` > failing-witness), the discharge split, stop-and-surface,
-and the YOLO oracle gate (`check_oracle_frozen.py`) — is in
+and the YOLO oracle gate (`run_frozen_oracle.py`; `check_oracle_frozen.py` is the check-only diagnostic) — is in
 [`ralph-loop/SKILL.md`](../ralph-loop/SKILL.md). Read that.
 
 ## Why an alias and not a duplicate
