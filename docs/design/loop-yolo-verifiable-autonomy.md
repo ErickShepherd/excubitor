@@ -209,13 +209,15 @@ signal" was therefore not yet mechanically true: the *files* were frozen, but th
 `run_frozen_oracle.py` now binds the permit on four axes before the freeze envelope runs: the
 command must appear as a whole authored unit (a whole line or complete `verify:` suffix, never a
 substring) in a tracked anchor file's **base-tree blob** (`--anchor`, with `--base` pinned to the
-repo's default branch — which, under the armed loop guard, is the one ref the loop cannot move: the
-VC fence denies both a merge into it and the direct ref moves that would repoint it, `branch
--f/-m/-M/-C` / `update-ref` / `switch -C` / `checkout -B` / `worktree add -B`); the executable must
-resolve on a fixed trusted PATH and be either tracked-in-repo-and-frozen or non-user-writable outside
-the repo (including a resolved target that lands outside the repo); known verdict-affecting companions
-(conftest.py, root runner config, `-m` sys.path[0] shadowing across every `-m` spelling) join the
-frozen surface; and the witness runs under a sanitized environment.
+**push-protected** default branch — `refs/remotes/origin/<name>`, the one ref a loop cannot move
+without a push, which the VC fence denies; a *local* default ref is loop-movable through verbs
+outside the porcelain fence — `checkout <default> && reset --soft`, `rebase`, `commit` — so a
+local-only repo has no verifiable baseline and gets no permit, the correct fail-deny rather than
+security theater over a movable ref); the executable must resolve on a fixed trusted PATH and be
+either tracked-in-repo-and-frozen or non-user-writable outside the repo (including a resolved target
+that lands outside the repo); known verdict-affecting companions (conftest.py, root runner config,
+`-m` sys.path[0] shadowing across every `-m` spelling) join the frozen surface; and the witness runs
+under a sanitized environment.
 Anything unbindable **refuses** (exit 10). The gate's honest claim is correspondingly narrowed: it
 binds **authorship and bytes, not semantics** — a baseline-authored vacuous or delegating oracle
 remains the DoD author's responsibility (KNOWN-BYPASSES.md), and interpreter site-packages /

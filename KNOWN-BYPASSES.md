@@ -220,9 +220,11 @@ not see is out of scope. Documented, not chased. See `guard-default-branch.py::_
 `run_frozen_oracle.py` (the YOLO permit-to-act gate) refuses a caller-supplied witness command (it
 must appear in the anchor file's **base-tree blob** as a **whole authored unit** — a whole line or a
 complete `verify:` suffix, so a *truncation* of an authored command earns no permit either — with
-`--base` pinned to the default branch), refuses an untrusted executable (untracked in-repo — the `.venv/bin/python` class — or
-user-writable outside the repo), and binds conftest/runner-config/module-shadow companions into the
-frozen surface, executing under a sanitized environment. What it deliberately does **not** verify:
+`--base` pinned to the **push-protected** default `refs/remotes/origin/<name>`), refuses an untrusted
+executable (untracked in-repo — the `.venv/bin/python` class — or user-writable outside the repo,
+including a resolved symlink target that lands outside the repo), and binds
+conftest/runner-config/module-shadow companions into the frozen surface, executing under a sanitized
+environment. What it deliberately does **not** verify:
 
 - **A baseline-authored command's semantics.** A DoD author who writes `/bin/true <file>` (vacuous),
   or a launcher/delegating prefix (`env …`, a trusted wrapper), authored that oracle — the gate binds
@@ -233,6 +235,15 @@ frozen surface, executing under a sanitized environment. What it deliberately do
   root-owned interpreter, and sys.path shadowing from a directly-executed script's own directory,
   are outside the frozen surface (the `-m` repo-root shadow *is* checked, across every `-m` spelling —
   spaced, attached, or clustered).
+- **A local-only default branch as a baseline.** The pin requires a push-protected anchor
+  (`refs/remotes/origin/HEAD`): a *local* `refs/heads/<default>` is loop-movable through verbs OUTSIDE
+  the porcelain fence — `git checkout <default> && git reset --soft <loop-sha>`, `rebase`, `commit`,
+  `filter-branch` — and chasing those is the deny-set-completeness race the guard refuses. So rather
+  than pin to a movable ref, a repo with no `origin/HEAD` **fail-denies** (no permit); the residual is
+  therefore "YOLO requires a remote whose origin/HEAD names the default", not a forgeable baseline.
+  A `git fetch <path> +<src>:<default>` refspec can still move the *remote-tracking* ref locally — the
+  driver should launch the loop without fetch/push credentials (the designated backstop). Pinned in
+  `skills/ralph-loop/tests/test_run_frozen_oracle.py::TestBasePinRequiresPushProtectedAnchor`.
 - **The gate's own invocation.** A misbehaving loop can still skip the gate or run it through a
   forged interpreter — the recipe-level honest limit that has always applied (the guard hooks cannot
   know which files are "the oracle"). YOLO narrows the trust placed in the loop; it does not

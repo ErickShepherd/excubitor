@@ -118,6 +118,14 @@ class _RepoCase(unittest.TestCase):
         )
         g("add", "-A")
         g("commit", "-m", "base")
+        # A PUSH-PROTECTED default anchor: mirror the base commit into refs/remotes/origin/main and
+        # point origin/HEAD at it (no real remote needed). The gate pins --base to this remote ref
+        # (round-5 fix), which a loop cannot move without a push; a local-only default with no such
+        # anchor fail-denies (see TestBasePinRequiresPushProtectedAnchor).
+        sha = subprocess.run(["git", "-C", self.d, "rev-parse", "HEAD"],
+                             capture_output=True, text=True).stdout.strip()
+        g("update-ref", "refs/remotes/origin/main", sha)
+        g("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
         g("checkout", "-b", "loop/telos")
 
 
@@ -203,6 +211,11 @@ class TestRunFrozenOracle(_RepoCase):
         self.g("commit", "-m", "add orphan oracle")
         self.g("checkout", "main")
         self.g("merge", "--ff-only", "loop/telos")
+        # advance the PUSH-PROTECTED anchor too, so --base (origin/main) tracks the file and the base
+        # pin passes — leaving the EXECUTABLE binding as the refusal under test, not the base pin.
+        sha = subprocess.run(["git", "-C", self.d, "rev-parse", "HEAD"],
+                             capture_output=True, text=True).stdout.strip()
+        self.g("update-ref", "refs/remotes/origin/main", sha)
         self.g("checkout", "loop/telos")
         p = _run(self.d, "main", "no-such-interpreter tests/orphan.py")
         self.assertEqual(p.returncode, REFUSED)
@@ -314,7 +327,7 @@ class TestPermitBinding(_RepoCase):
         self.g("commit", "-m", "loop work")
         p = _run(self.d, "HEAD", "python3 tests/witness_ok.py")
         self.assertEqual(p.returncode, REFUSED, f"stdout={p.stdout} stderr={p.stderr}")
-        self.assertIn("default branch", p.stderr)
+        self.assertIn("push-protected default", p.stderr)
 
     def test_untracked_conftest_refuses(self):
         # conftest.py is auto-collected by pytest and changes verdicts without appearing in the
@@ -373,6 +386,68 @@ class TestPermitBinding(_RepoCase):
         # test starts refusing, the boundary strengthened and the docs must be rewritten.
         p = _run(self.d, "main", "/bin/true tests/witness_ok.py")
         self.assertEqual(p.returncode, GREEN, f"stdout={p.stdout} stderr={p.stderr}")
+
+
+class TestBasePinRequiresPushProtectedAnchor(unittest.TestCase):
+    """Round-5 review: the base pin must anchor to a PUSH-PROTECTED ref (refs/remotes/origin/<name>),
+    never a loop-movable local ref. A local-only default has no such anchor and fail-denies; and even
+    with an anchor, a loop that moves LOCAL main (via a verb outside the porcelain fence — the exact
+    `checkout <default> && reset --soft` forge) no longer forges GREEN, because --base is compared to
+    the REMOTE ref, which the moved local ref no longer matches."""
+
+    def setUp(self) -> None:
+        self.d = tempfile.mkdtemp(prefix="frozenrun-basepin-")
+        self.addCleanup(shutil.rmtree, self.d, ignore_errors=True)
+
+        def g(*args: str) -> str:
+            return subprocess.run(["git", "-C", self.d, *args],
+                                  check=True, capture_output=True, text=True).stdout.strip()
+
+        self.g = g
+        g("init", "-b", "main")
+        g("config", "user.email", "t@t.t")
+        g("config", "user.name", "t")
+        Path(self.d, "PLAN.md").write_text("verify: /bin/true PLAN.md\n")
+        g("add", "-A")
+        g("commit", "-m", "base")
+        self.base_sha = g("rev-parse", "HEAD")
+        g("checkout", "-b", "loop/x")
+
+    def _add_origin(self) -> None:
+        self.g("update-ref", "refs/remotes/origin/main", self.base_sha)
+        self.g("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
+
+    def test_local_only_default_fail_denies(self):
+        # No origin/HEAD: the default is backed only by a loop-movable local ref → REFUSED, never a
+        # permit over an unprovable baseline.
+        p = _run(self.d, "main", "/bin/true PLAN.md")
+        self.assertEqual(p.returncode, REFUSED, f"stdout={p.stdout} stderr={p.stderr}")
+        self.assertIn("push-protected anchor", p.stderr)
+
+    def test_push_protected_default_is_green(self):
+        # With origin/HEAD mirroring the base, --base main resolves to the push-protected anchor → the
+        # baseline-authored vacuous oracle passes (authorship residual), proving the anchor path works.
+        self._add_origin()
+        p = _run(self.d, "main", "/bin/true PLAN.md")
+        self.assertEqual(p.returncode, GREEN, f"stdout={p.stdout} stderr={p.stderr}")
+
+    def test_loop_moved_local_main_no_longer_forges(self):
+        # THE round-5 forge: the loop authors a weaker PLAN.md on its branch, then moves LOCAL main
+        # onto it via `checkout main && reset --soft loop/x` (verbs OUTSIDE the porcelain fence). The
+        # base pin compares --base main to the REMOTE ref (still at the honest base), so the moved
+        # local ref mismatches → REFUSED, not the forged GREEN the local-first resolution once gave.
+        self._add_origin()
+        Path(self.d, "PLAN.md").write_text("verify: /bin/true loot.py\n")  # weaker, loop-authored
+        Path(self.d, "loot.py").write_text("x = 1\n")
+        self.g("add", "-A")
+        self.g("commit", "-m", "loop authors a weaker oracle")
+        loop_sha = self.g("rev-parse", "HEAD")
+        self.g("checkout", "main")
+        self.g("reset", "--soft", loop_sha)  # local main now points at loop-authored state
+        self.g("checkout", "loop/x")
+        p = _run(self.d, "main", "/bin/true loot.py")
+        self.assertEqual(p.returncode, REFUSED, f"stdout={p.stdout} stderr={p.stderr}")
+        self.assertIn("push-protected default", p.stderr)
 
 
 if __name__ == "__main__":

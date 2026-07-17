@@ -109,51 +109,54 @@ def _toplevel(repo: str) -> str | None:
 
 
 def _default_branch_oid(repo: str) -> tuple[str | None, str | None]:
-    """(default-branch name, its commit OID) — mirrors the guards' resolution; None on ambiguity."""
+    """(default-branch name, its PUSH-PROTECTED commit OID) or (None, None) if there is no
+    push-protected anchor.
+
+    The only ref a loop provably cannot move is a remote-tracking one — moving it needs a push, which
+    guard-loop-vc.py denies in both modes. So the immutable baseline is `refs/remotes/origin/HEAD` →
+    `refs/remotes/origin/<name>`, and the pinned OID is that REMOTE ref's, never the local
+    `refs/heads/<name>`. A local-only default (no origin/HEAD) has NO push-protected anchor: a loop
+    can move `refs/heads/<name>` through verbs OUTSIDE the porcelain fence — `git checkout <default>
+    && git reset --soft <loop-sha>`, `rebase`, `commit`, `filter-branch` — none of which the fence
+    covers (chasing them is the deny-set-completeness race the guard refuses). Rather than pretend a
+    movable ref is immutable, this returns (None, None) there and the caller fail-denies (round-5
+    review). (`^{commit}` peels an annotated-tag HEAD; the name keeps slashes via removeprefix.)"""
     ok, out = _git_text(repo, "symbolic-ref", "--quiet", "refs/remotes/origin/HEAD")
-    name: str | None = None
-    candidates: list[str] = []
-    if ok and out.strip().startswith("refs/remotes/origin/"):
-        name = out.strip().removeprefix("refs/remotes/origin/")
-        candidates = [name, f"origin/{name}"]
-    else:
-        has_main = _git_text(repo, "show-ref", "--verify", "--quiet", "refs/heads/main")[0]
-        has_master = _git_text(repo, "show-ref", "--verify", "--quiet", "refs/heads/master")[0]
-        if has_main and not has_master:
-            name = "main"
-        elif has_master and not has_main:
-            name = "master"
-        elif has_main and has_master:
-            ok2, cfg = _git_text(repo, "config", "init.defaultBranch")
-            if ok2 and cfg.strip() in ("main", "master"):
-                name = cfg.strip()
-        candidates = [name] if name else []
-    for c in candidates:
-        ok, oid = _git_text(repo, "rev-parse", "--verify", f"{c}^{{commit}}")
-        if ok and oid.strip():
-            return name, oid.strip()
+    if not (ok and out.strip().startswith("refs/remotes/origin/")):
+        return None, None
+    name = out.strip().removeprefix("refs/remotes/origin/")
+    if not name:
+        return None, None
+    ok2, oid = _git_text(repo, "rev-parse", "--verify", f"refs/remotes/origin/{name}^{{commit}}")
+    if ok2 and oid.strip():
+        return name, oid.strip()
     return None, None
 
 
 def _base_pin_refusal(repo: str, base: str) -> str | None:
-    """REFUSE unless `base` resolves to the repo's default branch tip. Under an armed loop
-    (CLAUDE_LOOP_GUARD=yolo — the only context in which this gate grants a permit) guard-loop-vc.py
-    denies both a merge into the default branch AND the porcelain-bypass ref moves that would
-    repoint it (`branch -f/-m/-M/-C`, `update-ref`, `switch -C`, `checkout -B`, `worktree add -B`,
-    symbolic-ref writes), so the default branch is the baseline the loop cannot author. A loop-chosen
-    base (`HEAD`, its own branch, a raw commit) would instead anchor the gate to loop-authored state.
-    HONEST LIMIT: immutability rests on that guard being armed — it is defense-in-depth with the VC
-    fence, not independent of it; a `git fetch` refspec moving a local ref is a guard residual the
-    driver-side protected-ref snapshot backstops."""
+    """REFUSE unless `base` resolves to the repo's PUSH-PROTECTED default branch tip
+    (`refs/remotes/origin/<name>`) — the one ref a loop cannot move without a push (denied in both
+    modes). A loop-chosen base (`HEAD`, its own branch, a raw commit), OR a local-only default with no
+    push-protected anchor, is loop-movable and would anchor the whole gate (base + the anchor blob +
+    the frozen surface all read from it) to loop-authored state — so both fail-deny.
+
+    HONEST LIMIT: this makes the gate require a remote whose `origin/HEAD` names the default; a
+    local-only repo cannot offer a verifiable baseline and gets no YOLO permit (the correct fail-deny,
+    consistent with the gate's ethos — not security theater over a movable ref). A `git fetch` refspec
+    that moves a *remote-tracking* ref locally is the remaining residual (KNOWN-BYPASSES); the driver
+    should launch the loop without fetch/push credentials, the designated backstop."""
     name, want = _default_branch_oid(repo)
     if want is None:
-        return ("the repo's default branch cannot be determined, so --base cannot be verified as "
-                "loop-immutable (fail-deny)")
+        return ("the default branch has no push-protected anchor (refs/remotes/origin/HEAD): a "
+                "local-only default ref is loop-movable through verbs outside the porcelain fence "
+                "(git checkout <default> && git reset/commit/rebase), so it cannot pin the permit "
+                "baseline — give the repo a remote whose origin/HEAD names the default, or pass a "
+                "push-protected --base (fail-deny)")
     ok, got = _git_text(repo, "rev-parse", "--verify", f"{base}^{{commit}}")
     if not ok or got.strip() != want:
-        return (f"--base {base!r} does not resolve to the default branch "
-                f"{name!r} — the permit gate only anchors to the baseline the loop cannot author "
-                f"(fail-deny)")
+        return (f"--base {base!r} does not resolve to the push-protected default "
+                f"refs/remotes/origin/{name} — the permit gate only anchors to the baseline the loop "
+                f"cannot move without a (denied) push (fail-deny)")
     return None
 
 
@@ -380,7 +383,8 @@ def run(repo: str, base: str, anchor: str, verified_by: str, timeout: float) -> 
         print(f"REFUSED: {repo} is not a git repo (fail-deny)", file=sys.stderr)
         return EXIT_REFUSED
 
-    # 0. BASE PIN — the baseline must be the default branch, the one line the loop cannot author.
+    # 0. BASE PIN — the baseline must be the PUSH-PROTECTED default (origin/<name>), the one ref the
+    #    loop cannot move without a denied push; a local-only movable default fail-denies.
     reason = _base_pin_refusal(repo, base)
     if reason is not None:
         print(f"REFUSED (base): {reason}", file=sys.stderr)
