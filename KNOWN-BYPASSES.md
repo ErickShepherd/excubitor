@@ -220,7 +220,7 @@ not see is out of scope. Documented, not chased. See `guard-default-branch.py::_
 `run_frozen_oracle.py` (the YOLO permit-to-act gate) refuses a caller-supplied witness command (it
 must appear in the anchor file's **base-tree blob** as a **whole authored unit** — a whole line or a
 complete `verify:` suffix, so a *truncation* of an authored command earns no permit either — with
-`--base` pinned to the **push-protected** default `refs/remotes/origin/<name>`), refuses an untrusted
+`--base` pinned to the **remote-tracking** default `refs/remotes/origin/<name>`), refuses an untrusted
 executable (untracked in-repo — the `.venv/bin/python` class — or user-writable outside the repo,
 including a resolved symlink target that lands outside the repo), and binds
 conftest/runner-config/module-shadow companions into the frozen surface, executing under a sanitized
