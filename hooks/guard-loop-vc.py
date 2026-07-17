@@ -1,90 +1,39 @@
 #!/usr/bin/env python3
 """PreToolUse guard (Claude Code adapter): fence the version-control actions of an autonomous loop.
 
-This is the thin Claude Code adapter over the model-blind loop-VC policy in
-`excubitor.core.policies.loop_vc`. Its whole job is host glue: read the Claude Code PreToolUse JSON
-envelope from stdin, check the `CLAUDE_LOOP_GUARD` arming marker (unset → inactive; `1` → conservative,
-`yolo` → verifiable — the value selects the mode), hand the Bash command to the core classifier, and
-render the core's deny reason as a Claude Code `hookSpecificOutput.permissionDecision="deny"` (or emit
-no decision, to defer). The classification logic — segment splitting, the launcher/shell/eval
-step-over, the git/gh deny set, and the two-mode behavior — lives in the core and is documented there;
-the accepted residuals are in KNOWN-BYPASSES.md. `runtime/spec_adapter.py` drives the SAME core from a
-generic envelope, so "one core, many adapters" is a running, tested fact.
+Thin Claude Code entry point over the model-blind loop-VC policy in `excubitor.core.policies.loop_vc`.
+The shared PreToolUse I/O glue — stdin parse, the `hookSpecificOutput` render, best-effort telemetry —
+lives in `excubitor.adapters.claude_code`; this file carries only the arming, the policy call, and the
+host-specific deny wording.
 
 TWO MODES (see docs/design/loop-yolo-verifiable-autonomy.md): CLAUDE_LOOP_GUARD=1 (conservative —
 "stop-and-surface, never stop-and-act") blocks merge/push/branch-delete/reset/clean/worktree-remove/
 `gh pr merge`/direct ref-moves; CLAUDE_LOOP_GUARD=yolo (verifiable autonomy) relaxes only to allow a
-`--no-ff` merge into a confirmed non-default branch. `git clean` (no dry-run) is denied in both.
+`--no-ff` merge into a confirmed non-default branch. `git clean` (no dry-run) is denied in both. The
+classifier (segment splitting, launcher/shell/eval step-over, the git/gh deny set) lives in the core
+and is documented there; accepted residuals are in KNOWN-BYPASSES.md.
 
-Contract (docs/en/hooks): deny = exit 0 + JSON on stdout with permissionDecision="deny"; emitting no
-decision defers to the normal flow. We never exit non-zero — a guard fault must fail OPEN, never wedge
-the tool. That includes an ABSENT core: a guard copied out of its package cannot import the classifier,
-so it fail-opens (defers) rather than crash-on-load. (No real install is affected — the shipped guards
-are `~/.claude/hooks` symlinks that resolve the package.) Every deny is appended, strictly best-effort
-AFTER the decision is on stdout, to a local JSONL telemetry log (hooks/_denial_log.py) — a telemetry
-fault never changes the decision.
-
-Registered in settings.json for the Bash tool.
+Contract (docs/en/hooks): deny = exit 0 + JSON on stdout with permissionDecision="deny"; no decision
+defers. We never exit non-zero — a guard fault must fail OPEN, never wedge the tool. That includes an
+ABSENT core: a guard copied out of its package can't import the adapter/policy, so it fails-open
+(defers) rather than crash. Registered in settings.json for the Bash tool.
 """
 from __future__ import annotations
 
-import json
 import os
 import sys
 
-# The loop-VC classifier lives in the shared model-blind core; this hook is the thin adapter over it.
 # Add the repo root — resolved through any deploy symlink — to sys.path, then import FAIL-SOFT: a guard
-# copied out of its package cannot reach the core, so it degrades to fail-OPEN (defer, never wedge)
-# rather than crash-on-load. main() checks for the absent core before classifying.
+# copied out of its package can reach neither the shared adapter glue nor the policy, so it fails-open.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 try:
+    from excubitor.adapters import claude_code  # noqa: E402
     from excubitor.core.policies import loop_vc  # noqa: E402
 except ImportError:  # copied out of its package → fail-open contract, never crash-on-load
+    claude_code = None  # type: ignore[assignment]
     loop_vc = None  # type: ignore[assignment]
 
-
-def _allow() -> None:
-    """Emit no decision → defer to the normal permission flow. Always exit 0."""
-    sys.exit(0)
-
-
-def _record_denial(reason: str, payload: dict) -> None:
-    """Best-effort denial telemetry via the sibling hooks/_denial_log.py (loaded by resolved
-    path, the runtime/spec_adapter.py pattern, so the ~/.claude symlink layout finds it). ANY
-    fault — module missing (a copied guard with no sibling), unwritable log, anything — is
-    swallowed: the deny already flushed to stdout must never be affected."""
-    try:
-        import importlib.util
-
-        mod_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "_denial_log.py")
-        spec = importlib.util.spec_from_file_location("_denial_log", mod_path)
-        if spec is None or spec.loader is None:
-            return
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-        mod.record("guard-loop-vc", reason, payload)
-    except Exception:
-        pass
-
-
-def _deny(reason: str, payload: dict) -> None:
-    json.dump(
-        {
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "deny",
-                "permissionDecisionReason": reason,
-            }
-        },
-        sys.stdout,
-    )
-    # Decision first, telemetry second: flush the deny to the harness BEFORE any telemetry I/O.
-    # Flushing alone is necessary but not sufficient — a hung write would still hold this process
-    # past the hook timeout (which fails OPEN and lets the fenced call run) — so record() also
-    # time-bounds the filesystem I/O in an abandonable daemon thread (see hooks/_denial_log.py).
-    sys.stdout.flush()
-    _record_denial(reason, payload)
-    sys.exit(0)
+_HOOK_DIR = os.path.dirname(os.path.realpath(__file__))  # where the _denial_log.py sibling lives
 
 
 def _deny_message(reason: str, yolo: bool) -> str:
@@ -112,39 +61,34 @@ def _deny_message(reason: str, yolo: bool) -> str:
 
 
 def main() -> None:
-    try:
-        payload = json.load(sys.stdin)
-    except ValueError:  # JSONDecodeError is a ValueError subclass — one catch suffices
-        _allow()  # unparseable input → fail open, never wedge the tool
-    if not isinstance(payload, dict):
-        _allow()  # valid-JSON-but-not-an-object (5, "x", [], null) → fail open; the never-exit-non-zero
-        # contract is unconditional, so payload.get(...) must never see a non-dict and raise AttributeError
+    if claude_code is None or loop_vc is None:
+        sys.exit(0)  # copied out of its package: no adapter/policy reachable → fail OPEN (never wedge)
+    payload = claude_code.read_payload()
+    if payload is None:
+        claude_code.emit_pass()  # unparseable / non-object input → fail open
 
     # Inactive unless explicitly in a guarded loop (opt-in marker). The value selects the mode.
     marker = os.environ.get("CLAUDE_LOOP_GUARD")
     if not marker:
-        _allow()
+        claude_code.emit_pass()
     yolo = marker.strip().lower() == "yolo"
 
     if payload.get("tool_name") != "Bash":
-        _allow()  # matcher should restrict to Bash, but never assume
+        claude_code.emit_pass()  # matcher should restrict to Bash, but never assume
 
-    # Same P0.16 posture as guard-default-branch.py: a truthy NON-string command/cwd (a crafted or
-    # buggy payload) must fail OPEN, not TypeError inside split_segments/os.path.join and exit 1
-    # against the never-exit-non-zero contract.
+    # Same P0.16 posture as guard-default-branch.py: a truthy NON-string command/cwd must fail OPEN, not
+    # TypeError inside split_segments/os.path.join against the never-exit-non-zero contract.
     tool_input = payload.get("tool_input")
     command = (tool_input if isinstance(tool_input, dict) else {}).get("command")
     if not isinstance(command, str):
-        _allow()  # absent or malformed command → nothing parseable to fence
+        claude_code.emit_pass()  # absent or malformed command → nothing parseable to fence
     cwd = payload.get("cwd")
     if not isinstance(cwd, str) or not cwd:
         cwd = os.getcwd()
-    if loop_vc is None:
-        _allow()  # copied out of its package: no classifier reachable → fail OPEN (never wedge)
     reason = loop_vc._dangerous(command, yolo, cwd)
     if reason:
-        _deny(_deny_message(reason, yolo), payload)
-    _allow()
+        claude_code.emit_deny(_deny_message(reason, yolo), "guard-loop-vc", payload, _HOOK_DIR)
+    claude_code.emit_pass()
 
 
 if __name__ == "__main__":
