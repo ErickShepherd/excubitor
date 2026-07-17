@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""PreToolUse guard: while a loop guard is armed, the loop may not disarm the guard.
+"""PreToolUse guard (Claude Code adapter): while a loop guard is armed, the loop may not disarm it.
+
+Thin Claude Code adapter over the model-blind self-integrity policy in
+`excubitor.core.policies.self_integrity`. The adapter owns the host-specific parts — the
+`CLAUDE_LOOP_GUARD` arming marker, the protected surface (this host's guard script names, the disarm
+marker, the settings basenames, and the `.claude` control directory), and the deny message — and hands
+the (target | command, cwd, surface) to the core, which does the basename/realpath matching.
 
 A judge the model can rewrite is not a judge. The other guards in this repo fence *version-control*
 acts, but every one of them has kill-switches an unattended loop could reach with ordinary file
@@ -55,7 +61,9 @@ Registered in settings.json for the Bash|Edit|Write|NotebookEdit tools.
 
 Contract (docs/en/hooks): deny = exit 0 + JSON on stdout with
 hookSpecificOutput.permissionDecision="deny"; emitting no decision defers to the normal flow.
-We never exit non-zero — a guard bug must fail OPEN (process sense), never wedge the tool.
+We never exit non-zero — a guard bug must fail OPEN (process sense), never wedge the tool. That
+includes an ABSENT core: a guard copied out of its package can't import the policy, so it fails-open
+(defers) rather than crash-on-load.
 
 Every deny is also appended, strictly best-effort AFTER the decision is on stdout, to a local
 JSONL telemetry log (see hooks/_denial_log.py) — a telemetry fault never changes the decision.
@@ -67,69 +75,25 @@ from __future__ import annotations
 
 import json
 import os
-import re
-import shlex
 import sys
 
-# Characters that, OUTSIDE quotes, separate independent commands within one Bash invocation: the
-# command separators `;` `|` `&` newline, and the subshell / command-substitution boundaries `(` `)`
-# backtick (so a mention glued inside `(rm PATH)` / `$(rm PATH)` / `` `rm PATH` `` becomes its own
-# segment instead of staying stuck to a `)`/backtick in one shlex token). Honored only outside quotes
-# by split_segments(), so a kill-switch name quoted in an argument is NOT a false deny.
-_SEPARATORS = frozenset(";|&\n()`")
-# Leading redirection/fd noise on a token (`>file`, `2>>file`, `<file`) so the path inside is seen.
-# The digits are an OPTIONAL fd number that must be FOLLOWED by a real redirect op (`<`/`>`/`&`) — else
-# a bare digit-prefixed filename (`1allow-default-branch`, `2024-notes.txt`) would be wrongly stripped.
-_REDIR_PREFIX = re.compile(r"^\d*[<>&]+")
+# The self-integrity policy lives in the shared model-blind core; this hook is the thin adapter over
+# it. Add the repo root — resolved through any deploy symlink — to sys.path, then import FAIL-SOFT: a
+# guard copied out of its package fails-open (defers, per the process contract), never crash-on-load.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
+try:
+    from excubitor.core.policies import self_integrity  # noqa: E402
+except ImportError:  # copied out of its package → defer (fail-open), never crash-on-load
+    self_integrity = None  # type: ignore[assignment]
 
-
-def split_segments(command: str) -> list[str]:
-    """Split a Bash command into segments at _SEPARATORS, honoring them ONLY outside quotes.
-
-    A separator inside single or double quotes is literal text, not a command boundary — so a
-    kill-switch name quoted in an argument (`git commit -m "refactor (see guard-loop-vc.py)"`) stays
-    inside its segment and is NOT promoted to its own command (which would be a false deny). The
-    tradeoff is that a LIVE command substitution inside double quotes is likewise not segmented — an
-    accepted under-block residual (see SCOPE / LIMITS). Backslash escapes the next char (outside
-    single quotes). Quote characters are preserved for the downstream shlex.split."""
-    segments: list[str] = []
-    buf: list[str] = []
-    in_single = in_double = False
-    i, n = 0, len(command)
-    while i < n:
-        ch = command[i]
-        if in_single:
-            buf.append(ch)
-            if ch == "'":
-                in_single = False
-        elif in_double:
-            if ch == "\\" and i + 1 < n:
-                buf.append(ch); buf.append(command[i + 1]); i += 2; continue
-            buf.append(ch)
-            if ch == '"':
-                in_double = False
-        elif ch == "'":
-            in_single = True; buf.append(ch)
-        elif ch == '"':
-            in_double = True; buf.append(ch)
-        elif ch == "\\" and i + 1 < n:
-            buf.append(ch); buf.append(command[i + 1]); i += 2; continue
-        elif ch in _SEPARATORS:
-            segments.append("".join(buf)); buf = []
-        else:
-            buf.append(ch)
-        i += 1
-    segments.append("".join(buf))
-    return [s for s in (seg.strip() for seg in segments) if s]
-
-_GUARD_SCRIPTS = {
-    "guard-default-branch.py",
-    "guard-loop-vc.py",
-    "guard-one-unit.py",
-    "guard-self-integrity.py",
-}
+# The protected surface is HOST-SPECIFIC (Claude Code's guard names + `.claude` control dir), so the
+# adapter owns it and passes it to the neutral core; the core hardcodes no host directory.
+_GUARD_SCRIPTS = frozenset(
+    {"guard-default-branch.py", "guard-loop-vc.py", "guard-one-unit.py", "guard-self-integrity.py"}
+)
 _MARKER = "allow-default-branch"
-_SETTINGS = {"settings.json", "settings.local.json"}
+_SETTINGS = frozenset({"settings.json", "settings.local.json"})
+_CONTROL_DIR = ".claude"
 
 
 def _allow() -> None:
@@ -176,59 +140,6 @@ def _deny(reason: str, payload: dict) -> None:
     sys.exit(0)
 
 
-def _kill_switch(path: str) -> str | None:
-    """Return what kill-switch `path` names, or None. Matches on the normalized basename."""
-    norm = os.path.normpath(path)
-    base = os.path.basename(norm)
-    if base == _MARKER:
-        return f"the guard disarm marker ({_MARKER})"
-    if base in _GUARD_SCRIPTS:
-        return f"a guard hook script ({base})"
-    if base in _SETTINGS and ".claude" in norm.split(os.sep):
-        return f"the hook registration in .claude/{base}"
-    return None
-
-
-def _target_kill_switch(target: str, cwd: str) -> str | None:
-    """Kill-switch check for a file-tool target: the path as given AND its symlink-resolved form
-    (a symlink named something innocent must not launder a write into a guard script)."""
-    try:
-        resolved = os.path.abspath(os.path.join(cwd, os.path.expanduser(target)))
-    except ValueError:
-        return None  # e.g. an embedded NUL byte — treat as no-match (the caller's scan continues)
-    hit = _kill_switch(resolved)
-    if hit:
-        return hit
-    try:
-        real = os.path.realpath(resolved)
-    except (OSError, ValueError):
-        # realpath lstats each component; an embedded NUL raises ValueError ("embedded null byte"),
-        # NOT OSError — catch both so one poisoned token can't crash the guard (fail-open would then
-        # let a sibling kill-switch write through) or suppress the scan of the remaining tokens.
-        return None
-    return _kill_switch(real) if real != resolved else None
-
-
-def _bash_kill_switch(command: str, cwd: str) -> str | None:
-    """Best-effort scan of a Bash command for any token naming a kill-switch path."""
-    for segment in split_segments(command):
-        try:
-            # comments=True matches bash: an unquoted `#` starts a comment, so a kill-switch name that
-            # appears only AFTER it (`rm foo # see guard-loop-vc.py`) is never acted on and must not be a
-            # false deny. A `#` inside quotes is preserved by split_segments and stays a real token.
-            tokens = shlex.split(segment, comments=True)
-        except ValueError:
-            tokens = segment.split()  # unbalanced quotes etc. → best-effort
-        for tok in tokens:
-            tok = _REDIR_PREFIX.sub("", tok)
-            if not tok:
-                continue
-            hit = _target_kill_switch(tok, cwd)
-            if hit:
-                return hit
-    return None
-
-
 def main() -> None:
     try:
         payload = json.load(sys.stdin)
@@ -247,13 +158,22 @@ def main() -> None:
     tool_input = ti if isinstance(ti, dict) else {}
     cwd = payload.get("cwd") or os.getcwd()
 
+    if self_integrity is None:
+        _allow()  # copied out of its package: no policy reachable → fail OPEN (process contract)
+    surface = self_integrity.ProtectedSurface(
+        guard_scripts=_GUARD_SCRIPTS,
+        marker=_MARKER,
+        settings_names=_SETTINGS,
+        control_dir=_CONTROL_DIR,
+    )
+
     hit = None
     if tool in ("Edit", "Write", "NotebookEdit"):
         target = tool_input.get("file_path") or tool_input.get("notebook_path")
         if target:
-            hit = _target_kill_switch(target, cwd)
+            hit = self_integrity.target_kill_switch(target, cwd, surface)
     elif tool == "Bash":
-        hit = _bash_kill_switch(tool_input.get("command") or "", cwd)
+        hit = self_integrity.bash_kill_switch(tool_input.get("command") or "", cwd, surface)
 
     if hit:
         _deny(
