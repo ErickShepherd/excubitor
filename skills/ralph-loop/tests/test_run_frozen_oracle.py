@@ -112,6 +112,7 @@ class _RepoCase(unittest.TestCase):
             "verify: python3 -mpytest tests/witness_ok.py\n"     # attached -m spelling
             "verify: python3 -Bmpytest tests/witness_ok.py\n"    # -m mid-cluster, module attached
             "verify: python3 -Bm pytest tests/witness_ok.py\n"   # -m last in cluster, module next tok
+            "verify: python3 --check-hash-based-pycs always -m pytest tests/witness_ok.py\n"  # sep-value long opt
             f"verify: {self.ext_exe} tests/witness_ok.py\n"
             "verify: tests/link-exe tests/witness_ok.py\n"       # in-repo link → external writable exe
         )
@@ -353,6 +354,16 @@ class TestPermitBinding(_RepoCase):
             p = _run(self.d, "main", cmd)
             self.assertEqual(p.returncode, REFUSED, f"{cmd!r}: stdout={p.stdout} stderr={p.stderr}")
             self.assertIn("pytest.py", p.stderr, f"{cmd!r}: attached/clustered -m shadow must refuse")
+
+    def test_separate_value_long_opt_before_m_shadow_refuses(self):
+        # Round-4 review finding 2: a separate-value long option (`--check-hash-based-pycs always`)
+        # before `-m` must not end the module scan early — its value token is consumed, not read as
+        # the script operand, so the `-m pytest` shadow is still bound and a repo-root pytest.py
+        # refuses. (Baseline-authored above.)
+        (Path(self.d) / "pytest.py").write_text("import sys\nsys.exit(0)\n")
+        p = _run(self.d, "main", "python3 --check-hash-based-pycs always -m pytest tests/witness_ok.py")
+        self.assertEqual(p.returncode, REFUSED, f"stdout={p.stdout} stderr={p.stderr}")
+        self.assertIn("pytest.py", p.stderr)
 
     def test_baseline_authored_bin_true_is_green_accepted_residual(self):
         # ACCEPTED residual, pinned bidirectionally: a command the BASELINE AUTHOR wrote is trusted

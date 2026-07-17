@@ -136,9 +136,15 @@ def _default_branch_oid(repo: str) -> tuple[str | None, str | None]:
 
 
 def _base_pin_refusal(repo: str, base: str) -> str | None:
-    """REFUSE unless `base` resolves to the repo's default branch tip — the one line the loop
-    cannot move (guard-loop-vc denies merges into it and direct ref moves). A loop-chosen base
-    (`HEAD`, its own branch, a raw commit) would anchor the gate to loop-authored state."""
+    """REFUSE unless `base` resolves to the repo's default branch tip. Under an armed loop
+    (CLAUDE_LOOP_GUARD=yolo — the only context in which this gate grants a permit) guard-loop-vc.py
+    denies both a merge into the default branch AND the porcelain-bypass ref moves that would
+    repoint it (`branch -f/-m/-M/-C`, `update-ref`, `switch -C`, `checkout -B`, `worktree add -B`,
+    symbolic-ref writes), so the default branch is the baseline the loop cannot author. A loop-chosen
+    base (`HEAD`, its own branch, a raw commit) would instead anchor the gate to loop-authored state.
+    HONEST LIMIT: immutability rests on that guard being armed — it is defense-in-depth with the VC
+    fence, not independent of it; a `git fetch` refspec moving a local ref is a guard residual the
+    driver-side protected-ref snapshot backstops."""
     name, want = _default_branch_oid(repo)
     if want is None:
         return ("the repo's default branch cannot be determined, so --base cannot be verified as "
@@ -243,6 +249,10 @@ def _bind_executable(repo: str, toplevel: str, argv0: str) -> tuple[str | None, 
 # python options that consume a value (attached to the same token, or the next token) — so a `m`
 # appearing in their value (`-Wm`, `-Xm`) is NOT the module switch. Mirrors install_settings.py.
 _PY_M_VALUE_SHORTS = frozenset("WX")
+# python LONG options that consume a SEPARATE value token, so the value isn't mistaken for the
+# script operand (which would end the -m scan early). Only --check-hash-based-pycs takes a separate
+# value in CPython's launcher grammar; --help/--version terminate anyway. Mirrors install_settings.
+_PY_M_VALUE_LONGS = frozenset({"--check-hash-based-pycs"})
 
 
 def _module_arg(argv: list[str]) -> "str | None":
@@ -263,7 +273,13 @@ def _module_arg(argv: list[str]) -> "str | None":
         if t == "--" or t == "-" or not t.startswith("-"):
             return None  # end-of-options / script operand reached before any -m
         if t.startswith("--"):
-            j += 1  # python's long options don't introduce a module; step over
+            # a separate-value long option (`--check-hash-based-pycs always`) consumes the NEXT
+            # token — skip it so its value isn't read as the script operand, ending the scan early
+            # and leaving a `-m` shadow unbound. The `--opt=value` attached form self-terminates.
+            if t in _PY_M_VALUE_LONGS:
+                j += 2
+                continue
+            j += 1  # other long options don't introduce a module; step over
             continue
         for idx, ch in enumerate(t[1:]):
             if ch == "c":
@@ -284,23 +300,25 @@ def _module_arg(argv: list[str]) -> "str | None":
     return None
 
 
-def _module_shadow(toplevel: str, argv: list[str]) -> tuple[str | None, list[str]]:
-    """For a `-m <module>` witness (any spelling — see `_module_arg`), bind the repo-root path that
-    would shadow the module.
+def _module_shadow(cwd: str, argv: list[str]) -> tuple[str | None, list[str]]:
+    """For a `-m <module>` witness (any spelling — see `_module_arg`), bind the path that would
+    shadow the module on sys.path.
 
-    `python -m` puts the cwd (the repo) first on sys.path, so a repo-root `<module>.py` or
-    `<module>/` package replaces the intended module wholesale. A shadowing package directory
-    cannot be frozen as a blob → refuse; a shadowing file joins the required surface (tracked →
-    frozen, untracked → evaluate refuses)."""
+    `python -m` puts sys.path[0] = the process CWD, and the witness runs with `cwd=repo` (NOT
+    necessarily the git toplevel — `--repo` can be a subdirectory), so the shadow to freeze lives at
+    `<cwd>/<module>.py` or `<cwd>/<module>/`, keyed off the witness cwd not the toplevel (round-4
+    review, finding 3). A shadowing package directory cannot be frozen as a blob → refuse; a
+    shadowing file joins the required surface (tracked → frozen, untracked → evaluate refuses).
+    Absolute cwd under the toplevel keeps the path inside the diffable/tracked surface."""
     mod = _module_arg(argv)
     if mod is None:
         return None, []
     top_mod = mod.split(".")[0]
     if not top_mod:
         return None, []
-    pkg = os.path.join(toplevel, top_mod)
+    pkg = os.path.join(cwd, top_mod)
     if os.path.isdir(pkg):
-        return (f"repo-root package {top_mod}/ would shadow the -m module on sys.path and cannot "
+        return (f"cwd package {top_mod}/ would shadow the -m module on sys.path and cannot "
                 f"be frozen as a blob (fail-deny)"), []
     mod_py = pkg + ".py"
     if os.path.isfile(mod_py) or os.path.islink(mod_py):
@@ -390,7 +408,7 @@ def run(repo: str, base: str, anchor: str, verified_by: str, timeout: float) -> 
         return EXIT_REFUSED
 
     # 3. VERDICT-SURFACE BINDING — module shadowing + runner config/conftest companions.
-    reason, shadow_extra = _module_shadow(toplevel, argv)
+    reason, shadow_extra = _module_shadow(repo, argv)
     if reason is not None:
         print(f"REFUSED (module shadow): {reason}", file=sys.stderr)
         return EXIT_REFUSED

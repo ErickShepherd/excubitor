@@ -113,6 +113,27 @@ class TestGuardLoopVC(unittest.TestCase):
         "git branch -qD feature",                              # quiet + force-delete
         "git branch -dr origin/feature",                       # delete letter first in the cluster
         "git symbolic-ref -qd refs/remotes/origin/HEAD",       # quiet + delete
+        # direct ref MOVES — repoint/rename/overwrite an existing ref without a porcelain verb; the
+        # forge the P0.13 base-pin depends on being fenced (git branch -f main <sha>, etc.)
+        "git branch -f main other",                            # force-move a branch ref
+        "git branch --force main other",                       # ... long form
+        "git branch -m old new",                               # rename (old name vanishes)
+        "git branch -M main",                                  # force-rename
+        "git branch -C main copy",                             # force-copy over an existing ref
+        "git branch -fm a b",                                  # clustered force+move
+        "git branch --forc main x",                            # unambiguous abbreviation of --force
+        "git update-ref refs/heads/main HEAD",                 # move a ref directly (plumbing)
+        "git update-ref -d refs/heads/main",                   # delete a ref directly
+        "git -C /repo update-ref refs/heads/master HEAD~1",    # ... via -C
+        "git switch -C main",                                  # force-recreate a branch
+        "git switch -Cmain",                                   # ... attached value
+        "git switch -fC main",                                 # ... clustered after -f
+        "git checkout -B main",                                # force-recreate via checkout
+        "git checkout -B main origin/main",
+        "git worktree add -B main ../wt",                      # force-reset a branch ref via worktree
+        "git worktree add -fB main ../wt",                     # ... clustered
+        "sudo git branch -f main other",                       # launcher + ref move
+        "cd /repo && git update-ref refs/heads/main HEAD",     # ref move in a compound command
         # exec-prefix launchers run the real command one token deeper — the fenced verb must still
         # be seen (representative cases; the full battery is TestLauncherPrefix)
         "env git push origin main",                            # POSIX launcher, no privilege
@@ -170,7 +191,13 @@ class TestGuardLoopVC(unittest.TestCase):
         "git branch -r",                       # remote-tracking list
         "git branch --list -v",                # explicit list
         "git branch -u origin/main feature",   # -u takes a value; no delete here
-        "git branch -m old new",               # rename (no delete)
+        "git branch -c old new",               # NON-force copy (create): allowed, unlike -C
+        "git switch -c fix/new",               # create+switch (lowercase -c): allowed, unlike -C
+        "git switch -cFooCase",                # -c with an attached CamelCase name — not -C
+        "git checkout -b fix/new",             # create branch (lowercase -b): allowed, unlike -B
+        "git checkout -bFix",                  # -b attached name with a capital — not -B
+        "git worktree add -b new ../wt",       # create-only worktree branch (-b): allowed, unlike -B
+        "git switch --force main",             # discard-changes switch — a prefix of --force-create, allowed
         # a dangerous verb QUOTED in an argument is literal text, not a command — must not false-deny
         # (this repo's own commit messages are full of these strings)
         'git commit -m "document the (git push) bypass"',
@@ -245,7 +272,6 @@ class TestGuardLoopVC(unittest.TestCase):
     # being denied, this fails and forces an honest update rather than a silent scope expansion —
     # the guard's deny-set is a deliberate choice, not an accident, and this documents its edges.
     UNHANDLED_GIT_VERBS = [
-        "git update-ref -d refs/heads/main",       # ref delete via plumbing
         "git reflog expire --expire=now --all",    # drop the reflog
         "git stash drop",
         "git stash clear",

@@ -21,22 +21,27 @@ TWO MODES, selected by the value of CLAUDE_LOOP_GUARD (see docs/design/loop-yolo
     over the LLM), the self-judgment objection above evaporates — "done" is unforgeable, not
     self-blessed. So the loop may *act* to completion, but ONLY within the reversible/internal
     blast radius: it may integrate via a `--no-ff` merge into a NON-default local branch. It still
-    may NOT push, force-push, hard-reset, `git clean`, delete a branch, remove a worktree,
-    `gh pr merge`, merge into the default branch, or fast-forward merge (excluded so every merge is
-    revertable via `git revert -m 1`). Default-branch detection FAILS DENY: if the current or
-    default branch can't be determined, the merge is blocked.
+    may NOT push, force-push, hard-reset, `git clean`, delete a branch, remove a worktree, move a
+    ref directly (`git branch -f/-m/-M/-C`, `update-ref`, `switch -C`, `checkout -B`, `worktree add
+    -B`, symbolic-ref writes), `gh pr merge`, merge into the default branch, or fast-forward merge
+    (excluded so every merge is revertable via `git revert -m 1`). Default-branch detection FAILS
+    DENY: if the current or default branch can't be determined, the merge is blocked.
 
 `git clean` (without a dry-run flag) is denied in BOTH modes — it deletes untracked files with no
 reflog, strictly worse than `reset --hard`.
 
-Also denied in BOTH modes: `git remote set-head` and the write/delete forms of `git symbolic-ref`.
-They repoint refs/remotes/origin/HEAD — the trust anchor this guard (and guard-default-branch.py)
-reads for default-branch detection — so denying them protects the guard's OWN integrity. The read
-form of `symbolic-ref` stays allowed. (main/master are hardcode-protected regardless, so this only
-ever mattered for a non-standard trunk. This is deliberately NOT a complete deny-set over the git
-surface — other rarely-dangerous verbs like `update-ref -d` / `reflog expire` are left open by
-design; chasing full git-verb completeness is a losing race the SCOPE / LIMITS section documents
-rather than pretends to win.)
+Also denied in BOTH modes: the porcelain-bypass REF MOVES — `git branch -f/-m/-M/-C`,
+`git update-ref`, `git switch -C`, `git checkout -B`, `git worktree add -B`, `git remote set-head`,
+and the write/delete forms of `git symbolic-ref`. They repoint/rename/overwrite refs (including
+refs/remotes/origin/HEAD and refs/heads/{main,master} — the trust anchors this guard,
+guard-default-branch.py, AND the ralph-loop frozen-oracle base pin read) WITHOUT the porcelain verbs
+above, so denying them protects the trust anchor's integrity: a loop that can move the default branch
+can re-aim what "default branch" means and forge the oracle baseline. The read form of `symbolic-ref`
+stays allowed. (This is deliberately NOT a complete deny-set over the git surface — other
+rarely-dangerous verbs like `reflog expire`, `git rebase`, and a `git fetch` refspec that moves a
+local ref are left open by design; chasing full git-verb completeness is a losing race the SCOPE /
+LIMITS section documents rather than pretends to win — the driver-side protected-ref snapshot is the
+designated backstop for those.)
 
 ACTIVATION (opt-in). Does nothing unless CLAUDE_LOOP_GUARD is set. `/loop` is a built-in skill that
 sets no marker of its own and there is no reliable way to auto-detect loop context, so the guard is
@@ -541,6 +546,51 @@ def _has_delete_flag(
     return False
 
 
+def _cluster_denies(token: str, deny: str, value_stop: str) -> bool:
+    """True iff a short-option token carries a denied letter, parsed the way git parse-options does.
+
+    git clusters short booleans and lets the FIRST VALUE-TAKING letter consume the token's
+    remainder as its attached value (`git switch -fCmain` = `-f` + `-C main`; `git switch -cnew` =
+    `-c new`). So a left-to-right scan is the only correct reading: a letter in `deny` before any
+    value-consumer denies; a letter in `value_stop` ends the scan (everything after is that option's
+    VALUE — so a branch NAME glued to `switch -c`/`checkout -b`/`branch -u`, e.g. `-cFooCase`, can't
+    false-deny); a non-alphabetic char means this isn't a pure option cluster (`-u=x`) and the token
+    is left to the exact-match checks. `value_stop` is per-subcommand: verified against git 2.47.3,
+    `git branch -c/-C` take POSITIONAL names (so `c` is NOT a value-stop for branch — only
+    `u`=--set-upstream-to), whereas `switch -c`/`checkout -b`/`-t` and `worktree add -b` take
+    attached values. Long options are matched by `_long_opt_matches`, not here."""
+    if len(token) < 2 or not token.startswith("-") or token.startswith("--"):
+        return False
+    for ch in token[1:]:
+        if ch in deny:
+            return True
+        if ch in value_stop:
+            return False
+        if not ch.isalpha():
+            return False
+    return False
+
+
+def _long_opt_matches(token: str, dangerous: tuple[str, ...], safe_exact: tuple[str, ...] = ()) -> bool:
+    """True iff a `--long` token is (an unambiguous abbreviation of) a dangerous long option.
+
+    git accepts any UNAMBIGUOUS PREFIX of a long option and an attached `--opt=value`, so exact
+    full-spelling matching (`"--force" in rest`) misses `--forc`/`--del`/`--force-create=x` — all of
+    which really act (git 2.47.3). Strip a `=value` suffix and treat the token as dangerous when its
+    name is a non-empty prefix of a dangerous name. An AMBIGUOUS prefix errors out in git (a no-op),
+    so denying it costs nothing; a prefix that resolves to a SAFE option isn't a prefix of any
+    dangerous name, so it stays allowed. `safe_exact` carves out a COMPLETE safe option that is
+    itself a prefix of a dangerous one — `switch --force` (discard-changes) is a prefix of
+    `--force-create`, and git binds an exact full match to the shorter option, so `--force` must
+    stay allowed while `--force-create`/`--force-cr`/`--force-create=x` deny."""
+    if not token.startswith("--"):
+        return False
+    name = token[2:].split("=", 1)[0]
+    if not name or name in safe_exact:
+        return False
+    return any(d.startswith(name) for d in dangerous)
+
+
 def _symbolic_ref_write_reason(rest: list[str]) -> str | None:
     """Deny reason for a WRITE-form `git symbolic-ref`, or None for the read form.
 
@@ -694,11 +744,47 @@ def _classify(
     # short is `-u <upstream>`, so an `-ud` cluster's `d` is the upstream name, not a delete.
     if sub == "branch" and _has_delete_flag(rest, ("d", "D"), ("u",)):
         return "delete a branch (git branch -d/-D)"
+    # Direct ref MOVES that repoint/rename/overwrite an existing ref WITHOUT the porcelain verbs
+    # above — the same trust-anchor-integrity rationale as `symbolic-ref`/`remote set-head` below,
+    # and the specific forge the P0.13 base-pin depends on being closed: `git branch -f main <sha>`
+    # / `update-ref refs/heads/main <sha>` / `switch -C main` move the default branch the frozen-
+    # oracle gate reads as its loop-immutable baseline. Denied UNCONDITIONALLY (any branch, like the
+    # branch-delete above): a loop integrates only via `--no-ff` merges into non-default branches, so
+    # force-moving/renaming/overwriting ANY ref is outside its model. `-m`/`-M` rename (old name
+    # vanishes), `-C` force-copies over an existing ref; `u` (--set-upstream-to) is branch's only
+    # value-consumer, so it is the cluster value-stop. Long forms match by unambiguous prefix.
+    if sub == "branch" and (
+        any(_long_opt_matches(t, ("force", "move")) for t in rest)
+        or any(_cluster_denies(t, "fmMC", "u") for t in rest)
+    ):
+        return "force-move, rename, or overwrite a branch ref (git branch -f/-m/-M/-C)"
+    if sub == "update-ref":
+        # No read form exists — update-ref is pure ref-mutation plumbing (incl. -d and --stdin).
+        return "move or delete a ref directly (git update-ref)"
+    # switch/checkout force-(re)create a branch at an arbitrary commit (`-C main`/`-B main` clobber
+    # an existing ref). `-C`/`-B` take an ATTACHED value (`-Cmain`) and cluster after booleans
+    # (`-fCmain`); the lowercase creators `-c`/`-b` and `-t` consume the remainder as a value, so a
+    # capital in `-cFooCase`/`-bFix` must not false-deny. `switch --force` (discard-changes) is a
+    # complete safe option that is a prefix of the dangerous `--force-create`, so it is carved out;
+    # `checkout` has no `--force-create` long option (git 2.47.3: "unknown option force-create").
+    if sub == "switch" and (
+        any(_long_opt_matches(t, ("force-create",), ("force",)) for t in rest)
+        or any(_cluster_denies(t, "C", "ct") for t in rest)
+    ):
+        return "force-recreate a branch at an arbitrary commit (git switch -C)"
+    if sub == "checkout" and any(_cluster_denies(t, "B", "bt") for t in rest):
+        return "force-recreate a branch at an arbitrary commit (git checkout -B)"
     # position-aware (like `remote set-head` / `gh pr merge` below), NOT a bare `"remove" in rest`
     # membership — else `git worktree add ../wt remove` (a branch/path literally named `remove`) would
     # be a false deny. Only the `remove` SUBCOMMAND (first positional) is the destructive one.
     if sub == "worktree" and _subcommand_path(rest, set(), 1) == ["remove"]:
         return "remove a worktree (git worktree remove)"
+    # `git worktree add -B <branch>` force-resets an existing branch ref (git 2.47.3 verified) — the
+    # same ref clobber as `branch -f`, spelled through worktree. `-b` only CREATES (fails if the
+    # branch exists), so it stays allowed; `b` is the value-stop (consumes the new-branch name), `B`
+    # denies even attached (`-Bmain`) or clustered after `-f` (`-fB`).
+    if sub == "worktree" and "add" in rest and any(_cluster_denies(t, "B", "b") for t in rest):
+        return "force-reset a branch ref via worktree (git worktree add -B)"
     # Both `remote set-head` and the write form of `symbolic-ref` rewrite refs/remotes/origin/HEAD —
     # the trust anchor _default_branch() (and guard-default-branch.py) reads for default-branch
     # detection. A loop that can repoint it can re-aim what "default branch" means, so denying these
