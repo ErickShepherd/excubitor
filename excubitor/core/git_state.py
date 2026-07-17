@@ -24,21 +24,23 @@ __all__ = [
     "origin_head_name",
     "default_branch",
     "protected_default_names",
+    "scoped_commit_count",
 ]
 
 # refs/remotes/origin/HEAD is the trust anchor both guards read to resolve the default branch.
 _ORIGIN_HEAD_PREFIX = "refs/remotes/origin/"
 
 
-def run_git(selectors: list[str], *args: str) -> tuple[bool, str]:
+def run_git(selectors: list[str], *args: str, timeout: int = 5) -> tuple[bool, str]:
     """Run a read-only `git` query; return ``(ok, stripped_stdout)``. Never raises (fails toward not-ok).
 
     `selectors` are the repository-selecting global options placed before the subcommand, so the query
     hits the intended repository. A missing / timed-out / non-zero git yields ``(False, "")`` — the
-    fail-toward-not-ok posture the guards rely on to never wedge on a git fault.
+    fail-toward-not-ok posture the guards rely on to never wedge on a git fault. `timeout` defaults to
+    a short plumbing bound; a slower query (e.g. `git log` over a large history) may widen it.
     """
     try:
-        p = subprocess.run(["git", *selectors, *args], capture_output=True, text=True, timeout=5)
+        p = subprocess.run(["git", *selectors, *args], capture_output=True, text=True, timeout=timeout)
     except (OSError, subprocess.SubprocessError):
         return False, ""
     if p.returncode != 0:
@@ -110,3 +112,19 @@ def protected_default_names(selectors: list[str]) -> set[str]:
     if name is not None:
         protected.add(name)
     return protected
+
+
+def scoped_commit_count(selectors: list[str], scope: str) -> int | None:
+    """Count this branch's commits whose SUBJECT carries ``(scope)``. None on any git failure (fail open).
+
+    Counts subjects (``git log --format=%s HEAD``), NOT ``git rev-list --grep`` — the latter matches the
+    whole commit message (subject + body), so a commit whose body merely mentions another scope would
+    inflate the count. Subject-only keeps per-worker attribution exact (the one-unit cap's parallel-stage
+    guarantee). Uses a wider (10s) timeout than a plumbing query — ``git log`` over a large history can be
+    slower, and a timeout here must fail-open (None), never wedge.
+    """
+    ok, out = run_git(selectors, "log", "--format=%s", "HEAD", timeout=10)
+    if not ok:
+        return None
+    needle = f"({scope})"
+    return sum(1 for line in out.splitlines() if needle in line)

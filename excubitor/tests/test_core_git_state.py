@@ -184,6 +184,21 @@ class TestProtectedDefaultNames(unittest.TestCase):
             )
 
 
+class TestScopedCommitCount(unittest.TestCase):
+    def test_counts_scoped_subjects_only(self):
+        with tempfile.TemporaryDirectory() as td:
+            _init_repo(td)  # seed commit has no scope
+            for subj in ("feat(alpha): one", "fix(beta): two", "feat(alpha): three"):
+                _git(td, "commit", "--allow-empty", "-m", subj)
+            self.assertEqual(git_state.scoped_commit_count(_sel(td), "alpha"), 2)
+            self.assertEqual(git_state.scoped_commit_count(_sel(td), "beta"), 1)
+            self.assertEqual(git_state.scoped_commit_count(_sel(td), "gamma"), 0)
+
+    def test_none_on_non_repo(self):
+        with tempfile.TemporaryDirectory() as td:
+            self.assertIsNone(git_state.scoped_commit_count(_sel(td), "alpha"))
+
+
 class TestGitStatePurity(unittest.TestCase):
     """git_state may shell out to read-only git (the documented carve-out) but must still name no
     host/provider and read no environment or home paths — the core neutrality invariant."""
