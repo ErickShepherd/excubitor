@@ -928,5 +928,81 @@ class TestLauncherPrefix(unittest.TestCase):
                 f"move it out of LAUNCHER_RESIDUALS: {cmd}")
 
 
+class TestShellKeywordAndEvalPrefix(unittest.TestCase):
+    """Shell RESERVED WORDS / grouping tokens (`!`, `{`, `if`, `while`, `until`) and the `eval`
+    builtin run a following LITERAL git/gh verb in the same segment, so a fenced verb hides one token
+    past them. Before the fix the guard anchored `exe` on `!`/`{`/`if`/`eval`, matched nothing, and
+    DEFERRED — a trivial, no-privilege disarm of the ENTIRE deny set (`eval git push`, `{ git push;
+    }`, `! git push`, `if git push; then :; fi`), the exact class already closed for `env`/`bash -c`.
+    These pin that every prefix is now stepped over (and `eval`'s args re-scanned), plus —
+    bidirectionally — that ordinary keyword uses of a NON-fenced command are not false-denied.
+    """
+
+    # A fenced git/gh verb sits one token past a keyword/eval prefix → must DENY.
+    KEYWORD_DENY = [
+        "eval git push origin main",             # eval, unquoted
+        'eval "git push origin main"',           # eval, quoted single arg (rejoin is load-bearing)
+        "eval git branch -D main",
+        "eval git merge --no-ff topic",
+        "eval git branch -f main other",         # ref-move behind eval
+        "eval gh pr merge 5",
+        "eval env git push",                     # eval → launcher → git (nested resolution)
+        "{ git push origin main; }",             # brace group
+        "{ git branch -D main; }",
+        "! git push origin main",                # pipeline negation
+        "! git merge --no-ff topic",
+        "if git push origin main; then :; fi",   # condition command runs
+        "while git push; do break; done",
+        "until git push; do break; done",
+        "if git branch -D main; then :; fi",
+        "{ eval git push; }",                    # keyword + eval chained
+        "coproc git push origin main",           # coproc reserved word, simple command
+        "coproc git branch -D main",
+        "coproc worker { git push; }",           # coproc NAME <compound> — the name is skipped
+        "coproc { git push; }",                  # coproc + anonymous group
+        "builtin eval git push",                 # `builtin` twin of `command` (was asymmetric)
+        "command builtin eval git push",         # launcher + builtin + eval chain
+    ]
+
+    def test_keyword_and_eval_prefix_denied(self):
+        for cmd in self.KEYWORD_DENY:
+            rc, out = _run(cmd)
+            self.assertEqual(rc, 0, f"must exit 0 (fail-open contract): {cmd}")
+            self.assertTrue(_denied(out), f"keyword/eval-hidden VC verb must be DENIED: {cmd}")
+
+    # Keyword/eval uses whose delegated command is NOT fenced must still DEFER — the step-over must
+    # not manufacture a false deny, and a keyword appearing as a plain WORD (not the segment head)
+    # must not trip it.
+    KEYWORD_ALLOW = [
+        "echo if git push is scary",             # 'if'/'git push' are echo arguments, not the head
+        "if grep -q foo file; then echo ok; fi", # condition is grep, body is echo — nothing fenced
+        "for x in a b; do echo $x; done",        # 'for' loop over literals; git never runs
+        "for x in git push; do echo $x; done",   # 'git'/'push' are for-loop WORDS, not a command
+        "eval echo hello",                       # eval of a non-fenced command
+        "eval git status",                       # eval of a non-fenced git subcommand
+        "{ git status; }",                       # grouped non-fenced command
+        "while read l; do echo $l; done",        # 'read'/'echo' — nothing fenced
+        "! git diff --quiet",                    # negated non-fenced git read
+        "coproc git status",                     # coproc of a non-fenced git subcommand
+        "coproc worker { echo hi; }",            # coproc NAME group, non-fenced body
+        "coproc mydb { psql; }",                 # coproc NAME group, non-git body
+        "builtin cd /tmp",                       # builtin of a non-fenced command
+        "echo coproc git push",                  # 'coproc'/'git push' are echo args, not the head
+    ]
+
+    def test_keyword_and_eval_non_fenced_still_allows(self):
+        for cmd in self.KEYWORD_ALLOW:
+            rc, out = _run(cmd)
+            self.assertEqual((rc, out.strip()), (0, ""), f"must DEFER (no decision): {cmd}")
+
+    def test_bypass_denied_in_both_modes(self):
+        # the disarm worked identically in =1 and =yolo; the fix must close both.
+        for guard in ("1", "yolo"):
+            for cmd in ("eval git push", "{ git push; }", "! git push",
+                        "if git push; then :; fi"):
+                rc, out = _run(cmd, guard=guard)
+                self.assertTrue(_denied(out), f"[{guard}] must be denied: {cmd}")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

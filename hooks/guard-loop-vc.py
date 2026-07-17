@@ -56,9 +56,14 @@ It also steps over an enumerated set of exec-prefix LAUNCHERS (`env git push`,
 argument list as a new command, so the fenced verb hides one token deeper; `_classify` resolves the
 real executable (recursing for a chain like `sudo nice git push`) rather than anchoring on the
 launcher basename. A shell running a simple `-c`/`+c` command string
-(`bash`/`sh`/`dash`/`zsh`/`ksh -c "git push"`) is re-scanned as the command line it is. This is
-executable resolution, not shell expansion (every token is literal), and it closes what was a
-trivial no-privilege disarm of the whole deny set. The set holds launchers whose separate-value
+(`bash`/`sh`/`dash`/`zsh`/`ksh -c "git push"`) is re-scanned as the command line it is. It likewise
+steps over leading shell RESERVED WORDS / grouping tokens that run a following literal command in the
+same segment (`! git push`, `{ git push; }`, `if git push; then …`, `while git push; do …`) and
+re-scans `eval`'s concatenated arguments (`eval git push`, `eval "git push"`) — these are shell
+builtins/keywords, not external launcher binaries, so without stepping over them the guard anchored on
+`!`/`{`/`if`/`eval` and deferred. This is executable resolution, not shell expansion (every token is
+literal), and it closes what was a trivial no-privilege disarm of the whole deny set. The set holds
+launchers whose separate-value
 option grammar is small, stable, and confidently complete — so a value is never misread as the
 command. It is *enumerated, not exhaustive*: any exec-prefix NOT in it (an unlisted or
 large-option-grammar launcher — `unshare`/`numactl`/`strace`/…, a leading-positional launcher, a
@@ -170,16 +175,40 @@ _ENV_ASSIGN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 # have tiny fixed value sets. `firejail` is NOT here: its option surface is large enough that a
 # separate-value option can't be confidently ruled out, so it is a documented residual.)
 _LAUNCHERS = {
-    "env", "command", "exec", "nohup", "setsid", "sudo", "doas",
+    "env", "command", "builtin", "exec", "nohup", "setsid", "sudo", "doas",
     "nice", "ionice", "stdbuf", "timeout", "time",
     "unbuffer", "eatmydata", "catchsegv", "torsocks",
-}
+}  # `builtin`/`command` are the shell twins that run a following builtin/command (`builtin eval git
+   #  push`); both optionless-for-our-purposes → the launcher step-over lands on the real command.
 # Shells that run a command STRING passed to `-c` (`bash -c "git push"`). The string is itself a
 # command line, so `_classify` re-scans it with the full segment splitter (catching `sh -c 'env git
 # push'` too). `_shell_c_command` models the SIMPLE `-c`/`+c` flag-cluster forms and bails to the
 # residual on the value-consuming `-o`/`-O` forms rather than guess the command position. Privileged
 # positional-arg shell forms (`su -c`, `runuser -c`, `sg -c`) are the documented residual.
 _SHELL_LAUNCHERS = {"bash", "sh", "dash", "zsh", "ksh", "ash", "mksh"}
+# Shell RESERVED WORDS / grouping tokens that can prefix a *literal* command within one segment and
+# still run it: `! git push` (negation), `{ git push; }` (group), `if git push; then …`,
+# `while git push; do …`, `until git push; …`. These are shell keywords, not external binaries, so
+# they never reach `_LAUNCHERS`; without stepping over them `_classify` anchors `exe` on `!`/`{`/`if`/
+# … , matches nothing, and defers — a no-privilege disarm of the WHOLE deny set, the exact class
+# already closed for `env`/`sudo`/`bash -c`. They carry no option grammar, so a leading run of them
+# is skipped unconditionally. `time` is deliberately NOT here — it takes options (`time -p git push`)
+# and is handled as a `_LAUNCHERS` binary instead. Body keywords that head their own post-`;` segment
+# (`then`/`do`/`else git push`) are skipped the same way when that segment is scanned.
+_SHELL_KEYWORD_PREFIXES = {
+    "!", "{", "}", "if", "then", "elif", "else", "fi",
+    "while", "until", "do", "done", "for", "case", "esac", "select", "in", "coproc",
+}
+# A shell NAME/identifier — the optional coprocess name in `coproc NAME <compound-command>`, which
+# sits between the (skipped) `coproc` keyword and a compound-command opener (`{`/`if`/…). Skipped so
+# `coproc worker { git push; }` lands on the real `git`, not the name. (`[[`, `function` are
+# deferred/non-command constructs; a function BODY runs only when the function is later called — the
+# documented indirect-wrapper residual.)
+_IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+# `eval` concatenates its arguments and re-parses the result as a command line, so a fenced verb hides
+# inside them whether quoted (`eval "git push"`) or not (`eval git push`). It is re-scanned via the
+# JOINED args (a plain step-over fails: the quoted form is one token whose basename isn't `git`).
+_EVAL_BUILTINS = {"eval"}
 # Long shell options that take a SEPARATE value token; their presence shifts the command position, so
 # `_shell_c_command` bails to the residual rather than mis-locate it.
 _SHELL_LONG_VALUE_OPTS = {"--rcfile", "--init-file"}
@@ -641,10 +670,32 @@ def _classify(
         if tokens[i].partition("=")[0] in _GIT_ENV_SELECTORS:
             _unmodeled_sel = True
         i += 1
+    # Step over leading shell reserved words / grouping tokens (`!`, `{`, `if`, `while`, `coproc`, …):
+    # they run the following literal command in the same segment, so a fenced verb hides one token
+    # past them (`! git push`, `{ git push; }`, `if git push; then …`, `coproc git push`). They are
+    # keywords, not launchers, and carry no options, so a leading run is skipped before `exe` is
+    # anchored. The one exception is the `coproc NAME <compound>` name: skip an identifier that sits
+    # between a just-skipped `coproc` and a compound-command opener (`coproc worker { git push; }`),
+    # so the name is not mistaken for the executable.
+    while i < len(tokens):
+        if tokens[i] in _SHELL_KEYWORD_PREFIXES:
+            i += 1
+            continue
+        if (i > 0 and tokens[i - 1] == "coproc" and _IDENT.match(tokens[i])
+                and i + 1 < len(tokens) and tokens[i + 1] in _SHELL_KEYWORD_PREFIXES):
+            i += 1  # the coprocess NAME before its compound command
+            continue
+        break
     if i >= len(tokens):
         return None
     exe = os.path.basename(tokens[i])
     args = tokens[i + 1 :]
+
+    # `eval` re-parses its concatenated args as a command line — re-scan the JOINED args (not a token
+    # step-over: `eval "git push"` is a single token whose basename isn't `git`). Same disarm class
+    # as `bash -c "git push"`, which is already re-scanned.
+    if exe in _EVAL_BUILTINS and _depth < _MAX_LAUNCHER_DEPTH:
+        return _dangerous(" ".join(args), yolo, cwd, _depth + 1, _unmodeled_sel) if args else None
 
     # Exec-prefix launcher (`env`/`sudo`/`nice`/`timeout`/…): the real command hides in its args.
     # Step over the launcher and re-classify the delegated command so `env git push` is seen as the
