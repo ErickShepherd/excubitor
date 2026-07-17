@@ -26,11 +26,8 @@ import re
 import shlex
 from dataclasses import dataclass
 
-# Characters that, OUTSIDE quotes, separate independent commands within one Bash invocation: the
-# command separators `;` `|` `&` newline, and the subshell / command-substitution boundaries `(` `)`
-# backtick. Honored only outside quotes by split_segments(), so a kill-switch name quoted in an
-# argument is NOT a false deny.
-_SEPARATORS = frozenset(";|&\n()`")
+from excubitor.core.shell import split_segments
+
 # Leading redirection/fd noise on a token (`>file`, `2>>file`, `<file`) so the path inside is seen.
 # The digits are an OPTIONAL fd number that must be FOLLOWED by a real redirect op (`<`/`>`/`&`) — else
 # a bare digit-prefixed filename (`1allow-default-branch`, `2024-notes.txt`) would be wrongly stripped.
@@ -48,46 +45,6 @@ class ProtectedSurface:
     marker: str
     settings_names: "frozenset[str]"
     control_dir: str
-
-
-def split_segments(command: str) -> list[str]:
-    """Split a Bash command into segments at _SEPARATORS, honoring them ONLY outside quotes.
-
-    A separator inside single or double quotes is literal text, not a command boundary — so a
-    kill-switch name quoted in an argument (`git commit -m "refactor (see guard-loop-vc.py)"`) stays
-    inside its segment and is NOT promoted to its own command (which would be a false deny). The
-    tradeoff is that a LIVE command substitution inside double quotes is likewise not segmented — an
-    accepted under-block residual (see SCOPE / LIMITS). Backslash escapes the next char (outside
-    single quotes). Quote characters are preserved for the downstream shlex.split."""
-    segments: list[str] = []
-    buf: list[str] = []
-    in_single = in_double = False
-    i, n = 0, len(command)
-    while i < n:
-        ch = command[i]
-        if in_single:
-            buf.append(ch)
-            if ch == "'":
-                in_single = False
-        elif in_double:
-            if ch == "\\" and i + 1 < n:
-                buf.append(ch); buf.append(command[i + 1]); i += 2; continue
-            buf.append(ch)
-            if ch == '"':
-                in_double = False
-        elif ch == "'":
-            in_single = True; buf.append(ch)
-        elif ch == '"':
-            in_double = True; buf.append(ch)
-        elif ch == "\\" and i + 1 < n:
-            buf.append(ch); buf.append(command[i + 1]); i += 2; continue
-        elif ch in _SEPARATORS:
-            segments.append("".join(buf)); buf = []
-        else:
-            buf.append(ch)
-        i += 1
-    segments.append("".join(buf))
-    return [s for s in (seg.strip() for seg in segments) if s]
 
 
 def _kill_switch(path: str, surface: ProtectedSurface) -> "str | None":

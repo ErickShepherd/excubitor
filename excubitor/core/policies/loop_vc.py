@@ -23,13 +23,8 @@ import re
 import shlex
 
 from excubitor.core import git_state
+from excubitor.core.shell import split_segments
 
-# Characters that, OUTSIDE quotes, separate independent commands within one Bash invocation:
-# the command separators `;` `|` `&` newline, and the subshell / command-substitution boundaries
-# `(` `)` backtick (so a dangerous verb glued inside `(git push)` / `$(git push)` / `` `git push` ``
-# becomes its own segment instead of hiding behind the `(`/backtick in one shlex token). `&&`/`||`
-# fall out of the single-char `&`/`|` split (an empty middle segment is harmless).
-_SEPARATORS = frozenset(";|&\n()`")
 # git global options that consume the *following* token as their value (so the real subcommand is
 # one token further on): e.g. `git -C /path merge`, `git --config-env sec.key=ENV merge`. Verified
 # against git 2.47.3 with a subcommand-shift discriminator (`git <opt> <val> zzzcmd` => git reports
@@ -652,48 +647,6 @@ def _classify(
     # `git pull` is deliberately NOT denied: it advances the *current* branch from upstream
     # (reflog-recoverable, no push / branch-delete / remote mutation) — within the seatbelt scope.
     return None
-
-
-def split_segments(command: str) -> list[str]:
-    """Split a Bash command into segments at _SEPARATORS, honoring them ONLY outside quotes.
-
-    A separator inside single or double quotes is literal text, not a command boundary — so a
-    dangerous verb quoted in an argument (`git commit -m "document the (git push) bypass"`) stays
-    inside its segment and is NOT promoted to its own command (which would be a false deny; this
-    repo's own commit messages are full of such strings). The tradeoff is that a LIVE command
-    substitution inside double quotes (`"... $(git push)"`, which bash WOULD execute) is likewise
-    not segmented — an accepted under-block residual, consistent with the word-expansion limits in
-    SCOPE / LIMITS. Backslash escapes the next char (outside single quotes) so an escaped separator
-    is literal too. Quote characters are preserved in the segment for the downstream shlex.split."""
-    segments: list[str] = []
-    buf: list[str] = []
-    in_single = in_double = False
-    i, n = 0, len(command)
-    while i < n:
-        ch = command[i]
-        if in_single:
-            buf.append(ch)
-            if ch == "'":
-                in_single = False
-        elif in_double:
-            if ch == "\\" and i + 1 < n:
-                buf.append(ch); buf.append(command[i + 1]); i += 2; continue
-            buf.append(ch)
-            if ch == '"':
-                in_double = False
-        elif ch == "'":
-            in_single = True; buf.append(ch)
-        elif ch == '"':
-            in_double = True; buf.append(ch)
-        elif ch == "\\" and i + 1 < n:
-            buf.append(ch); buf.append(command[i + 1]); i += 2; continue
-        elif ch in _SEPARATORS:
-            segments.append("".join(buf)); buf = []
-        else:
-            buf.append(ch)
-        i += 1
-    segments.append("".join(buf))
-    return [s for s in (seg.strip() for seg in segments) if s]
 
 
 def _segment_changes_repo_context(tokens: list[str]) -> bool:
