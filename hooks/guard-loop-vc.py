@@ -35,13 +35,15 @@ Also denied in BOTH modes: the porcelain-bypass REF MOVES — `git branch -f/-m/
 and the write/delete forms of `git symbolic-ref`. They repoint/rename/overwrite refs (including
 refs/remotes/origin/HEAD and refs/heads/{main,master} — the trust anchors this guard,
 guard-default-branch.py, AND the ralph-loop frozen-oracle base pin read) WITHOUT the porcelain verbs
-above, so denying them protects the trust anchor's integrity: a loop that can move the default branch
-can re-aim what "default branch" means and forge the oracle baseline. The read form of `symbolic-ref`
-stays allowed. (This is deliberately NOT a complete deny-set over the git surface — other
-rarely-dangerous verbs like `reflog expire`, `git rebase`, and a `git fetch` refspec that moves a
-local ref are left open by design; chasing full git-verb completeness is a losing race the SCOPE /
-LIMITS section documents rather than pretends to win — the driver-side protected-ref snapshot is the
-designated backstop for those.)
+above, so denying them RAISES THE BAR on trust-anchor integrity: a loop that can move the default
+branch can re-aim what "default branch" means and forge the oracle baseline. The read form of
+`symbolic-ref` stays allowed. (This is deliberately NOT a complete deny-set over the git surface —
+`reflog expire`, `git rebase`, a `git fetch` refspec that moves a ref, and ultimately a direct
+`.git/refs` write are left open by design; chasing full git-verb completeness is a losing race the
+SCOPE / LIMITS section documents rather than pretends to win. The guard is defense-in-depth: a
+baseline that must be immutable against a loop with repo write access is the DRIVER's job — isolate
+the loop from the real refs, or capture the anchor out of band — not something a Bash-parsing hook
+can guarantee.)
 
 ACTIVATION (opt-in). Does nothing unless CLAUDE_LOOP_GUARD is set. `/loop` is a built-in skill that
 sets no marker of its own and there is no reliable way to auto-detect loop context, so the guard is

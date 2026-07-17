@@ -327,7 +327,7 @@ class TestPermitBinding(_RepoCase):
         self.g("commit", "-m", "loop work")
         p = _run(self.d, "HEAD", "python3 tests/witness_ok.py")
         self.assertEqual(p.returncode, REFUSED, f"stdout={p.stdout} stderr={p.stderr}")
-        self.assertIn("push-protected default", p.stderr)
+        self.assertIn("remote-tracking default", p.stderr)
 
     def test_untracked_conftest_refuses(self):
         # conftest.py is auto-collected by pytest and changes verdicts without appearing in the
@@ -422,10 +422,10 @@ class TestBasePinRequiresPushProtectedAnchor(unittest.TestCase):
         # permit over an unprovable baseline.
         p = _run(self.d, "main", "/bin/true PLAN.md")
         self.assertEqual(p.returncode, REFUSED, f"stdout={p.stdout} stderr={p.stderr}")
-        self.assertIn("push-protected anchor", p.stderr)
+        self.assertIn("remote-tracking anchor", p.stderr)
 
     def test_push_protected_default_is_green(self):
-        # With origin/HEAD mirroring the base, --base main resolves to the push-protected anchor → the
+        # With origin/HEAD mirroring the base, --base main resolves to the remote-tracking anchor → the
         # baseline-authored vacuous oracle passes (authorship residual), proving the anchor path works.
         self._add_origin()
         p = _run(self.d, "main", "/bin/true PLAN.md")
@@ -447,7 +447,7 @@ class TestBasePinRequiresPushProtectedAnchor(unittest.TestCase):
         self.g("checkout", "loop/x")
         p = _run(self.d, "main", "/bin/true loot.py")
         self.assertEqual(p.returncode, REFUSED, f"stdout={p.stdout} stderr={p.stderr}")
-        self.assertIn("push-protected default", p.stderr)
+        self.assertIn("remote-tracking default", p.stderr)
 
 
 if __name__ == "__main__":

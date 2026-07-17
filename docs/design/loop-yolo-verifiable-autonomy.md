@@ -209,11 +209,12 @@ signal" was therefore not yet mechanically true: the *files* were frozen, but th
 `run_frozen_oracle.py` now binds the permit on four axes before the freeze envelope runs: the
 command must appear as a whole authored unit (a whole line or complete `verify:` suffix, never a
 substring) in a tracked anchor file's **base-tree blob** (`--anchor`, with `--base` pinned to the
-**push-protected** default branch — `refs/remotes/origin/<name>`, the one ref a loop cannot move
-without a push, which the VC fence denies; a *local* default ref is loop-movable through verbs
-outside the porcelain fence — `checkout <default> && reset --soft`, `rebase`, `commit` — so a
-local-only repo has no verifiable baseline and gets no permit, the correct fail-deny rather than
-security theater over a movable ref); the executable must resolve on a fixed trusted PATH and be
+**remote-tracking** default branch — `refs/remotes/origin/<name>`, the highest-bar *in-repo* anchor:
+the trivial local ref moves are fenced or don't touch it, and a local-only repo with no such anchor
+fail-denies. This is defense-in-depth, NOT absolute immutability — a `git fetch` refspec (local-path,
+no credentials) or a direct `.git/refs` write can still retarget it; a truly loop-immutable baseline
+is the driver's job, via loop isolation or an out-of-band `--base <sha>`); the executable must resolve
+on a fixed trusted PATH and be
 either tracked-in-repo-and-frozen or non-user-writable outside the repo (including a resolved target
 that lands outside the repo); known verdict-affecting companions (conftest.py, root runner config,
 `-m` sys.path[0] shadowing across every `-m` spelling) join the frozen surface; and the witness runs

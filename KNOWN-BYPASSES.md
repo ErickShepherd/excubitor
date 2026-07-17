@@ -149,7 +149,7 @@ and **left open by design**, documented here and pinned ALLOW in
 | Verb | What it can do | Why it's left open |
 |---|---|---|
 | `git reflog expire --expire=now --all` | drop the reflog (the recovery net others rely on) | rare; only matters combined with another destructive act |
-| `git fetch <path> +<src>:<default>` | move a local ref (incl. the default) via a refspec | a fetch refspec can retarget a ref without a fenced verb; the driver-side protected-ref snapshot is the designated backstop, not a per-verb fence |
+| `git fetch <path> +<src>:<ref>` (incl. `refs/remotes/*`) | move a ref — even a remote-tracking one — via a local-path refspec, no network/credentials | a fetch refspec retargets a ref without a fenced verb, and a direct `.git/refs` write goes below any Bash-parsing hook entirely; both are the irreducible "a loop with repo write access can move any ref" residual. The real backstop is DRIVER ISOLATION (run the loop in a worktree/container with no write access to the real refs) or an out-of-band base OID, NOT a per-verb fence |
 | `git stash drop` / `git stash clear` | discard stashed work | stashes are not the loop's committed line of work |
 | `git tag -d <tag>` | delete a tag | local tag; recreatable; not an integration act |
 | `git filter-branch …` / `git rebase …` | rewrite history on the current branch | rewrites the *current* branch only — like `reset`, within the "own branch" seatbelt scope until a push (which IS denied) would publish it |
@@ -235,14 +235,18 @@ environment. What it deliberately does **not** verify:
   root-owned interpreter, and sys.path shadowing from a directly-executed script's own directory,
   are outside the frozen surface (the `-m` repo-root shadow *is* checked, across every `-m` spelling —
   spaced, attached, or clustered).
-- **A local-only default branch as a baseline.** The pin requires a push-protected anchor
-  (`refs/remotes/origin/HEAD`): a *local* `refs/heads/<default>` is loop-movable through verbs OUTSIDE
-  the porcelain fence — `git checkout <default> && git reset --soft <loop-sha>`, `rebase`, `commit`,
-  `filter-branch` — and chasing those is the deny-set-completeness race the guard refuses. So rather
-  than pin to a movable ref, a repo with no `origin/HEAD` **fail-denies** (no permit); the residual is
-  therefore "YOLO requires a remote whose origin/HEAD names the default", not a forgeable baseline.
-  A `git fetch <path> +<src>:<default>` refspec can still move the *remote-tracking* ref locally — the
-  driver should launch the loop without fetch/push credentials (the designated backstop). Pinned in
+- **The base OID's ultimate immutability — the DRIVER's job, not the gate's.** The pin resolves the
+  remote-tracking default (`refs/remotes/origin/HEAD` → `refs/remotes/origin/<name>`), which RAISES
+  THE BAR: the trivial local ref moves (`branch -f/-M/-C`, `update-ref`, `switch -C`, `checkout -B`,
+  `checkout <default> && reset --soft`) are fenced or don't touch it, and a local-only default (no
+  remote-tracking anchor at all) **fail-denies** rather than pin to a trivially-movable local ref. It
+  is **not** absolute immutability, and the gate does not claim to be: a `git fetch <path>
+  +<src>:refs/remotes/origin/<name>` (local-path, no credentials — verified ALLOWED by the guard) and,
+  below any Bash-parsing hook, a direct `.git/refs` write can still retarget even the remote-tracking
+  ref. Chasing those is the completeness race the guard refuses; the real guarantee is **driver
+  isolation** — run the loop in a worktree/container with no write access to the real refs, or capture
+  the default-branch OID out of band before launch and pass it as `--base <sha>`. This gate is
+  defense-in-depth over that isolation, not a replacement for it. Pinned in
   `skills/ralph-loop/tests/test_run_frozen_oracle.py::TestBasePinRequiresPushProtectedAnchor`.
 - **The gate's own invocation.** A misbehaving loop can still skip the gate or run it through a
   forged interpreter — the recipe-level honest limit that has always applied (the guard hooks cannot

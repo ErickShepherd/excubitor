@@ -109,18 +109,20 @@ def _toplevel(repo: str) -> str | None:
 
 
 def _default_branch_oid(repo: str) -> tuple[str | None, str | None]:
-    """(default-branch name, its PUSH-PROTECTED commit OID) or (None, None) if there is no
-    push-protected anchor.
+    """(default-branch name, its remote-tracking commit OID) or (None, None) if there is no
+    remote-tracking anchor.
 
-    The only ref a loop provably cannot move is a remote-tracking one — moving it needs a push, which
-    guard-loop-vc.py denies in both modes. So the immutable baseline is `refs/remotes/origin/HEAD` →
-    `refs/remotes/origin/<name>`, and the pinned OID is that REMOTE ref's, never the local
-    `refs/heads/<name>`. A local-only default (no origin/HEAD) has NO push-protected anchor: a loop
-    can move `refs/heads/<name>` through verbs OUTSIDE the porcelain fence — `git checkout <default>
-    && git reset --soft <loop-sha>`, `rebase`, `commit`, `filter-branch` — none of which the fence
-    covers (chasing them is the deny-set-completeness race the guard refuses). Rather than pretend a
-    movable ref is immutable, this returns (None, None) there and the caller fail-denies (round-5
-    review). (`^{commit}` peels an annotated-tag HEAD; the name keeps slashes via removeprefix.)"""
+    The pin resolves `refs/remotes/origin/HEAD` → `refs/remotes/origin/<name>` and returns that
+    REMOTE ref's OID, never the local `refs/heads/<name>`. This RAISES THE BAR — the trivial local
+    ref moves (`branch -f/-M/-C`, `update-ref`, `switch -C`, `checkout -B`, or `checkout <default> &&
+    reset --soft`) are fenced by guard-loop-vc.py or don't touch a remote-tracking ref — but it is NOT
+    absolute immutability: a `git fetch <path> +<src>:refs/remotes/origin/<name>` (local-path, no
+    credentials, unfenced) retargets it, and a loop with repo write access can rewrite `.git/refs`
+    directly, below any git-verb fence. True baseline immutability is the DRIVER's responsibility (see
+    `_base_pin_refusal`), not something this resolver can guarantee. A local-only default (no
+    origin/HEAD) has not even the remote-tracking bar, so it returns (None, None) and the caller
+    fail-denies rather than pin to a trivially-movable local ref. (`^{commit}` peels an annotated-tag
+    HEAD; the name keeps slashes via removeprefix.)"""
     ok, out = _git_text(repo, "symbolic-ref", "--quiet", "refs/remotes/origin/HEAD")
     if not (ok and out.strip().startswith("refs/remotes/origin/")):
         return None, None
@@ -134,29 +136,35 @@ def _default_branch_oid(repo: str) -> tuple[str | None, str | None]:
 
 
 def _base_pin_refusal(repo: str, base: str) -> str | None:
-    """REFUSE unless `base` resolves to the repo's PUSH-PROTECTED default branch tip
-    (`refs/remotes/origin/<name>`) — the one ref a loop cannot move without a push (denied in both
-    modes). A loop-chosen base (`HEAD`, its own branch, a raw commit), OR a local-only default with no
-    push-protected anchor, is loop-movable and would anchor the whole gate (base + the anchor blob +
-    the frozen surface all read from it) to loop-authored state — so both fail-deny.
+    """REFUSE unless `base` resolves to the repo's remote-tracking default tip
+    (`refs/remotes/origin/<name>`). A loop-chosen base (`HEAD`, its own branch, a raw commit), OR a
+    local-only default with no remote-tracking anchor, is trivially loop-movable and would anchor the
+    whole gate (base + the anchor blob + the frozen surface all read from it) to loop-authored state
+    — so both fail-deny.
 
-    HONEST LIMIT: this makes the gate require a remote whose `origin/HEAD` names the default; a
-    local-only repo cannot offer a verifiable baseline and gets no YOLO permit (the correct fail-deny,
-    consistent with the gate's ethos — not security theater over a movable ref). A `git fetch` refspec
-    that moves a *remote-tracking* ref locally is the remaining residual (KNOWN-BYPASSES); the driver
-    should launch the loop without fetch/push credentials, the designated backstop."""
+    HONEST LIMIT — what this does and does NOT guarantee. It RAISES THE BAR: the easy local ref moves
+    are fenced (guard-loop-vc.py) and a local-only repo, whose default has no remote-tracking anchor
+    at all, gets no YOLO permit. It is NOT absolute immutability: a `git fetch <path>
+    +<src>:refs/remotes/origin/<name>` (local-path, no credentials, and — like every other in-repo
+    git operation — unclosable in general without losing the completeness race the guard refuses), or
+    a direct `.git/refs` write, can still retarget even the remote-tracking ref. A truly
+    loop-immutable baseline is the DRIVER's job, not this gate's: run the loop in an isolated
+    worktree/container that has no write access to the real refs, or capture the default-branch OID
+    out of band BEFORE launch and pass it as `--base <sha>`. This gate is defense-in-depth over that
+    isolation, never a substitute for it (KNOWN-BYPASSES documents the in-repo residual)."""
     name, want = _default_branch_oid(repo)
     if want is None:
-        return ("the default branch has no push-protected anchor (refs/remotes/origin/HEAD): a "
-                "local-only default ref is loop-movable through verbs outside the porcelain fence "
-                "(git checkout <default> && git reset/commit/rebase), so it cannot pin the permit "
-                "baseline — give the repo a remote whose origin/HEAD names the default, or pass a "
-                "push-protected --base (fail-deny)")
+        return ("the default branch has no remote-tracking anchor (refs/remotes/origin/HEAD): a "
+                "local-only default ref is trivially loop-movable (git checkout <default> && git "
+                "reset/commit/rebase), so it cannot pin the permit baseline — give the repo a remote "
+                "whose origin/HEAD names the default, isolate the loop and pass a driver-captured "
+                "--base <sha>, or accept no YOLO permit (fail-deny)")
     ok, got = _git_text(repo, "rev-parse", "--verify", f"{base}^{{commit}}")
     if not ok or got.strip() != want:
-        return (f"--base {base!r} does not resolve to the push-protected default "
-                f"refs/remotes/origin/{name} — the permit gate only anchors to the baseline the loop "
-                f"cannot move without a (denied) push (fail-deny)")
+        return (f"--base {base!r} does not resolve to the remote-tracking default "
+                f"refs/remotes/origin/{name} — the permit gate anchors to the highest-bar in-repo "
+                f"baseline; true immutability is the driver's (isolation / out-of-band --base) "
+                f"(fail-deny)")
     return None
 
 
@@ -383,8 +391,9 @@ def run(repo: str, base: str, anchor: str, verified_by: str, timeout: float) -> 
         print(f"REFUSED: {repo} is not a git repo (fail-deny)", file=sys.stderr)
         return EXIT_REFUSED
 
-    # 0. BASE PIN — the baseline must be the PUSH-PROTECTED default (origin/<name>), the one ref the
-    #    loop cannot move without a denied push; a local-only movable default fail-denies.
+    # 0. BASE PIN — the baseline must be the remote-tracking default (origin/<name>), the highest-bar
+    #    in-repo anchor; a local-only movable default fail-denies. True immutability is the driver's
+    #    (isolation / out-of-band --base) — this gate is defense-in-depth, not a substitute.
     reason = _base_pin_refusal(repo, base)
     if reason is not None:
         print(f"REFUSED (base): {reason}", file=sys.stderr)

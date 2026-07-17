@@ -511,9 +511,10 @@ work hard-refuses YOLO — no override — and routes to the normal out-of-loop 
   - the oracle is **baseline-bound, frozen AND green in ONE atomic operation** — the permit-to-act gate is
     `python3 ~/.claude/skills/ralph-loop/scripts/run_frozen_oracle.py --repo "$R" --base <default-branch> --anchor <the ledger file carrying the claim> --verified-by "<the claim's verified-by command>"`
     exiting 0 (GREEN). The runner binds **what runs** to state the loop cannot author — `--base` must
-    resolve to the **push-protected** default (`refs/remotes/origin/<name>`, the one ref a loop cannot
-    move without a denied push; a loop-chosen base, or a local-only repo with no `origin/HEAD` whose
-    local default is loop-movable, refuses), the command must appear as a whole authored unit in the
+    resolve to the **remote-tracking** default (`refs/remotes/origin/<name>`, the highest-bar in-repo
+    anchor — a loop-chosen base, or a local-only repo with no `origin/HEAD` whose local default is
+    trivially loop-movable, refuses; true immutability against a loop with repo write access is the
+    driver's job via isolation or an out-of-band `--base`, not this gate's), the command must appear as a whole authored unit in the
     anchor's **base-tree blob** (a caller-supplied or truncated command earns no permit, no matter which
     frozen files it names), the executable resolves on a fixed trusted PATH and must itself be trustworthy
     (an untracked in-repo interpreter like `.venv/bin/python` refuses — author witnesses against a system
