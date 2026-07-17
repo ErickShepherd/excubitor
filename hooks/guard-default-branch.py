@@ -1,26 +1,28 @@
 #!/usr/bin/env python3
-"""PreToolUse guard: block the direct file-edit tools while on a repo's default branch.
+"""PreToolUse guard (Claude Code adapter): block the direct file-edit tools while on a repo's default.
 
-Enforces a branch-first workflow (see this repo's README, "The workflow these
-fences assume"): no editing on main/master — branch first. Registered in
-settings.json for the Edit|Write|NotebookEdit tools ONLY — a Bash mutation
-(redirection, `sed -i`, …) is out of this guard's surface (R-06 accepted
-residual, named in KNOWN-BYPASSES.md); the honest claim is "the direct
-file-edit tools", not "all file mutations".
+Thin Claude Code adapter over the model-blind default-branch policy in
+`excubitor.core.policies.default_branch`. It parses the PreToolUse envelope (Edit/Write use
+`file_path`, NotebookEdit uses `notebook_path`), applies the host-specific concerns — the blanket
+`CLAUDE_ALLOW_DEFAULT_BRANCH` env off-switch and the per-repo `.claude/allow-default-branch` opt-out
+marker — and hands the (cwd, target, marker-relpath) to the core, then renders the veto. The
+symlink-laundering target resolution and the protected-default-branch decision live in the core.
 
-Defers to the normal permission flow (no decision) when:
-  - the target file isn't inside a git repo,
-  - the current branch isn't the repo's default branch,
-  - a `.claude/allow-default-branch` marker file exists at the repo root, or
-  - CLAUDE_ALLOW_DEFAULT_BRANCH is set in the environment.
-Otherwise it denies the call with a message telling Claude to branch first.
+Enforces a branch-first workflow (see this repo's README, "The workflow these fences assume"): no
+editing on main/master — branch first. Registered in settings.json for the Edit|Write|NotebookEdit
+tools ONLY — a Bash mutation (redirection, `sed -i`, …) is out of this guard's surface (R-06 accepted
+residual, named in KNOWN-BYPASSES.md); the honest claim is "the direct file-edit tools", not "all file
+mutations".
 
-Contract (docs/en/hooks): deny = exit 0 + JSON on stdout with
-hookSpecificOutput.permissionDecision="deny"; emitting no decision defers. We never
-exit non-zero — a guard bug must not wedge the editor, only fail open.
+Defers to the normal permission flow (no decision) when: the target isn't inside a git repo; the
+current branch isn't the repo's default; a `.claude/allow-default-branch` marker exists at the repo
+root; `CLAUDE_ALLOW_DEFAULT_BRANCH` is set; or — a guard copied out of its package — the core is
+unreachable (fail-open, never crash). Otherwise it denies with a branch-first message.
 
-Every deny is also appended, strictly best-effort AFTER the decision is on stdout, to a local
-JSONL telemetry log (see hooks/_denial_log.py) — a telemetry fault never changes the decision.
+Contract (docs/en/hooks): deny = exit 0 + JSON on stdout with permissionDecision="deny"; emitting no
+decision defers. We never exit non-zero — a guard fault must not wedge the editor, only fail open.
+Every deny is appended, strictly best-effort AFTER the decision is on stdout, to a local JSONL
+telemetry log (hooks/_denial_log.py) — a telemetry fault never changes the decision.
 """
 from __future__ import annotations
 
@@ -28,20 +30,19 @@ import json
 import os
 import sys
 
-# The shared model-blind policy core lives in the importable `excubitor` package at the repo root.
-# This hook runs as a standalone subprocess, so it adds the repo root — resolved through any deploy
-# symlink — to sys.path before importing the core (read-only git state now lives there, not here).
-# FAIL-SOFT: a guard copied out of its package must still LOAD, never crash. Without the core this
-# guard cannot resolve repo state, so it defers (fail-open) exactly as it already does on a git fault.
+# The default-branch policy lives in the shared model-blind core; this hook is the thin adapter over
+# it. Add the repo root — resolved through any deploy symlink — to sys.path, then import FAIL-SOFT: a
+# guard copied out of its package cannot reach the core, so it defers (fail-open) — exactly as it
+# already does on a git fault — rather than crash-on-load.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 try:
-    from excubitor.core import git_state  # noqa: E402
+    from excubitor.core.policies import default_branch  # noqa: E402
 except ImportError:  # copied out of its package → defer (fail-open), never crash-on-load
-    git_state = None  # type: ignore[assignment]
+    default_branch = None  # type: ignore[assignment]
 
-# Read-only git state and default-branch resolution — the former private `_git` plus the inline
-# origin/HEAD resolution — were extracted to the shared core in C1.2 and now live in
-# `excubitor.core.git_state`, shared verbatim with guard-loop-vc.py. hooks/tests/ is the oracle.
+# The per-repo opt-out marker is host-specific (Claude Code's control dir), so the adapter owns it and
+# passes it to the neutral core; the core hardcodes no host directory.
+_OPT_OUT_MARKER = os.path.join(".claude", "allow-default-branch")
 
 
 def _allow() -> None:
@@ -88,86 +89,6 @@ def _deny(reason: str, payload: dict) -> None:
     sys.exit(0)
 
 
-def _nearest_existing_dir(path: str, fallback: str) -> str:
-    """Walk up from `path` to the first directory that exists on disk.
-
-    Handles Write creating a brand-new file (and even new parent dirs) inside a repo:
-    the file itself doesn't exist yet, so resolve to its nearest existing ancestor.
-    """
-    candidate = path if os.path.isdir(path) else os.path.dirname(path)
-    while candidate and not os.path.isdir(candidate):
-        parent = os.path.dirname(candidate)
-        if parent == candidate:
-            break
-        candidate = parent
-    return candidate if os.path.isdir(candidate) else fallback
-
-
-def _candidate_dirs(cwd: str, logical_target: str) -> "list[str] | None":
-    """The existing directories to test for protected-repo membership.
-
-    Both the LOGICAL target's container AND the realpath-resolved container, because a symlink can
-    launder a write across a repo boundary: a symlink in a feature-branch repo can point at a
-    tracked file in a *different* repo checked out on its default branch. Inspecting only the
-    logical container (as the original code did) misses that — the resolved path lands in the
-    protected repo. `realpath` resolves symlinks in every existing path component even when the
-    leaf does not exist yet (a Write creating a new file through a symlinked directory).
-
-    Returns a de-duplicated, order-preserving list, or None on malformed input (embedded NUL, etc.)
-    so the caller fails OPEN — never wedge the editor on a crafted-but-broken path.
-    """
-    try:
-        abs_target = os.path.abspath(os.path.join(cwd, logical_target))
-        dirs = [_nearest_existing_dir(abs_target, cwd)]
-        real_target = os.path.realpath(abs_target)
-        if real_target != abs_target:  # a symlink (or /./ , .. , etc.) actually moved the path
-            dirs.append(_nearest_existing_dir(real_target, cwd))
-    except (TypeError, ValueError, OSError):
-        # TypeError is belt-and-suspenders for a non-string that slips past main()'s field-type
-        # checks (P0.16) — os.path.join raising must fail OPEN, never exit 1 against the contract.
-        return None
-    seen: set[str] = set()
-    out: list[str] = []
-    for d in dirs:
-        if d not in seen:
-            seen.add(d)
-            out.append(d)
-    return out
-
-
-def _protected_repo_deny(target_dir: str, payload: dict) -> "str | None":
-    """If `target_dir` is inside a git repo checked out on its (un-opted-out) default branch,
-    return the deny reason; else None (not a repo / opted out / on a feature branch)."""
-    if git_state is None:  # core not importable (guard copied out of its package) → defer, never wedge
-        return None
-    repo = git_state.repo_toplevel(["-C", target_dir])
-    if repo is None:
-        return None  # not a git repo → not our concern
-
-    # Per-repo opt-out: bless main-only repos (or a one-off) with a marker file. isfile (not exists) so a
-    # stray directory / dangling symlink of that name can't silently disable the guard.
-    if os.path.isfile(os.path.join(repo, ".claude", "allow-default-branch")):
-        return None
-
-    # Detached HEAD reads as 'HEAD'; a git fault reads as "" — both fall out of the protected set below
-    # (defer), preserving the prior `.stdout.strip()` behavior.
-    branch = git_state.current_branch(["-C", repo]) or ""
-
-    # Always protect main/master; a resolved origin/HEAD ADDS to the set, never replaces it (replacing
-    # it would silently un-protect main/master). The slash-safe resolution now lives in the shared core.
-    protected = git_state.protected_default_names(["-C", repo])
-
-    if branch not in protected:
-        return None
-    return (
-        f"On the default branch '{branch}' in {repo} — branch before editing. "
-        f"`git switch -c <type>/<slug>` carries your current changes onto a new "
-        f"branch (branching-strategy: feature/, fix/, docs/, chore/, refactor/, …). "
-        f"To intentionally allow the default branch in this repo, create the marker: "
-        f"touch {os.path.join(repo, '.claude', 'allow-default-branch')}"
-    )
-
-
 def main() -> None:
     try:
         payload = json.load(sys.stdin)
@@ -200,20 +121,11 @@ def main() -> None:
     # payload cwd, else repo detection lands on the wrong directory (e.g. a sibling repo).
     logical_target = file_path or notebook_path or cwd
 
-    candidates = _candidate_dirs(cwd, logical_target)
-    if candidates is None:
-        _allow()  # malformed target → fail open
-
-    # Deny if ANY candidate (logical container OR symlink-resolved container) is a protected repo.
-    # A safe logical container must NOT override an unsafe physical target — so we never short-circuit
-    # to allow on the first non-protected candidate; only after every candidate has cleared.
-    # NOTE (residual): a hard link is indistinguishable from an ordinary file at the path layer (no
-    # link to resolve), so a hard link into a protected repo is NOT caught here — documented in
-    # KNOWN-BYPASSES.md, not chased (detecting it means stat-ing inode/nlink across repos).
-    for target_dir in candidates:
-        reason = _protected_repo_deny(target_dir, payload)
-        if reason is not None:
-            _deny(reason, payload)
+    if default_branch is None:
+        _allow()  # copied out of its package: no policy reachable → fail OPEN (never wedge)
+    reason = default_branch.deny_reason(cwd, logical_target, _OPT_OUT_MARKER)
+    if reason is not None:
+        _deny(reason, payload)
     _allow()
 
 
