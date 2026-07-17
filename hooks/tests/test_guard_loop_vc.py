@@ -956,6 +956,12 @@ class TestShellKeywordAndEvalPrefix(unittest.TestCase):
         "until git push; do break; done",
         "if git branch -D main; then :; fi",
         "{ eval git push; }",                    # keyword + eval chained
+        "coproc git push origin main",           # coproc reserved word, simple command
+        "coproc git branch -D main",
+        "coproc worker { git push; }",           # coproc NAME <compound> — the name is skipped
+        "coproc { git push; }",                  # coproc + anonymous group
+        "builtin eval git push",                 # `builtin` twin of `command` (was asymmetric)
+        "command builtin eval git push",         # launcher + builtin + eval chain
     ]
 
     def test_keyword_and_eval_prefix_denied(self):
@@ -977,6 +983,11 @@ class TestShellKeywordAndEvalPrefix(unittest.TestCase):
         "{ git status; }",                       # grouped non-fenced command
         "while read l; do echo $l; done",        # 'read'/'echo' — nothing fenced
         "! git diff --quiet",                    # negated non-fenced git read
+        "coproc git status",                     # coproc of a non-fenced git subcommand
+        "coproc worker { echo hi; }",            # coproc NAME group, non-fenced body
+        "coproc mydb { psql; }",                 # coproc NAME group, non-git body
+        "builtin cd /tmp",                       # builtin of a non-fenced command
+        "echo coproc git push",                  # 'coproc'/'git push' are echo args, not the head
     ]
 
     def test_keyword_and_eval_non_fenced_still_allows(self):
