@@ -19,9 +19,11 @@ bless its own work. The watcher that stays awake while the loop runs and nobody 
 Stdlib-only Python hooks + [Agent Skills](https://code.claude.com/docs/en/skills)-format capability
 packets, each mechanism pinned by executed regressions and shipped with the design rationale that
 produced it. Built for and battle-tested
-with Claude Code; the VC-guard's decision core is runtime-neutral — a second, non-Claude-Code adapter
-drives the *same* code with an equivalence test to prove it ([`SPEC.md`](SPEC.md)), so its portability
-to any runtime that can intercept tool calls is demonstrated, not just asserted.
+with Claude Code; **all four guards now share a model-blind policy core** (`excubitor/core/`) — the
+shipped hooks are thin Claude Code adapters over it, and a second, non-Claude-Code adapter drives the
+*same* core with an equivalence test to prove it ([`SPEC.md`](SPEC.md)), so its portability to any
+runtime that can intercept tool calls is demonstrated, not just asserted. (Claude Code is the only
+*supported* runtime today; other hosts are designed, not yet built.)
 
 ## 60-second crash test
 
@@ -102,14 +104,19 @@ must never discharge its own claims).
 ## What's in the box
 
 ```
-hooks/                     # 4 stdlib-only PreToolUse guards + denial-telemetry log + tests
+excubitor/core/            # the model-blind policy core (stdlib-only, no host I/O): events,
+                           # git_state, policies/{loop_vc,default_branch,one_unit,self_integrity},
+                           # dispatch (deny precedence), shell + tests
+excubitor/adapters/        # per-runtime adapters: claude_code.py (shared PreToolUse envelope glue)
+hooks/                     # the 4 Claude Code guard entry points — thin adapters over the core —
+                           # + denial-telemetry log + the differential-oracle tests
 skills/
   telos/                   # intent-record authoring (write side)
   audit-telos/             # conformance audit (read side) + strict parser + tests
   telos-loop/              # telos-anchored unattended loop recipe
   ralph-loop/              # charter-driven loop + oracle freeze/run + suspend scripts + tests
   leak-guard/              # private→public boundary guard + leak_check.py + tests
-runtime/                   # runtime-neutral adapter (portability, proven) + tests — see SPEC.md
+runtime/spec_adapter.py    # the generic excubitor.pre_tool.v1 adapter (portability, proven) — see SPEC.md
 docs/design/               # design/deliberation records
 docs/telos/                # this repo's own intent record (audited by its own tooling)
 scripts/install.sh         # symlink skills+hooks into ~/.claude, register the hooks
