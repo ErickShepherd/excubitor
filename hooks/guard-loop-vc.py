@@ -21,22 +21,29 @@ TWO MODES, selected by the value of CLAUDE_LOOP_GUARD (see docs/design/loop-yolo
     over the LLM), the self-judgment objection above evaporates — "done" is unforgeable, not
     self-blessed. So the loop may *act* to completion, but ONLY within the reversible/internal
     blast radius: it may integrate via a `--no-ff` merge into a NON-default local branch. It still
-    may NOT push, force-push, hard-reset, `git clean`, delete a branch, remove a worktree,
-    `gh pr merge`, merge into the default branch, or fast-forward merge (excluded so every merge is
-    revertable via `git revert -m 1`). Default-branch detection FAILS DENY: if the current or
-    default branch can't be determined, the merge is blocked.
+    may NOT push, force-push, hard-reset, `git clean`, delete a branch, remove a worktree, move a
+    ref directly (`git branch -f/-m/-M/-C`, `update-ref`, `switch -C`, `checkout -B`, `worktree add
+    -B`, symbolic-ref writes), `gh pr merge`, merge into the default branch, or fast-forward merge
+    (excluded so every merge is revertable via `git revert -m 1`). Default-branch detection FAILS
+    DENY: if the current or default branch can't be determined, the merge is blocked.
 
 `git clean` (without a dry-run flag) is denied in BOTH modes — it deletes untracked files with no
 reflog, strictly worse than `reset --hard`.
 
-Also denied in BOTH modes: `git remote set-head` and the write/delete forms of `git symbolic-ref`.
-They repoint refs/remotes/origin/HEAD — the trust anchor this guard (and guard-default-branch.py)
-reads for default-branch detection — so denying them protects the guard's OWN integrity. The read
-form of `symbolic-ref` stays allowed. (main/master are hardcode-protected regardless, so this only
-ever mattered for a non-standard trunk. This is deliberately NOT a complete deny-set over the git
-surface — other rarely-dangerous verbs like `update-ref -d` / `reflog expire` are left open by
-design; chasing full git-verb completeness is a losing race the SCOPE / LIMITS section documents
-rather than pretends to win.)
+Also denied in BOTH modes: the porcelain-bypass REF MOVES — `git branch -f/-m/-M/-C`,
+`git update-ref`, `git switch -C`, `git checkout -B`, `git worktree add -B`, `git remote set-head`,
+and the write/delete forms of `git symbolic-ref`. They repoint/rename/overwrite refs (including
+refs/remotes/origin/HEAD and refs/heads/{main,master} — the trust anchors this guard,
+guard-default-branch.py, AND the ralph-loop frozen-oracle base pin read) WITHOUT the porcelain verbs
+above, so denying them RAISES THE BAR on trust-anchor integrity: a loop that can move the default
+branch can re-aim what "default branch" means and forge the oracle baseline. The read form of
+`symbolic-ref` stays allowed. (This is deliberately NOT a complete deny-set over the git surface —
+`reflog expire`, `git rebase`, a `git fetch` refspec that moves a ref, and ultimately a direct
+`.git/refs` write are left open by design; chasing full git-verb completeness is a losing race the
+SCOPE / LIMITS section documents rather than pretends to win. The guard is defense-in-depth: a
+baseline that must be immutable against a loop with repo write access is the DRIVER's job — isolate
+the loop from the real refs, or capture the anchor out of band — not something a Bash-parsing hook
+can guarantee.)
 
 ACTIVATION (opt-in). Does nothing unless CLAUDE_LOOP_GUARD is set. `/loop` is a built-in skill that
 sets no marker of its own and there is no reliable way to auto-detect loop context, so the guard is
@@ -122,6 +129,20 @@ _SEPARATORS = frozenset(";|&\n()`")
 _GIT_VALUE_OPTS = {
     "-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env", "--attr-source",
 }
+# Environment variables that SELECT THE REPOSITORY out-of-band of the argv scan (`GIT_DIR=/p/.git
+# git merge --no-ff t` targets /p while branch detection would read the payload cwd). P0.14 posture:
+# they are not modeled — their presence marks the segment's repo selection UNMODELED, which
+# _yolo_merge_reason turns into a fail-deny. (GIT_NAMESPACE etc. don't move HEAD; not selectors.)
+_GIT_ENV_SELECTORS = {"GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR"}
+# Shell builtins that CHANGE THE WORKING DIRECTORY of every LATER segment (`cd /p && git merge
+# --no-ff t` merges in /p while branch detection would read the payload cwd) — the cross-segment
+# sibling of the launcher chdir options above. Same posture: not modeled; a preceding segment headed
+# by one of these marks later segments' repo selection UNMODELED → YOLO merge fail-deny.
+_DIR_BUILTINS = {"cd", "pushd", "popd"}
+# Builtins that can EXPORT a GIT_DIR-family variable into every later segment
+# (`export GIT_DIR=/p/.git; git merge --no-ff t`) — the cross-segment sibling of the same-segment
+# `GIT_DIR=x git merge` prefix _classify already flags.
+_EXPORT_BUILTINS = {"export", "declare", "typeset", "local"}
 # gh options that consume the following token as their value and may precede the subcommand
 # path, so a flag value isn't mistaken for `pr`/`merge`: e.g. `gh -R owner/repo pr merge`.
 _GH_VALUE_OPTS = {"-R", "--repo", "--hostname"}
@@ -183,21 +204,38 @@ _LAUNCHER_VALUE_OPTS = {
     "time": {"-o", "--output", "-f", "--format"},  # GNU /usr/bin/time (the bash keyword ignores these)
     "torsocks": {"-a", "--address", "-p", "--port", "-P", "--pass", "-u", "--user"},
 }
+# Launcher options that CHANGE THE WORKING DIRECTORY of the delegated command (`env -C /p git merge`
+# runs the merge in /p while branch detection would read the payload cwd) — another repo-selector
+# spelling. P0.14 posture: not modeled (composing the new cwd faithfully buys little); their presence
+# marks the delegated command's repo selection UNMODELED → fail-deny for a YOLO merge. sudo's `-C`
+# is --close-from (an fd number), NOT chdir — its chdir short is `-D`; env's chdir short IS `-C`.
+_LAUNCHER_CHDIR_OPTS = {
+    "env": {"-C", "--chdir"},
+    "sudo": {"-D", "--chdir"},
+}
 # Launchers whose grammar puts N bare positionals BEFORE the delegated command (`timeout DURATION
 # command`). Skipped after the option scan so the DURATION is not misread as the command.
 _LAUNCHER_POSITIONAL_SKIP = {"timeout": 1}
 _MAX_LAUNCHER_DEPTH = 10  # backstop against a pathological launcher chain (each hop shrinks tokens)
 
 
-def _after_launcher(launcher: str, args: list[str]) -> list[str] | None:
-    """Tokens of the command a launcher delegates to, or None if it names no command.
+def _after_launcher(launcher: str, args: list[str]) -> tuple[list[str] | None, bool]:
+    """(Tokens of the command a launcher delegates to or None, saw-a-chdir-option).
 
     Steps over the launcher's own options (consuming the values of `_LAUNCHER_VALUE_OPTS`) and any
     leading positionals it takes (`_LAUNCHER_POSITIONAL_SKIP`), landing on the delegated command.
     The caller re-runs `_classify` on the result, so a `VAR=val` prefix (env's assignments) and a
     nested launcher are handled by that recursion, not here.
+
+    The second element is True iff a `_LAUNCHER_CHDIR_OPTS` option was seen (in long, `--chdir=`
+    attached, clustered-short, or `-C<path>` attached-short form): the delegated command then runs
+    in a directory the guard did not model, so a YOLO merge behind it must fail-deny (P0.14).
     """
     value_opts = _LAUNCHER_VALUE_OPTS.get(launcher, frozenset())
+    chdir_opts = _LAUNCHER_CHDIR_OPTS.get(launcher, frozenset())
+    chdir_letters = {opt[1] for opt in chdir_opts if len(opt) == 2 and opt[0] == "-"}
+    chdir_longs = {opt for opt in chdir_opts if opt.startswith("--")}
+    saw_chdir = False
     # The value-taking SHORT letters, so a value option CLUSTERED behind other short flags
     # (`env -vu FOO ...`, `sudo -knu user ...`, `ionice -tc 2 ...`) still consumes its value token
     # instead of being read as a valueless flag — the same clustered-short walk `_has_delete_flag`
@@ -211,6 +249,8 @@ def _after_launcher(launcher: str, args: list[str]) -> list[str] | None:
             j += 1  # option terminator — the very next token is the command
             break
         if a.startswith("--"):
+            if a in chdir_longs or a.partition("=")[0] in chdir_longs:
+                saw_chdir = True  # --chdir <dir> / --chdir=<dir>
             j += 2 if a in value_opts else 1  # long value-opt consumes its token; else a flag
             continue
         if a.startswith("-") and len(a) > 1:
@@ -219,6 +259,8 @@ def _after_launcher(launcher: str, args: list[str]) -> list[str] | None:
             consumes_next = False
             for idx, ch in enumerate(a[1:]):
                 if ch in value_letters:
+                    if ch in chdir_letters:
+                        saw_chdir = True  # -C <dir>, -C<dir>, or clustered (-vC <dir>)
                     consumes_next = idx == len(a) - 2  # value letter is the cluster's last char
                     break
             j += 2 if consumes_next else 1
@@ -230,7 +272,7 @@ def _after_launcher(launcher: str, args: list[str]) -> list[str] | None:
     for _ in range(_LAUNCHER_POSITIONAL_SKIP.get(launcher, 0)):
         if j < len(args):
             j += 1
-    return args[j:] if j < len(args) else None
+    return (args[j:] if j < len(args) else None), saw_chdir
 
 
 def _shell_c_command(args: list[str]) -> str | None:
@@ -333,14 +375,18 @@ def _deny(reason: str, payload: dict) -> None:
     sys.exit(0)
 
 
-def _git(repo_dir: str | None, *args: str) -> tuple[bool, str]:
-    """Run a read-only `git` query; return (ok, stdout). Never raises (fail toward not-ok)."""
-    cmd = ["git"]
-    if repo_dir:
-        cmd += ["-C", repo_dir]
-    cmd += list(args)
+def _git(selectors: list[str], *args: str) -> tuple[bool, str]:
+    """Run a read-only `git` query; return (ok, stdout). Never raises (fail toward not-ok).
+
+    `selectors` are the repository-selecting global options (`-C <dir>`, `--git-dir <dir>`,
+    `--work-tree <dir>`) reconstructed from the guarded command, so the query interrogates the SAME
+    repository the guarded command would mutate (P0.14) — not the payload cwd. The `-C` entry is
+    placed first by the caller, so a relative `--git-dir`/`--work-tree` resolves against the `-C`
+    base exactly as git itself resolves them (git chdirs for `-C` during option parsing and resolves
+    GIT_DIR/GIT_WORK_TREE at repository setup, i.e. after every chdir, regardless of option order).
+    """
     try:
-        p = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+        p = subprocess.run(["git", *selectors, *args], capture_output=True, text=True, timeout=5)
     except (OSError, subprocess.SubprocessError):
         return False, ""
     if p.returncode != 0:
@@ -348,13 +394,13 @@ def _git(repo_dir: str | None, *args: str) -> tuple[bool, str]:
     return True, p.stdout.strip()
 
 
-def _current_branch(repo_dir: str | None) -> str | None:
+def _current_branch(selectors: list[str]) -> str | None:
     """The checked-out branch name, or None if undeterminable. Detached HEAD reads as 'HEAD'."""
-    ok, out = _git(repo_dir, "rev-parse", "--abbrev-ref", "HEAD")
+    ok, out = _git(selectors, "rev-parse", "--abbrev-ref", "HEAD")
     return out if ok else None
 
 
-def _default_branch(repo_dir: str | None) -> str | None:
+def _default_branch(selectors: list[str]) -> str | None:
     """The repo's default branch, or None if it can't be determined unambiguously (→ fail-deny).
 
     Mirrors pre-merge-review's base resolution: prefer `origin/HEAD`; else, for local-only repos
@@ -368,7 +414,7 @@ def _default_branch(repo_dir: str | None) -> str | None:
     `master` names; the residual (a non-standard trunk) is bounded — the only allowed act is a
     revertable `--no-ff` merge, and push stays denied. Set `origin/HEAD`/`init.defaultBranch` to be safe.
     """
-    ok, out = _git(repo_dir, "symbolic-ref", "--quiet", "refs/remotes/origin/HEAD")
+    ok, out = _git(selectors, "symbolic-ref", "--quiet", "refs/remotes/origin/HEAD")
     if ok and out.startswith("refs/remotes/origin/"):
         # Strip the fixed ref prefix, NOT rsplit("/") — a branch name can itself contain slashes
         # (release/2.0, team/main), and rsplit would keep only the last segment ("2.0", "main"),
@@ -376,31 +422,41 @@ def _default_branch(repo_dir: str | None) -> str | None:
         # real default slip through. removeprefix keeps the full name. (This mirrors the sibling
         # fix in guard-default-branch.py, which resolves the same trust anchor.)
         return out.removeprefix("refs/remotes/origin/")
-    has_main = _git(repo_dir, "show-ref", "--verify", "--quiet", "refs/heads/main")[0]
-    has_master = _git(repo_dir, "show-ref", "--verify", "--quiet", "refs/heads/master")[0]
+    has_main = _git(selectors, "show-ref", "--verify", "--quiet", "refs/heads/main")[0]
+    has_master = _git(selectors, "show-ref", "--verify", "--quiet", "refs/heads/master")[0]
     if has_main and not has_master:
         return "main"
     if has_master and not has_main:
         return "master"
     if has_main and has_master:
-        ok, cfg = _git(repo_dir, "config", "init.defaultBranch")
+        ok, cfg = _git(selectors, "config", "init.defaultBranch")
         if ok and cfg in ("main", "master"):
             return cfg
     return None
 
 
-def _yolo_merge_reason(repo_dir: str | None, rest: list[str]) -> str | None:
+def _yolo_merge_reason(selectors: list[str], rest: list[str], unmodeled_selector: bool) -> str | None:
     """In YOLO mode, return a deny reason for this `git merge`, or None if the merge is allowed.
 
     Allowed iff it is a `--no-ff` merge (so it is revertable via `git revert -m 1`) into a
-    confirmed NON-default branch. Any uncertainty about the current/default branch fails DENY.
+    confirmed NON-default branch. Any uncertainty about the current/default branch fails DENY —
+    including `unmodeled_selector`: the command carries a repository/directory selector spelling the
+    guard did not model (attached `-C<path>`, a `GIT_DIR`/`GIT_WORK_TREE`/`GIT_COMMON_DIR` env
+    assignment, a launcher chdir option, or a preceding `cd`/`pushd`/`export` segment), so branch
+    detection would interrogate the WRONG repo (P0.14).
     """
     if "--no-ff" not in rest:
         return "fast-forward merge in YOLO (only --no-ff merges are allowed, so the merge is revertable)"
-    current = _current_branch(repo_dir)
+    if unmodeled_selector:
+        return (
+            "merge behind a repository/directory selector the guard does not model "
+            "(attached -C, GIT_DIR-family environment variable, launcher chdir option, or a "
+            "preceding cd/pushd/export segment) — branch detection can't be trusted (fail-deny)"
+        )
+    current = _current_branch(selectors)
     if not current or current == "HEAD":
         return "merge while the current branch can't be confirmed non-default (fail-deny)"
-    default = _default_branch(repo_dir)
+    default = _default_branch(selectors)
     if default is None:
         return "merge while the repo's default branch can't be determined (fail-deny)"
     # Protect the resolved default AND the literal main/master names — so a main/master mix-up, or a
@@ -492,6 +548,51 @@ def _has_delete_flag(
     return False
 
 
+def _cluster_denies(token: str, deny: str, value_stop: str) -> bool:
+    """True iff a short-option token carries a denied letter, parsed the way git parse-options does.
+
+    git clusters short booleans and lets the FIRST VALUE-TAKING letter consume the token's
+    remainder as its attached value (`git switch -fCmain` = `-f` + `-C main`; `git switch -cnew` =
+    `-c new`). So a left-to-right scan is the only correct reading: a letter in `deny` before any
+    value-consumer denies; a letter in `value_stop` ends the scan (everything after is that option's
+    VALUE — so a branch NAME glued to `switch -c`/`checkout -b`/`branch -u`, e.g. `-cFooCase`, can't
+    false-deny); a non-alphabetic char means this isn't a pure option cluster (`-u=x`) and the token
+    is left to the exact-match checks. `value_stop` is per-subcommand: verified against git 2.47.3,
+    `git branch -c/-C` take POSITIONAL names (so `c` is NOT a value-stop for branch — only
+    `u`=--set-upstream-to), whereas `switch -c`/`checkout -b`/`-t` and `worktree add -b` take
+    attached values. Long options are matched by `_long_opt_matches`, not here."""
+    if len(token) < 2 or not token.startswith("-") or token.startswith("--"):
+        return False
+    for ch in token[1:]:
+        if ch in deny:
+            return True
+        if ch in value_stop:
+            return False
+        if not ch.isalpha():
+            return False
+    return False
+
+
+def _long_opt_matches(token: str, dangerous: tuple[str, ...], safe_exact: tuple[str, ...] = ()) -> bool:
+    """True iff a `--long` token is (an unambiguous abbreviation of) a dangerous long option.
+
+    git accepts any UNAMBIGUOUS PREFIX of a long option and an attached `--opt=value`, so exact
+    full-spelling matching (`"--force" in rest`) misses `--forc`/`--del`/`--force-create=x` — all of
+    which really act (git 2.47.3). Strip a `=value` suffix and treat the token as dangerous when its
+    name is a non-empty prefix of a dangerous name. An AMBIGUOUS prefix errors out in git (a no-op),
+    so denying it costs nothing; a prefix that resolves to a SAFE option isn't a prefix of any
+    dangerous name, so it stays allowed. `safe_exact` carves out a COMPLETE safe option that is
+    itself a prefix of a dangerous one — `switch --force` (discard-changes) is a prefix of
+    `--force-create`, and git binds an exact full match to the shorter option, so `--force` must
+    stay allowed while `--force-create`/`--force-cr`/`--force-create=x` deny."""
+    if not token.startswith("--"):
+        return False
+    name = token[2:].split("=", 1)[0]
+    if not name or name in safe_exact:
+        return False
+    return any(d.startswith(name) for d in dangerous)
+
+
 def _symbolic_ref_write_reason(rest: list[str]) -> str | None:
     """Deny reason for a WRITE-form `git symbolic-ref`, or None for the read form.
 
@@ -522,15 +623,23 @@ def _symbolic_ref_write_reason(rest: list[str]) -> str | None:
     return None
 
 
-def _classify(tokens: list[str], yolo: bool, cwd: str | None, _depth: int = 0) -> str | None:
+def _classify(
+    tokens: list[str], yolo: bool, cwd: str | None, _depth: int = 0, _unmodeled_sel: bool = False
+) -> str | None:
     """Return a short reason if `tokens` (one command segment) is a forbidden VC mutation.
 
-    `yolo` selects the destructive-only deny set; `cwd` is the fallback repo dir used for
-    branch detection when the command carries no `-C`. `_depth` bounds launcher-prefix recursion.
+    `yolo` selects the destructive-only deny set; `cwd` is the fallback repo dir used for branch
+    detection when the command carries no repo selector. `_depth` bounds launcher-prefix recursion.
+    `_unmodeled_sel` carries a repo/directory-selector sighting the guard did not model (a launcher
+    chdir option, a GIT_DIR-family env assignment) down the recursion — it fail-denies a YOLO merge
+    (P0.14) and is ignored everywhere else (the rest of the deny set never consults the repo).
     """
-    # Skip leading `VAR=value` env assignments to reach the executable.
+    # Skip leading `VAR=value` env assignments to reach the executable. GIT_DIR-family assignments
+    # select the repository out-of-band of the argv scan → mark the selection unmodeled (P0.14).
     i = 0
     while i < len(tokens) and _ENV_ASSIGN.match(tokens[i]):
+        if tokens[i].partition("=")[0] in _GIT_ENV_SELECTORS:
+            _unmodeled_sel = True
         i += 1
     if i >= len(tokens):
         return None
@@ -542,15 +651,17 @@ def _classify(tokens: list[str], yolo: bool, cwd: str | None, _depth: int = 0) -
     # `git push` it runs. Recursion (bounded) handles a chain like `sudo nice git push`; the fenced
     # git/gh verb is a literal token, so this is executable resolution, not shell expansion.
     if exe in _LAUNCHERS and _depth < _MAX_LAUNCHER_DEPTH:
-        delegated = _after_launcher(exe, args)
-        return _classify(delegated, yolo, cwd, _depth + 1) if delegated is not None else None
+        delegated, saw_chdir = _after_launcher(exe, args)
+        if delegated is None:
+            return None
+        return _classify(delegated, yolo, cwd, _depth + 1, _unmodeled_sel or saw_chdir)
 
     # A shell running a `-c` command string: the string is another command line, so re-scan it with
     # the full segment splitter (`bash -c "git push"`, `sh -c 'env git push'`). No `-c` → a script or
     # interactive shell whose body the guard does not read (the wrapper-script residual).
     if exe in _SHELL_LAUNCHERS and _depth < _MAX_LAUNCHER_DEPTH:
         inner = _shell_c_command(args)
-        return _dangerous(inner, yolo, cwd, _depth + 1) if inner is not None else None
+        return _dangerous(inner, yolo, cwd, _depth + 1, _unmodeled_sel) if inner is not None else None
 
     if exe == "gh":
         # Only `gh pr merge` performs the merge server-side (denied in both modes). Resolve the
@@ -564,19 +675,44 @@ def _classify(tokens: list[str], yolo: bool, cwd: str | None, _depth: int = 0) -
     if exe != "git":
         return None
 
-    # Find the git subcommand, stepping over global options (and their values). Capture `-C`'s
-    # value as the repo dir for branch detection (relative paths resolve against cwd).
+    # Find the git subcommand, stepping over global options (and their values). Capture every
+    # REPOSITORY SELECTOR the command carries — `-C` (repeated relatives compose, each against the
+    # preceding base, per git), `--git-dir`/`--work-tree` in both the separate and the `=`-attached
+    # spelling — so branch detection interrogates the repo the command TARGETS, not the payload cwd
+    # (P0.14). The one git-selector spelling NOT modeled is the attached `-C<path>`: git 2.47.3
+    # rejects it ("unknown option"), so today it can't run — marking it unmodeled (→ YOLO fail-deny)
+    # is hardening in case a future git accepts it, not a live-bypass closure.
     repo_dir = cwd
+    git_dir: str | None = None
+    work_tree: str | None = None
+    unmodeled_sel = _unmodeled_sel
     sub = None
     rest: list[str] = []
     j = 0
     while j < len(args):
         a = args[j]
         if a in _GIT_VALUE_OPTS:
-            if a == "-C" and j + 1 < len(args):
-                cval = args[j + 1]
-                repo_dir = cval if os.path.isabs(cval) else os.path.join(cwd or ".", cval)
+            if j + 1 < len(args):
+                val = args[j + 1]
+                if a == "-C":
+                    repo_dir = val if os.path.isabs(val) else os.path.join(repo_dir or ".", val)
+                elif a == "--git-dir":
+                    git_dir = val
+                elif a == "--work-tree":
+                    work_tree = val
             j += 2
+            continue
+        if a.startswith("--git-dir="):
+            git_dir = a.partition("=")[2]
+            j += 1
+            continue
+        if a.startswith("--work-tree="):
+            work_tree = a.partition("=")[2]
+            j += 1
+            continue
+        if a.startswith("-C") and len(a) > 2:
+            unmodeled_sel = True  # attached -C<path>: git-rejected today; fail-deny hardening
+            j += 1
             continue
         if a.startswith("-"):
             j += 1
@@ -586,10 +722,20 @@ def _classify(tokens: list[str], yolo: bool, cwd: str | None, _depth: int = 0) -
         break
     if sub is None:
         return None
+    # Reconstruct the selectors for the read-only detection queries. `-C` first: git resolves a
+    # relative GIT_DIR/GIT_WORK_TREE at repository setup — after every `-C` chdir — so this
+    # reproduces the guarded command's resolution for any option order (see _git's docstring).
+    selectors: list[str] = []
+    if repo_dir:
+        selectors += ["-C", repo_dir]
+    if git_dir is not None:
+        selectors += ["--git-dir", git_dir]
+    if work_tree is not None:
+        selectors += ["--work-tree", work_tree]
 
     # `merge` but not the read-only plumbing `merge-base` / `merge-tree` / `merge-file`.
     if sub == "merge":
-        return _yolo_merge_reason(repo_dir, rest) if yolo else "merge a branch (git merge)"
+        return _yolo_merge_reason(selectors, rest, unmodeled_sel) if yolo else "merge a branch (git merge)"
     if sub == "push":
         return "push to a remote (git push)"
     if sub == "reset" and "--hard" in rest:
@@ -600,11 +746,47 @@ def _classify(tokens: list[str], yolo: bool, cwd: str | None, _depth: int = 0) -
     # short is `-u <upstream>`, so an `-ud` cluster's `d` is the upstream name, not a delete.
     if sub == "branch" and _has_delete_flag(rest, ("d", "D"), ("u",)):
         return "delete a branch (git branch -d/-D)"
+    # Direct ref MOVES that repoint/rename/overwrite an existing ref WITHOUT the porcelain verbs
+    # above — the same trust-anchor-integrity rationale as `symbolic-ref`/`remote set-head` below,
+    # and the specific forge the P0.13 base-pin depends on being closed: `git branch -f main <sha>`
+    # / `update-ref refs/heads/main <sha>` / `switch -C main` move the default branch the frozen-
+    # oracle gate reads as its loop-immutable baseline. Denied UNCONDITIONALLY (any branch, like the
+    # branch-delete above): a loop integrates only via `--no-ff` merges into non-default branches, so
+    # force-moving/renaming/overwriting ANY ref is outside its model. `-m`/`-M` rename (old name
+    # vanishes), `-C` force-copies over an existing ref; `u` (--set-upstream-to) is branch's only
+    # value-consumer, so it is the cluster value-stop. Long forms match by unambiguous prefix.
+    if sub == "branch" and (
+        any(_long_opt_matches(t, ("force", "move")) for t in rest)
+        or any(_cluster_denies(t, "fmMC", "u") for t in rest)
+    ):
+        return "force-move, rename, or overwrite a branch ref (git branch -f/-m/-M/-C)"
+    if sub == "update-ref":
+        # No read form exists — update-ref is pure ref-mutation plumbing (incl. -d and --stdin).
+        return "move or delete a ref directly (git update-ref)"
+    # switch/checkout force-(re)create a branch at an arbitrary commit (`-C main`/`-B main` clobber
+    # an existing ref). `-C`/`-B` take an ATTACHED value (`-Cmain`) and cluster after booleans
+    # (`-fCmain`); the lowercase creators `-c`/`-b` and `-t` consume the remainder as a value, so a
+    # capital in `-cFooCase`/`-bFix` must not false-deny. `switch --force` (discard-changes) is a
+    # complete safe option that is a prefix of the dangerous `--force-create`, so it is carved out;
+    # `checkout` has no `--force-create` long option (git 2.47.3: "unknown option force-create").
+    if sub == "switch" and (
+        any(_long_opt_matches(t, ("force-create",), ("force",)) for t in rest)
+        or any(_cluster_denies(t, "C", "ct") for t in rest)
+    ):
+        return "force-recreate a branch at an arbitrary commit (git switch -C)"
+    if sub == "checkout" and any(_cluster_denies(t, "B", "bt") for t in rest):
+        return "force-recreate a branch at an arbitrary commit (git checkout -B)"
     # position-aware (like `remote set-head` / `gh pr merge` below), NOT a bare `"remove" in rest`
     # membership — else `git worktree add ../wt remove` (a branch/path literally named `remove`) would
     # be a false deny. Only the `remove` SUBCOMMAND (first positional) is the destructive one.
     if sub == "worktree" and _subcommand_path(rest, set(), 1) == ["remove"]:
         return "remove a worktree (git worktree remove)"
+    # `git worktree add -B <branch>` force-resets an existing branch ref (git 2.47.3 verified) — the
+    # same ref clobber as `branch -f`, spelled through worktree. `-b` only CREATES (fails if the
+    # branch exists), so it stays allowed; `b` is the value-stop (consumes the new-branch name), `B`
+    # denies even attached (`-Bmain`) or clustered after `-f` (`-fB`).
+    if sub == "worktree" and "add" in rest and any(_cluster_denies(t, "B", "b") for t in rest):
+        return "force-reset a branch ref via worktree (git worktree add -B)"
     # Both `remote set-head` and the write form of `symbolic-ref` rewrite refs/remotes/origin/HEAD —
     # the trust anchor _default_branch() (and guard-default-branch.py) reads for default-branch
     # detection. A loop that can repoint it can re-aim what "default branch" means, so denying these
@@ -662,19 +844,59 @@ def split_segments(command: str) -> list[str]:
     return [s for s in (seg.strip() for seg in segments) if s]
 
 
-def _dangerous(command: str, yolo: bool, cwd: str | None, _depth: int = 0) -> str | None:
+def _segment_changes_repo_context(tokens: list[str]) -> bool:
+    """True iff this segment relocates the repo context of LATER segments (P0.14, cross-segment).
+
+    Three shapes, all fail-deny-marked rather than modeled: a directory-changing builtin (`cd`,
+    `pushd`, `popd` — also behind the `builtin`/`command` prefixes bash accepts); an export-style
+    builtin naming a GIT_DIR-family variable (`export GIT_DIR=/p/.git`, `declare -x GIT_DIR=…`,
+    bare `export GIT_DIR` promoting an earlier assignment); and an assignments-only segment that
+    assigns one (`GIT_DIR=/p/.git; git merge …` — only live if exported earlier/later, but the
+    conservative flag costs nothing real). Marking is one-directional: segments BEFORE this one are
+    unaffected (`git merge …; cd /p` merges in the payload cwd, so it stays modeled).
+    """
+    if not tokens:
+        return False
+    head = tokens[0]
+    if head in ("builtin", "command") and len(tokens) > 1:
+        head = tokens[1]
+    if head in _DIR_BUILTINS:
+        return True
+    if tokens[0] in _EXPORT_BUILTINS and any(
+        t.partition("=")[0] in _GIT_ENV_SELECTORS for t in tokens[1:]
+    ):
+        return True
+    if all(_ENV_ASSIGN.match(t) for t in tokens) and any(
+        t.partition("=")[0] in _GIT_ENV_SELECTORS for t in tokens
+    ):
+        return True
+    return False
+
+
+def _dangerous(
+    command: str, yolo: bool, cwd: str | None, _depth: int = 0, _unmodeled_sel: bool = False
+) -> str | None:
     """Scan a full Bash command (possibly compound) for a forbidden VC mutation.
 
-    `_depth` is threaded from a shell `-c` re-scan (`bash -c "git push"`) so a nested-shell chain
-    shares the launcher recursion cap and cannot loop unbounded."""
+    `_depth` and `_unmodeled_sel` are threaded from a shell `-c` re-scan (`bash -c "git push"`) so a
+    nested-shell chain shares the launcher recursion cap, and an unmodeled directory selector seen
+    OUTSIDE the shell (`env -C /p bash -c "git merge --no-ff t"`) still fail-denies the inner merge.
+
+    Segments are scanned IN ORDER, carrying the unmodeled-selector flag forward: a segment that
+    relocates the repo context (`cd /p`, `export GIT_DIR=…`) marks every LATER segment, so
+    `cd /p && git merge --no-ff t` fail-denies the merge in YOLO instead of evaluating the payload
+    cwd's branches (P0.14, cross-segment)."""
+    unmodeled_sel = _unmodeled_sel
     for segment in split_segments(command):
         try:
             tokens = shlex.split(segment)
         except ValueError:
             tokens = segment.split()  # unbalanced quotes etc. → best-effort
-        reason = _classify(tokens, yolo, cwd, _depth)
+        reason = _classify(tokens, yolo, cwd, _depth, unmodeled_sel)
         if reason:
             return reason
+        if not unmodeled_sel and _segment_changes_repo_context(tokens):
+            unmodeled_sel = True
     return None
 
 
@@ -720,9 +942,16 @@ def main() -> None:
     if payload.get("tool_name") != "Bash":
         _allow()  # matcher should restrict to Bash, but never assume
 
+    # Same P0.16 posture as guard-default-branch.py: a truthy NON-string command/cwd (a crafted or
+    # buggy payload) must fail OPEN, not TypeError inside split_segments/os.path.join and exit 1
+    # against the never-exit-non-zero contract.
     tool_input = payload.get("tool_input")
-    command = (tool_input if isinstance(tool_input, dict) else {}).get("command") or ""
-    cwd = payload.get("cwd") or os.getcwd()
+    command = (tool_input if isinstance(tool_input, dict) else {}).get("command")
+    if not isinstance(command, str):
+        _allow()  # absent or malformed command → nothing parseable to fence
+    cwd = payload.get("cwd")
+    if not isinstance(cwd, str) or not cwd:
+        cwd = os.getcwd()
     reason = _dangerous(command, yolo, cwd)
     if reason:
         _deny(_deny_message(reason, yolo), payload)

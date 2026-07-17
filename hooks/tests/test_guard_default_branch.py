@@ -43,12 +43,12 @@ def _repo(td: str, branch: str = "main", origin_head: "str | None" = None) -> st
     return td
 
 
-def _run(payload: dict, env: "dict | None" = None) -> "tuple[int, str]":
+def _run(payload: dict, env: "dict | None" = None, cwd: "str | None" = None) -> "tuple[int, str]":
     env = dict(os.environ) if env is None else dict(env)
     # Keep test denies out of the real telemetry log (every deny appends — see hooks/_denial_log.py).
     env.setdefault("EXCUBITOR_DENIAL_LOG", os.devnull)
     p = subprocess.run([sys.executable, str(HOOK)], input=json.dumps(payload),
-                       capture_output=True, text=True, env=env)
+                       capture_output=True, text=True, env=env, cwd=cwd)
     return p.returncode, p.stdout
 
 
@@ -126,6 +126,42 @@ class TestGuardDefaultBranch(unittest.TestCase):
         for payload in (5, [], None, "x"):
             rc, out = _run(payload)  # _run json.dumps() the value; a bare scalar/array is valid JSON
             self.assertEqual((rc, out.strip()), (0, ""), f"non-object payload must defer: {payload!r}")
+
+    # --- P0.16: truthy NON-string field types must fail OPEN, never TypeError → exit 1 ---
+    def test_non_string_target_fields_fail_open(self):
+        # Valid JSON object, but file_path/notebook_path is a truthy non-string: pre-fix this reached
+        # os.path.join, raised TypeError, and exited 1 — wedging the editor against the documented
+        # never-exit-non-zero contract. Must defer (exit 0, no decision), like other malformed input.
+        with tempfile.TemporaryDirectory() as td:
+            _repo(td, branch="main")  # maximally protected state — and still: malformed → fail open
+            for tool_input in (
+                {"file_path": ["x"]},
+                {"file_path": 5},
+                {"file_path": {"p": "x"}},
+                {"file_path": True},
+                {"notebook_path": ["nb"]},
+                {"notebook_path": 7},
+            ):
+                rc, out = _run({"tool_input": tool_input, "cwd": td})
+                self.assertEqual((rc, out.strip()), (0, ""),
+                                 f"non-string target must fail open, not crash: {tool_input!r}")
+
+    def test_non_string_cwd_falls_back_and_still_protects_absolute_target(self):
+        # A truthy non-string cwd pre-fix crashed in os.path.join (exit 1). Post-fix it falls back to
+        # the process cwd — and an ABSOLUTE file_path into a protected repo must then still DENY:
+        # the malformed cwd degrades gracefully instead of dropping the fence.
+        with tempfile.TemporaryDirectory() as td:
+            _repo(td, branch="main")
+            rc, out = _run({"tool_input": {"file_path": str(Path(td, "f.py"))}, "cwd": 123})
+            self.assertEqual(rc, 0, "non-string cwd must never exit non-zero")
+            self.assertTrue(_denied(out), "absolute target in a protected repo must still deny")
+
+    def test_non_string_cwd_without_target_fails_open(self):
+        # No usable target at all (non-string cwd, no file path): run the hook FROM a non-repo dir so
+        # the fallback is hermetic — must defer without crashing.
+        with tempfile.TemporaryDirectory() as td:
+            rc, out = _run({"tool_input": {}, "cwd": [1, 2]}, cwd=td)
+            self.assertEqual((rc, out.strip()), (0, ""), "non-string cwd with no target must defer")
 
 
 class TestGuardSymlinkLaundering(unittest.TestCase):

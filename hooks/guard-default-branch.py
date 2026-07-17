@@ -119,7 +119,9 @@ def _candidate_dirs(cwd: str, logical_target: str) -> "list[str] | None":
         real_target = os.path.realpath(abs_target)
         if real_target != abs_target:  # a symlink (or /./ , .. , etc.) actually moved the path
             dirs.append(_nearest_existing_dir(real_target, cwd))
-    except (ValueError, OSError):
+    except (TypeError, ValueError, OSError):
+        # TypeError is belt-and-suspenders for a non-string that slips past main()'s field-type
+        # checks (P0.16) — os.path.join raising must fail OPEN, never exit 1 against the contract.
         return None
     seen: set[str] = set()
     out: list[str] = []
@@ -184,10 +186,23 @@ def main() -> None:
 
     ti = payload.get("tool_input")
     tool_input = ti if isinstance(ti, dict) else {}
-    cwd = payload.get("cwd") or os.getcwd()
+    # P0.16: the fields below come off the wire as strings, but the never-exit-non-zero contract is
+    # unconditional — a truthy NON-string cwd/file_path/notebook_path (a crafted or buggy payload)
+    # used to reach os.path.join, TypeError, and exit 1 against the documented fail-open contract.
+    # A malformed field fails OPEN like every other malformed input (a non-string target also means
+    # the edit tool itself will reject the call — there is no write here to protect against).
+    cwd = payload.get("cwd")
+    if not isinstance(cwd, str) or not cwd:
+        cwd = os.getcwd()
+    file_path = tool_input.get("file_path")
+    notebook_path = tool_input.get("notebook_path")
+    if (file_path is not None and not isinstance(file_path, str)) or (
+        notebook_path is not None and not isinstance(notebook_path, str)
+    ):
+        _allow()  # malformed target field → fail open, never wedge the editor
     # Edit/Write use file_path; NotebookEdit uses notebook_path. Resolve a relative target against the
     # payload cwd, else repo detection lands on the wrong directory (e.g. a sibling repo).
-    logical_target = tool_input.get("file_path") or tool_input.get("notebook_path") or cwd
+    logical_target = file_path or notebook_path or cwd
 
     candidates = _candidate_dirs(cwd, logical_target)
     if candidates is None:

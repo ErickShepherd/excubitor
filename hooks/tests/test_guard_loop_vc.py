@@ -61,6 +61,10 @@ class TestGuardLoopVC(unittest.TestCase):
         "git --config-env sec.key=ENVVAR merge topic",        # ditto (--config-env takes a space value)
         "git push origin main",
         "git push",
+        # P0.14 spellings: repo selectors must not hide the subcommand from the conservative scan
+        "git --git-dir=/repo/.git --work-tree=/repo merge topic",
+        "git --git-dir /repo/.git push",
+        "git --work-tree=/repo merge --no-ff topic",
         "git branch -d feature",
         "git branch -D feature",
         "git branch --delete feature",
@@ -109,6 +113,27 @@ class TestGuardLoopVC(unittest.TestCase):
         "git branch -qD feature",                              # quiet + force-delete
         "git branch -dr origin/feature",                       # delete letter first in the cluster
         "git symbolic-ref -qd refs/remotes/origin/HEAD",       # quiet + delete
+        # direct ref MOVES — repoint/rename/overwrite an existing ref without a porcelain verb; the
+        # forge the P0.13 base-pin depends on being fenced (git branch -f main <sha>, etc.)
+        "git branch -f main other",                            # force-move a branch ref
+        "git branch --force main other",                       # ... long form
+        "git branch -m old new",                               # rename (old name vanishes)
+        "git branch -M main",                                  # force-rename
+        "git branch -C main copy",                             # force-copy over an existing ref
+        "git branch -fm a b",                                  # clustered force+move
+        "git branch --forc main x",                            # unambiguous abbreviation of --force
+        "git update-ref refs/heads/main HEAD",                 # move a ref directly (plumbing)
+        "git update-ref -d refs/heads/main",                   # delete a ref directly
+        "git -C /repo update-ref refs/heads/master HEAD~1",    # ... via -C
+        "git switch -C main",                                  # force-recreate a branch
+        "git switch -Cmain",                                   # ... attached value
+        "git switch -fC main",                                 # ... clustered after -f
+        "git checkout -B main",                                # force-recreate via checkout
+        "git checkout -B main origin/main",
+        "git worktree add -B main ../wt",                      # force-reset a branch ref via worktree
+        "git worktree add -fB main ../wt",                     # ... clustered
+        "sudo git branch -f main other",                       # launcher + ref move
+        "cd /repo && git update-ref refs/heads/main HEAD",     # ref move in a compound command
         # exec-prefix launchers run the real command one token deeper — the fenced verb must still
         # be seen (representative cases; the full battery is TestLauncherPrefix)
         "env git push origin main",                            # POSIX launcher, no privilege
@@ -150,6 +175,8 @@ class TestGuardLoopVC(unittest.TestCase):
         "git worktree add ../wt remove",      # 'remove' here is a branch/path name, not the subcommand
         "git worktree list",
         "git status && git diff",
+        "git --git-dir=/repo/.git status",     # repo selector on a non-fenced subcommand
+        "git --work-tree /repo status",
         # read forms of the trust-anchor verbs stay allowed (the guards themselves use them)
         "git symbolic-ref HEAD",
         "git symbolic-ref --quiet refs/remotes/origin/HEAD",
@@ -164,7 +191,13 @@ class TestGuardLoopVC(unittest.TestCase):
         "git branch -r",                       # remote-tracking list
         "git branch --list -v",                # explicit list
         "git branch -u origin/main feature",   # -u takes a value; no delete here
-        "git branch -m old new",               # rename (no delete)
+        "git branch -c old new",               # NON-force copy (create): allowed, unlike -C
+        "git switch -c fix/new",               # create+switch (lowercase -c): allowed, unlike -C
+        "git switch -cFooCase",                # -c with an attached CamelCase name — not -C
+        "git checkout -b fix/new",             # create branch (lowercase -b): allowed, unlike -B
+        "git checkout -bFix",                  # -b attached name with a capital — not -B
+        "git worktree add -b new ../wt",       # create-only worktree branch (-b): allowed, unlike -B
+        "git switch --force main",             # discard-changes switch — a prefix of --force-create, allowed
         # a dangerous verb QUOTED in an argument is literal text, not a command — must not false-deny
         # (this repo's own commit messages are full of these strings)
         'git commit -m "document the (git push) bypass"',
@@ -239,7 +272,6 @@ class TestGuardLoopVC(unittest.TestCase):
     # being denied, this fails and forces an honest update rather than a silent scope expansion —
     # the guard's deny-set is a deliberate choice, not an accident, and this documents its edges.
     UNHANDLED_GIT_VERBS = [
-        "git update-ref -d refs/heads/main",       # ref delete via plumbing
         "git reflog expire --expire=now --all",    # drop the reflog
         "git stash drop",
         "git stash clear",
@@ -289,15 +321,44 @@ class TestGuardLoopVC(unittest.TestCase):
         rc, out = _run("", raw=json.dumps({"tool_name": "Bash", "tool_input": "not-a-dict"}))
         self.assertEqual((rc, out.strip()), (0, ""))
 
+    # --- P0.16 sibling hardening: truthy NON-string field types must fail OPEN, never exit 1 ---
+    def test_non_string_command_fails_open(self):
+        # A truthy non-string command pre-fix reached split_segments (len() on an int/list) →
+        # TypeError → exit 1, against the never-exit-non-zero contract. Must defer.
+        for command in (123, ["git", "push"], {"c": "git push"}, True):
+            rc, out = _run("", raw=json.dumps(
+                {"tool_name": "Bash", "tool_input": {"command": command}}))
+            self.assertEqual((rc, out.strip()), (0, ""),
+                             f"non-string command must fail open, not crash: {command!r}")
 
-def _mkrepo(branches: "tuple[str, ...]" = (), *, checkout: str, default_config: "str | None" = None) -> str:
+    def test_non_string_cwd_falls_back_and_still_denies(self):
+        # A truthy non-string cwd pre-fix crashed in os.path.join composing a relative -C (exit 1).
+        # Post-fix it falls back to the process cwd — and the conservative merge deny still fires:
+        # the malformed cwd degrades gracefully instead of dropping the fence.
+        rc, out = _run("", raw=json.dumps(
+            {"tool_name": "Bash", "cwd": 123,
+             "tool_input": {"command": "git -C rel merge topic"}}))
+        self.assertEqual(rc, 0, "non-string cwd must never exit non-zero")
+        self.assertTrue(_denied(out), "the merge deny must survive a malformed cwd")
+
+
+def _mkrepo(
+    branches: "tuple[str, ...]" = (),
+    *,
+    checkout: str,
+    default_config: "str | None" = None,
+    at: "str | None" = None,
+) -> str:
     """Create a throwaway local git repo (no remote) with an initial commit on `main`.
 
     Creates each name in `branches`, then checks out `checkout` (use "DETACH" for a detached HEAD).
     Local-only by design: exercises the main/master heuristic in _default_branch. `default_config`
-    sets `init.defaultBranch` locally (to disambiguate when both main and master exist).
+    sets `init.defaultBranch` locally (to disambiguate when both main and master exist). `at` pins
+    the repo to a specific directory (created if missing) instead of a fresh tempdir — used by the
+    P0.14 composed-`-C` tests, which need repos at exact relative positions.
     """
-    d = tempfile.mkdtemp(prefix="guardtest-")
+    d = at or tempfile.mkdtemp(prefix="guardtest-")
+    os.makedirs(d, exist_ok=True)
 
     def g(*args: str) -> None:
         subprocess.run(["git", "-C", d, *args], check=True, capture_output=True, text=True)
@@ -518,6 +579,198 @@ class TestGuardYoloDefaultBranchParsing(unittest.TestCase):
         rc, out = _run(f"git -C {d} merge --no-ff topic", guard="yolo")
         self.assertEqual(rc, 0, "fail-open contract")
         self.assertTrue(_denied(out), "merge into the real default 'team/main' must be denied")
+
+
+class TestGuardYoloRepoSelector(unittest.TestCase):
+    """P0.14: a repository/directory selector must not divorce YOLO branch detection from the repo
+    the merge actually TARGETS. Pre-fix, only the separate `-C` was captured, so
+    `git --git-dir=/protected/.git --work-tree=/protected merge --no-ff topic` (git-accepted) was
+    evaluated against the payload cwd — an innocent feature-branch cwd waved a merge into another
+    repo's default branch through. Modeled spellings (repeated/composed relative `-C`,
+    `--git-dir`/`--work-tree` in separate and `=`-attached form) now resolve detection against the
+    TARGET repo, faithfully in both directions (deny when it targets a default, allow when it
+    targets a non-default). Unmodeled spellings — attached `-C<path>` (git-rejected today;
+    hardening), `GIT_DIR`-family env assignments, launcher chdir options (`env -C`, `sudo -D`,
+    `--chdir`) — fail-deny the merge outright rather than guess."""
+
+    def setUp(self) -> None:
+        self._dirs: list[str] = []
+
+    def tearDown(self) -> None:
+        for d in self._dirs:
+            shutil.rmtree(d, ignore_errors=True)
+
+    def _repo(self, **kw: object) -> str:
+        d = _mkrepo(**kw)  # type: ignore[arg-type]
+        self._dirs.append(d)
+        return d
+
+    def _protected(self) -> str:
+        """A repo checked out on its default branch `main` — the merge target to protect."""
+        return self._repo(checkout="main")
+
+    def _innocent(self) -> str:
+        """A repo checked out on a non-default branch — the cwd a bypass would launder through."""
+        return self._repo(branches=("feature",), checkout="feature")
+
+    def _denied(self, cmd: str, cwd: str) -> bool:
+        rc, out = _run(cmd, guard="yolo", cwd=cwd)
+        self.assertEqual(rc, 0, f"must exit 0 (fail-open contract): {cmd}")
+        return _denied(out)
+
+    def _deferred(self, cmd: str, cwd: str) -> bool:
+        rc, out = _run(cmd, guard="yolo", cwd=cwd)
+        return (rc, out.strip()) == (0, "")
+
+    # --- modeled spellings: detection follows the selector to the TARGET repo ---
+    def test_denies_git_dir_work_tree_merge_targeting_default(self):
+        target, cwd = self._protected(), self._innocent()
+        for cmd in (
+            f"git --git-dir={target}/.git --work-tree={target} merge --no-ff topic",  # =-attached
+            f"git --git-dir {target}/.git --work-tree {target} merge --no-ff topic",  # separate
+            f"git --work-tree={target} --git-dir={target}/.git merge --no-ff topic",  # order swapped
+        ):
+            self.assertTrue(self._denied(cmd, cwd),
+                            f"selector-targeted default-branch merge must be denied: {cmd}")
+
+    def test_allows_git_dir_merge_targeting_nondefault(self):
+        # The inverse direction: faithful modeling, not a blanket deny of --git-dir. The payload cwd
+        # sits on main (a plain merge HERE would be denied); the selectors target a feature-branch
+        # repo, so the merge is a legitimate YOLO integration and must defer.
+        cwd, target = self._protected(), self._innocent()
+        cmd = f"git --git-dir={target}/.git --work-tree={target} merge --no-ff topic"
+        self.assertTrue(self._deferred(cmd, cwd),
+                        "selector-targeted NON-default merge must still be allowed (no blanket deny)")
+
+    def test_denies_composed_relative_C_merge_targeting_default(self):
+        # git composes repeated relative -C values (`-C sub1 -C sub2` = sub1/sub2). Pre-fix each
+        # value resolved against cwd independently, so detection landed on X/sub2 — planted here as
+        # a feature-branch repo to pin the pre-fix ALLOW direction — instead of the real target
+        # X/sub1/sub2, which sits on main and must deny.
+        x = tempfile.mkdtemp(prefix="guardtest-")
+        self._dirs.append(x)
+        _mkrepo(checkout="main", at=os.path.join(x, "sub1", "sub2"))          # the real target
+        _mkrepo(branches=("feature",), checkout="feature", at=os.path.join(x, "sub2"))  # decoy
+        self.assertTrue(self._denied("git -C sub1 -C sub2 merge --no-ff topic", x),
+                        "composed relative -C must resolve against the preceding -C, not cwd")
+
+    def test_git_dir_selector_merge_is_real(self):
+        # Prove the modeled spelling is a GENUINE cross-directory merge, not a strawman: from an
+        # unrelated cwd, git accepts it and creates a merge commit on the target's checked-out main.
+        target = self._protected()
+
+        def g(*args: str) -> None:
+            subprocess.run(["git", "-C", target, *args], check=True, capture_output=True, text=True)
+
+        g("switch", "-c", "topic")
+        g("commit", "--allow-empty", "-m", "topic work")
+        g("switch", "main")
+        elsewhere = tempfile.mkdtemp(prefix="guardtest-")
+        self._dirs.append(elsewhere)
+        cmd = f"git --git-dir={target}/.git --work-tree={target} merge --no-ff topic"
+        self.assertTrue(self._denied(cmd, elsewhere))
+        subprocess.run(
+            ["git", f"--git-dir={target}/.git", f"--work-tree={target}", "merge", "--no-ff", "topic"],
+            cwd=elsewhere, check=True, capture_output=True, text=True)
+        has_second_parent = subprocess.run(
+            ["git", "-C", target, "rev-parse", "--verify", "HEAD^2"], capture_output=True
+        ).returncode == 0
+        self.assertTrue(has_second_parent,
+                        "the selector spelling should have produced a real merge commit on main")
+
+    # --- unmodeled spellings: fail-deny rather than guess ---
+    def test_denies_attached_C_merge_and_git_still_rejects_it(self):
+        target, cwd = self._protected(), self._innocent()
+        cmd = f"git -C{target} merge --no-ff topic"
+        self.assertTrue(self._denied(cmd, cwd), "attached -C<path> must fail-deny (unmodeled selector)")
+        # Pin the hardening claim: git 2.47.3 REJECTS this spelling, so the deny is future-proofing,
+        # not a live-bypass closure. If a future git starts ACCEPTING attached -C, this fails and
+        # forces re-verification (the spelling would then need real modeling, not just a fail-deny).
+        p = subprocess.run(["git", f"-C{target}", "status"], cwd=cwd, capture_output=True, text=True)
+        self.assertNotEqual(p.returncode, 0, "git now ACCEPTS attached -C — re-verify P0.14 modeling")
+
+    def test_denies_git_env_selector_merge(self):
+        target, cwd = self._protected(), self._innocent()
+        for cmd in (
+            f"GIT_DIR={target}/.git git merge --no-ff topic",
+            f"GIT_DIR={target}/.git GIT_WORK_TREE={target} git merge --no-ff topic",
+            f"GIT_WORK_TREE={target} git merge --no-ff topic",
+            f"GIT_COMMON_DIR={target}/.git git merge --no-ff topic",
+            f"env GIT_DIR={target}/.git git merge --no-ff topic",  # same selector via `env`
+        ):
+            self.assertTrue(self._denied(cmd, cwd),
+                            f"GIT_DIR-family env selector must fail-deny a YOLO merge: {cmd}")
+
+    def test_non_selector_env_assignment_still_allows(self):
+        # Bidirectional: an ordinary env-assignment prefix is NOT a repo selector and must not trip
+        # the fail-deny — the merge below targets the cwd's non-default branch and stays allowed.
+        cwd = self._innocent()
+        self.assertTrue(self._deferred("GIT_PAGER=cat git merge --no-ff topic", cwd))
+
+    def test_denies_launcher_chdir_merge(self):
+        target, cwd = self._protected(), self._innocent()
+        for cmd in (
+            f"env -C {target} git merge --no-ff topic",
+            f"env -C{target} git merge --no-ff topic",        # attached short value
+            f"env --chdir {target} git merge --no-ff topic",
+            f"env --chdir={target} git merge --no-ff topic",  # =-attached long value
+            f"sudo -D {target} git merge --no-ff topic",
+            f"sudo --chdir={target} git merge --no-ff topic",
+            f"env -C {target} bash -c 'git merge --no-ff topic'",  # threaded through the -c re-scan
+        ):
+            self.assertTrue(self._denied(cmd, cwd),
+                            f"launcher chdir option must fail-deny a YOLO merge: {cmd}")
+        # Documented cost of the fail-deny posture: even a chdir into a repo whose merge WOULD be
+        # legitimate is denied — the guard refuses to model launcher chdir rather than half-model it.
+        legit = self._innocent()
+        self.assertTrue(self._denied(f"env -C {legit} git merge --no-ff topic", cwd))
+
+    def test_launcher_chdir_non_merge_still_allows(self):
+        # The unmodeled-selector flag feeds ONLY the YOLO merge decision — a chdir launcher in front
+        # of a non-fenced command must not manufacture a deny.
+        target, cwd = self._protected(), self._innocent()
+        self.assertTrue(self._deferred(f"env -C {target} git status", cwd))
+        self.assertTrue(self._deferred(f"GIT_DIR={target}/.git git status", cwd))
+
+    def test_denies_cross_segment_dir_change_merge(self):
+        # Independent-review finding (re-review round 2): a PRECEDING segment can relocate the repo
+        # context — `cd /protected && git merge --no-ff topic` merges in /protected while detection
+        # read the payload cwd. Same class as `env -C`, so the same fail-deny.
+        target, cwd = self._protected(), self._innocent()
+        for cmd in (
+            f"cd {target} && git merge --no-ff topic",
+            f"cd {target}; git merge --no-ff topic",
+            f"pushd {target} && git merge --no-ff topic",
+            f"cd {target} && echo ok && git merge --no-ff topic",  # flag persists across segments
+            f"builtin cd {target} && git merge --no-ff topic",     # bash builtin-prefix spelling
+            f"command cd {target} && git merge --no-ff topic",
+            "popd && git merge --no-ff topic",
+        ):
+            self.assertTrue(self._denied(cmd, cwd),
+                            f"cross-segment dir change must fail-deny a YOLO merge: {cmd}")
+
+    def test_denies_cross_segment_git_env_export_merge(self):
+        target, cwd = self._protected(), self._innocent()
+        for cmd in (
+            f"export GIT_DIR={target}/.git; git merge --no-ff topic",
+            f"export GIT_DIR={target}/.git && git merge --no-ff topic",
+            f"declare -x GIT_DIR={target}/.git; git merge --no-ff topic",
+            f"GIT_DIR={target}/.git; export GIT_DIR; git merge --no-ff topic",  # bare-name promotion
+            f"GIT_DIR={target}/.git; git merge --no-ff topic",  # assignments-only segment (conservative)
+        ):
+            self.assertTrue(self._denied(cmd, cwd),
+                            f"cross-segment GIT_DIR export must fail-deny a YOLO merge: {cmd}")
+
+    def test_cross_segment_marking_is_one_directional(self):
+        # A dir change AFTER the merge cannot retroactively move it — the merge still targets the
+        # payload cwd (non-default here), so it must stay allowed. Pins the in-order semantics.
+        target, cwd = self._protected(), self._innocent()
+        self.assertTrue(self._deferred(f"git merge --no-ff topic && cd {target}", cwd))
+        # And a preceding dir change before a NON-fenced command manufactures no deny.
+        self.assertTrue(self._deferred(f"cd {target} && git status", cwd))
+        self.assertTrue(self._deferred(f"export GIT_DIR={target}/.git; git status", cwd))
+        # A non-selector export must not trip the flag either.
+        self.assertTrue(self._deferred("export GIT_PAGER=cat; git merge --no-ff topic", cwd))
 
 
 class TestLauncherPrefix(unittest.TestCase):

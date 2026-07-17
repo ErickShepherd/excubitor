@@ -137,16 +137,19 @@ Both guards run as `PreToolUse` hooks on specific tools. They see nothing outsid
 
 `guard-loop-vc.py` fences the irreversible VC set an unattended loop actually reaches on the
 stop-and-surface / YOLO paths: `merge`, `push`, `branch -d/-D`, `reset --hard`, non-dry-run `clean`,
-`worktree remove`, `gh pr merge`, and (because they repoint the default-branch trust anchor)
-`remote set-head` / `symbolic-ref` writes. It is **not** a complete deny-set over the git surface, and
-does not try to be — that is the deny-set-completeness race the crux refuses. The following verbs are
-destructive-or-history-rewriting and **left open by design**, documented here and pinned ALLOW in
+`worktree remove`, `gh pr merge`, and — because they repoint/rename/overwrite a ref (the
+default-branch trust anchor that guard-default-branch.py and the ralph-loop frozen-oracle base pin
+read) **without** the porcelain verbs above — the direct ref moves `branch -f/-m/-M/-C`, `update-ref`,
+`switch -C`, `checkout -B`, `worktree add -B`, `remote set-head`, and `symbolic-ref` writes. It is
+**not** a complete deny-set over the git surface, and does not try to be — that is the
+deny-set-completeness race the crux refuses. The following verbs are destructive-or-history-rewriting
+and **left open by design**, documented here and pinned ALLOW in
 `hooks/tests/test_guard_loop_vc.py::TestUnhandledGitVerbs`:
 
 | Verb | What it can do | Why it's left open |
 |---|---|---|
-| `git update-ref -d <ref>` | delete a ref (incl. a branch) via plumbing | plumbing; not on the loop's normal path; parking it invites chasing every plumbing verb |
 | `git reflog expire --expire=now --all` | drop the reflog (the recovery net others rely on) | rare; only matters combined with another destructive act |
+| `git fetch <path> +<src>:<ref>` (incl. `refs/remotes/*`) | move a ref — even a remote-tracking one — via a local-path refspec, no network/credentials | a fetch refspec retargets a ref without a fenced verb, and a direct `.git/refs` write goes below any Bash-parsing hook entirely; both are the irreducible "a loop with repo write access can move any ref" residual. The real backstop is DRIVER ISOLATION (run the loop in a worktree/container with no write access to the real refs) or an out-of-band base OID, NOT a per-verb fence |
 | `git stash drop` / `git stash clear` | discard stashed work | stashes are not the loop's committed line of work |
 | `git tag -d <tag>` | delete a tag | local tag; recreatable; not an integration act |
 | `git filter-branch …` / `git rebase …` | rewrite history on the current branch | rewrites the *current* branch only — like `reset`, within the "own branch" seatbelt scope until a push (which IS denied) would publish it |
@@ -212,6 +215,56 @@ it means stat-ing inode/nlink and cross-referencing repositories on every edit, 
 a stdlib seatbelt. Likewise a **bind mount** or other kernel-level redirection that `realpath` does
 not see is out of scope. Documented, not chased. See `guard-default-branch.py::_candidate_dirs`.
 
+## ACCEPTED — the frozen-oracle gate binds authorship and bytes, not semantics
+
+`run_frozen_oracle.py` (the YOLO permit-to-act gate) refuses a caller-supplied witness command (it
+must appear in the anchor file's **base-tree blob** as a **whole authored unit** — a whole line or a
+complete `verify:` suffix, so a *truncation* of an authored command earns no permit either — with
+`--base` pinned to the **remote-tracking** default `refs/remotes/origin/<name>`), refuses an untrusted
+executable (untracked in-repo — the `.venv/bin/python` class — or user-writable outside the repo,
+including a resolved symlink target that lands outside the repo), and binds
+conftest/runner-config/module-shadow companions into the frozen surface, executing under a sanitized
+environment. What it deliberately does **not** verify:
+
+- **A baseline-authored command's semantics.** A DoD author who writes `/bin/true <file>` (vacuous),
+  or a launcher/delegating prefix (`env …`, a trusted wrapper), authored that oracle — the gate binds
+  *who authored the command* and *what bytes ran*, not whether the oracle is adequate. Same class as
+  the `verified-by: true` weak-witness residual above. Pinned bidirectionally in
+  `skills/ralph-loop/tests/test_run_frozen_oracle.py::TestPermitBinding::test_baseline_authored_bin_true_is_green_accepted_residual`.
+- **The content of a trusted interpreter's environment beyond the repo:** system site-packages of a
+  root-owned interpreter, and sys.path shadowing from a directly-executed script's own directory,
+  are outside the frozen surface (the `-m` repo-root shadow *is* checked, across every `-m` spelling —
+  spaced, attached, or clustered).
+- **The base OID's ultimate immutability — the DRIVER's job, not the gate's.** The pin resolves the
+  remote-tracking default (`refs/remotes/origin/HEAD` → `refs/remotes/origin/<name>`), which RAISES
+  THE BAR: the trivial local ref moves (`branch -f/-M/-C`, `update-ref`, `switch -C`, `checkout -B`,
+  `checkout <default> && reset --soft`) are fenced or don't touch it, and a local-only default (no
+  remote-tracking anchor at all) **fail-denies** rather than pin to a trivially-movable local ref. It
+  is **not** absolute immutability, and the gate does not claim to be: a `git fetch <path>
+  +<src>:refs/remotes/origin/<name>` (local-path, no credentials — verified ALLOWED by the guard) and,
+  below any Bash-parsing hook, a direct `.git/refs` write can still retarget even the remote-tracking
+  ref. Chasing those is the completeness race the guard refuses; the real guarantee is **driver
+  isolation** — run the loop in a worktree/container with no write access to the real refs, or capture
+  the default-branch OID out of band before launch and pass it as `--base <sha>`. This gate is
+  defense-in-depth over that isolation, not a replacement for it. Pinned in
+  `skills/ralph-loop/tests/test_run_frozen_oracle.py::TestBasePinRequiresPushProtectedAnchor`.
+- **The gate's own invocation.** A misbehaving loop can still skip the gate or run it through a
+  forged interpreter — the recipe-level honest limit that has always applied (the guard hooks cannot
+  know which files are "the oracle"). YOLO narrows the trust placed in the loop; it does not
+  eliminate it.
+- A gate run **as root** refuses (every executable is then writable by the invoking user) — the safe
+  direction, documented rather than special-cased.
+
+## CLOSED — the frozen-oracle permit could be forged by a caller-supplied command or interpreter
+
+Before the 2026-07-16 independent review, `run_frozen_oracle.py --verified-by '/bin/true
+<tracked-test>'` returned GREEN without executing the frozen file (any tracked file argument was
+collected as the frozen surface; the executable was silently dropped), and the real checklist
+commands ran through the untracked, agent-writable `.venv/bin/python` — replacing the interpreter
+forged the permit. Closed by the authorship/executable/surface/environment bindings above; the
+reproductions are pinned in
+`skills/ralph-loop/tests/test_run_frozen_oracle.py::TestPermitBinding`.
+
 ## ACCEPTED — the denial-telemetry log is editable by the agent it records
 
 Every guard deny is appended to a local JSONL log (`hooks/_denial_log.py`; default
@@ -235,8 +288,10 @@ loop rewrite the judge that constrains it.
 |---|---|---|
 | An armed loop could `touch .claude/allow-default-branch`, or edit/delete the guard scripts or the `.claude/settings.json` hooks block, to disarm the fence | Denied while `CLAUDE_LOOP_GUARD` is set (file tools **and** Bash) | `guard-self-integrity.py` (TELOS-007/008) |
 | `git remote set-head` / `git symbolic-ref <name> <ref>` / `-d` could repoint `refs/remotes/origin/HEAD`, the trust anchor both guards read | Denied in both modes; the read form of `symbolic-ref` stays allowed | `guard-loop-vc.py::_classify` (TELOS-009) |
+| A loop could move the **default branch** with a direct ref move — `git branch -f/-m/-M/-C main`, `git update-ref refs/heads/main`, `git switch -C main`, `git checkout -B main`, `git worktree add -B main` — none of which touched the fenced porcelain verbs, so the ralph-loop frozen-oracle **base pin** (`--base main`, the "loop-immutable" baseline the P0.13 permit reads) was forgeable: move local `main` onto loop-authored state, then the anchor/freeze all read the loop's own tree → forged GREEN | Denied in both modes (any branch, clustered/attached/abbreviated spellings); the base pin now rests on a fence that actually holds | `guard-loop-vc.py::_classify` / `_cluster_denies` / `_long_opt_matches` (round-4 review) |
 | A dangerous verb or kill-switch glued inside an *unquoted* subshell / command substitution — `(git push)`, `$(rm PATH)`, `` `rm PATH` `` — slipped past the segment splitter | Denied; segments now split (quote-aware) on `(`, `)`, and backtick | both guards' `split_segments()` |
 | An **exec-prefix launcher** hid the fenced verb one token deeper — `env git push`, `sudo git branch -D main`, `nice git merge`, `timeout 60 git push`, `env gh pr merge 5`, `unbuffer git push`, `bash -c "git push"` — so the guard anchored on the launcher basename (`env`) and deferred, a trivial no-privilege disarm of the **whole** loop-vc deny set | Denied; `_classify` steps over an enumerated launcher set (and re-scans a simple shell `-c` string) and re-classifies the delegated command (an exec-prefix outside the set remains the ACCEPTED residual above) | `guard-loop-vc.py::_classify` / `_after_launcher` / `_shell_c_command` (TELOS-001) |
+| A **repository selector** divorced YOLO branch detection from the repo a merge actually targets: `git --git-dir=/protected/.git --work-tree=/protected merge --no-ff topic` (git-accepted) and composed relative `-C sub1 -C sub2` were evaluated against the payload cwd, so an innocent feature-branch cwd waved a merge into another repo's **default** branch through | Modeled spellings (repeated/composed `-C`, `--git-dir`/`--work-tree`, separate and `=`-attached) resolve detection against the **target** repo; unmodeled selector spellings — attached `-C<path>` (git-rejected today; hardening), `GIT_DIR`/`GIT_WORK_TREE`/`GIT_COMMON_DIR` env assignments (same-segment prefix, `export`/`declare` in a preceding segment, or an assignments-only segment), launcher chdir options (`env -C/--chdir`, `sudo -D/--chdir`), and a preceding directory-changing segment (`cd`/`pushd`/`popd`, incl. the `builtin`/`command` prefixes) — **fail-deny** the YOLO merge rather than guess (the known cost: a *legitimate* merge spelled through one of those is also denied) | `guard-loop-vc.py::_classify` / `_yolo_merge_reason` (P0.14) |
 
 ## Reporting a bypass
 

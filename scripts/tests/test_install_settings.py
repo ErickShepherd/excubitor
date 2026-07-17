@@ -210,5 +210,100 @@ class TestOwnershipAndRepair(unittest.TestCase):
             self.assertIn(e, pre, "unrelated entries must survive the merge unaltered")
 
 
+class TestOwnershipIsLaunchShapeNotTokenMembership(unittest.TestCase):
+    """2026-07-16 independent review, finding 3: `_command_target` treated ANY token with a guard
+    basename as ownership, so unrelated user hooks were removed and replaced with the canonical
+    guard. Ownership must be a launch shape; argument data is never ownership."""
+
+    def _merged(self, pre: list) -> dict:
+        with tempfile.TemporaryDirectory() as td:
+            p = Path(td) / "settings.json"
+            p.write_text(json.dumps({"hooks": {"PreToolUse": pre}}))
+            r = _cli(p)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            return json.loads(p.read_text())
+
+    def _assert_survives(self, user_entry: dict):
+        data = self._merged([json.loads(json.dumps(user_entry))])
+        self.assertIn(user_entry, data["hooks"]["PreToolUse"],
+                      "the user's handler must survive the merge byte-for-byte")
+        # and every real guard still got its own canonical registration
+        for script, matcher in ins.WANTED:
+            canon = [e for e in data["hooks"]["PreToolUse"]
+                     if ins._entry_is_canonical(e, script, matcher)]
+            self.assertEqual(len(canon), 1, script)
+
+    def test_review_repro_echo_guard_name_survives(self):
+        # THE REPRODUCTION: `echo guard-loop-vc.py` was classified Excubitor-owned, removed, and
+        # replaced with the canonical guard.
+        self._assert_survives({"matcher": "Bash",
+                               "hooks": [{"type": "command", "command": "echo guard-loop-vc.py",
+                                          "timeout": 5}]})
+
+    def test_wrapper_with_guard_name_argument_survives(self):
+        # the guard basename in a NON-script argument position is user data, not ownership
+        self._assert_survives({"matcher": "Bash",
+                               "hooks": [{"type": "command",
+                                          "command": "python3 some-wrapper.py guard-loop-vc.py",
+                                          "timeout": 5}]})
+
+    def test_python_c_and_m_forms_are_never_ours(self):
+        self._assert_survives({"matcher": "Bash",
+                               "hooks": [{"type": "command",
+                                          "command": "python3 -c 'print(\"guard-loop-vc.py\")'",
+                                          "timeout": 5}]})
+        self._assert_survives({"matcher": "Bash",
+                               "hooks": [{"type": "command",
+                                          "command": "python3 -m mytool guard-loop-vc.py",
+                                          "timeout": 5}]})
+
+    def test_near_miss_basenames_survive(self):
+        for cmd in ("python3 /home/u/bin/xguard-loop-vc.py.bak",
+                    "python3 /home/u/bin/guard-loop-vc.py2",
+                    "guard-loop-vc.py.orig --check"):
+            with self.subTest(cmd=cmd):
+                self._assert_survives({"matcher": "Bash",
+                                       "hooks": [{"type": "command", "command": cmd,
+                                                  "timeout": 5}]})
+
+    def test_mixed_group_user_handler_with_guard_name_argument_survives_in_place(self):
+        # a user handler carrying the guard name as an ARGUMENT, co-grouped with a genuinely stale
+        # OURS handler: repair must strip only ours and keep the user handler exactly in place
+        user_handler = {"type": "command", "command": "echo guard-loop-vc.py", "timeout": 5}
+        mixed = {"matcher": "Bash",
+                 "hooks": [dict(user_handler),
+                           {"type": "command",
+                            "command": "python3 /stale/guard-loop-vc.py", "timeout": 10}]}
+        data = self._merged([mixed])
+        pre = data["hooks"]["PreToolUse"]
+        self.assertEqual(pre[0]["hooks"], [user_handler],
+                         "only OUR stale handler is stripped; the user's stays in place")
+        owned = _entries_for(data, "guard-loop-vc.py")
+        canon = [e for e in owned if ins._entry_is_canonical(e, "guard-loop-vc.py", "Bash")]
+        self.assertEqual(len(canon), 1)
+
+    def test_stale_interpreter_launch_is_still_repaired(self):
+        # the genuine stale-registration repair must keep working: an interpreter launch of OUR
+        # script at a wrong path is ours
+        stale = {"matcher": "Bash",
+                 "hooks": [{"type": "command",
+                            "command": "python3 -u /stale/guard-loop-vc.py", "timeout": 10}]}
+        data = self._merged([stale])
+        pre = data["hooks"]["PreToolUse"]
+        self.assertNotIn(stale, pre, "our stale registration must be repaired, not preserved")
+        canon = [e for e in pre if ins._entry_is_canonical(e, "guard-loop-vc.py", "Bash")]
+        self.assertEqual(len(canon), 1)
+
+    def test_direct_execution_of_our_script_is_ours(self):
+        stale = {"matcher": "Bash",
+                 "hooks": [{"type": "command",
+                            "command": "/stale/hooks/guard-loop-vc.py", "timeout": 10}]}
+        data = self._merged([stale])
+        self.assertNotIn(stale, data["hooks"]["PreToolUse"])
+        canon = [e for e in data["hooks"]["PreToolUse"]
+                 if ins._entry_is_canonical(e, "guard-loop-vc.py", "Bash")]
+        self.assertEqual(len(canon), 1)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

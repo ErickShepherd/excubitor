@@ -387,9 +387,12 @@ paths:
   `## Key decisions` entry (or inline on a checklist/sidecar `- [ ] DECIDE:` item), **one `forbid: <command>`
   predicate per option** — an exit-code check that *rules that option out*. Run each option's predicate
   through the atomic runner (reuse `run_frozen_oracle.py` **unchanged**:
-  `python3 ~/.claude/skills/ralph-loop/scripts/run_frozen_oracle.py --repo "$R" --base <default-branch> --verified-by "<the forbid command>"`
-  — exit 10 means the predicate is not frozen / changed across execution → defer; 0/1 is the predicate's
-  own verdict produced under a frozen surface). The loop may only **rule options out**. **Exactly one survivor →
+  `python3 ~/.claude/skills/ralph-loop/scripts/run_frozen_oracle.py --repo "$R" --base <default-branch> --anchor <the spec file that authored the forbid predicate> --verified-by "<the forbid command>"`
+  — exit 10 means the predicate is not frozen / not baseline-authored / changed across execution → defer;
+  0/1 is the predicate's own verdict produced under a frozen surface). The runner reads the anchor from the
+  **base-tree blob**, so only a predicate that was authored *before the loop forked* can eliminate — a
+  `forbid:` the loop RECORDed mid-run is not in the base blob and refuses → defer (the conservative
+  direction: a mid-run fork always waits for a human). The loop may only **rule options out**. **Exactly one survivor →
   oracle-backed resolution** (no self-bless — an exit code, not the LLM judging itself; YOLO-eligible under the
   usual act-fence). **More than one survivor, or any predicate not frozen → defer.**
 - **Everything else → the reversibility rubric decides *whether to defer* (it does NOT pick the fork).** Reuse
@@ -505,15 +508,26 @@ work hard-refuses YOLO — no override — and routes to the normal out-of-loop 
 
 - **telos unit:**
   - the claim has an executable `verified-by:` oracle (test-expressible);
-  - the oracle is **frozen AND green in ONE atomic operation** — the permit-to-act gate is
-    `python3 ~/.claude/skills/ralph-loop/scripts/run_frozen_oracle.py --repo "$R" --base <default-branch> --verified-by "<the claim's verified-by command>"`
-    exiting 0 (GREEN). The runner prechecks the complete oracle surface (lexical paths, symlink-chain
-    hops, resolved targets, path types, link targets) against the base, snapshots it, runs the witness
-    **without a shell**, and rechecks the same snapshot before returning the verdict — closing the
-    check-then-run window in which a loop could edit its oracle between two separate commands. Exit 1 =
-    witness RED; exit 10 = REFUSED (surface not frozen / unverifiable / changed across execution) →
-    refuse, surface. (`check_oracle_frozen.py` remains available as the check-only **diagnostic** for a
-    quick freeze query; it is a point-in-time check and is **not** the permit-to-act gate.)
+  - the oracle is **baseline-bound, frozen AND green in ONE atomic operation** — the permit-to-act gate is
+    `python3 ~/.claude/skills/ralph-loop/scripts/run_frozen_oracle.py --repo "$R" --base <default-branch> --anchor <the ledger file carrying the claim> --verified-by "<the claim's verified-by command>"`
+    exiting 0 (GREEN). The runner binds **what runs** to state the loop cannot author — `--base` must
+    resolve to the **remote-tracking** default (`refs/remotes/origin/<name>`, the highest-bar in-repo
+    anchor — a loop-chosen base, or a local-only repo with no `origin/HEAD` whose local default is
+    trivially loop-movable, refuses; true immutability against a loop with repo write access is the
+    driver's job via isolation or an out-of-band `--base`, not this gate's), the command must appear as a whole authored unit in the
+    anchor's **base-tree blob** (a caller-supplied or truncated command earns no permit, no matter which
+    frozen files it names), the executable resolves on a fixed trusted PATH and must itself be trustworthy
+    (an untracked in-repo interpreter like `.venv/bin/python` refuses — author witnesses against a system
+    interpreter or a **tracked** script), and known verdict-affecting companions (conftest.py, root runner
+    config, `-m` module shadowing) join the frozen surface — then prechecks the complete oracle surface
+    (lexical paths, symlink-chain hops, resolved targets, path types, link targets) against the base,
+    snapshots it, runs the witness **without a shell and under a sanitized environment** (fixed PATH, no
+    inherited `PYTHONPATH`-class injection), and rechecks the same snapshot before returning the verdict —
+    closing the check-then-run window in which a loop could edit its oracle between two separate commands.
+    Exit 1 = witness RED; exit 10 = REFUSED (a binding failed / surface not frozen / unverifiable /
+    changed across execution) → refuse, surface. (`check_oracle_frozen.py` remains available as the
+    check-only **diagnostic** for a quick freeze query; it is a point-in-time check, performs none of the
+    bindings, and is **not** the permit-to-act gate.)
 - **green-the-suite unit:**
   - the loop touched **zero test-surface files** on its branch —
     `python3 ~/.claude/skills/ralph-loop/scripts/check_suite_frozen.py --repo "$R" --base <default-branch> --test-path <each test/config pathspec>`
@@ -527,9 +541,13 @@ work hard-refuses YOLO — no override — and routes to the normal out-of-loop 
     oracle, so it routes to the normal out-of-loop falsifier (stop-and-surface). This is the default.
   - an item with a frozen `verify:` oracle is **test-expressible** and degrades to the **telos-unit gate
     verbatim**: extract the item's `verify:` command and require the atomic runner GREEN —
-    `python3 ~/.claude/skills/ralph-loop/scripts/run_frozen_oracle.py --repo "$R" --base <default-branch> --verified-by "<the item's verify command>"`
-    exits 0 (exit 10 → the surface is not frozen or changed across execution, exit 1 → the witness is
-    red — either way refuse, surface). No new mechanism: a `verify:` item *is* a `verified-by:` claim.
+    `python3 ~/.claude/skills/ralph-loop/scripts/run_frozen_oracle.py --repo "$R" --base <default-branch> --anchor <the plan file> --verified-by "<the item's verify command>"`
+    exits 0 (exit 10 → a binding failed, the surface is not frozen, or it changed across execution;
+    exit 1 → the witness is red — either way refuse, surface). The anchor is read from the plan file's
+    **base-tree blob**, so only a `verify:` command that was in the plan *before the loop forked* is
+    YOLO-eligible — a `verify:` the loop added or edited on its own branch refuses (the plan file is
+    loop-editable by design, which is exactly why the gate never reads it from the worktree). No new
+    mechanism: a `verify:` item *is* a `verified-by:` claim.
 
 **The YOLO act (only after the gate passes):** mark the unit done (its frozen green oracle backs it) and you
 MAY integrate via `git merge --no-ff` into a **non-default** integration branch. Never the default branch,
@@ -549,16 +567,28 @@ context the loop read on the way there.
 > the DoD oracle is a *true*, *complete* definition (oracle/suite incompleteness — Goodhart — is the DoD
 > author's responsibility, not something YOLO can verify).
 >
-> **What the gate proves — stated precisely.** At precheck *and* recheck, every oracle-surface path's
+> **What the gate proves — stated precisely.** The permit is bound on four axes. **Authorship:** the
+> witness command must appear verbatim in the anchor file's base-tree blob, and `--base` must resolve to
+> the default branch — so neither the command nor the baseline it is checked against can be
+> loop-authored. **Executable:** argv[0] resolves on a fixed trusted PATH; in-repo executables must be
+> tracked (and join the frozen surface), out-of-repo ones must not be user-writable — the untracked
+> `.venv/bin/python` class refuses. **Bytes:** at precheck *and* recheck, every oracle-surface path's
 > current state is compared against the **base blob** — a regular file by content hash (`git hash-object`
 > vs the base OID), a symlink by its target string, plus its type and every symlink hop (file *and*
-> directory). So an oracle weakened in the worktree *without committing* (the R-04 #1 hole) is refused,
-> not only a committed edit. The atomic runner's envelope — precheck → snapshot → shell-less run → recheck
-> — then binds those checked bytes to the trusted exit code: the returned verdict was produced by a run
-> whose start and end state both matched the frozen baseline. Accepted residual: a witness that mutates an
-> oracle *during* execution and restores it before exiting defeats the recheck — snapshot equality is
-> start==end, not continuous immutability (that would need an immutable filesystem, which this deliberately
-> is not).
+> directory), with conftest/runner-config/module-shadow companions bound too. So an oracle weakened in
+> the worktree *without committing* (the R-04 #1 hole) is refused, not only a committed edit.
+> **Environment:** the witness runs shell-less under a sanitized env (fixed PATH, no inherited
+> `PYTHONPATH`-class vectors, user site-packages off). The atomic runner's envelope — bindings →
+> precheck → snapshot → shell-less run → recheck — then binds those checked bytes to the trusted exit
+> code: the returned verdict was produced by a run whose start and end state both matched the frozen
+> baseline. Accepted residuals (see KNOWN-BYPASSES.md): a witness that mutates an oracle *during*
+> execution and restores it before exiting defeats the recheck (snapshot equality is start==end, not
+> continuous immutability); and the gate binds **authorship and bytes, not semantics** — a
+> baseline-authored vacuous or delegating command (`/bin/true x`, a launcher prefix), and the content of
+> a trusted interpreter's system site-packages, are the DoD author's and host administrator's
+> responsibility, not something the gate can verify. (Authorship is bound to the **whole authored
+> unit** — a whole anchor line or complete `verify:` suffix — so a truncated slice of an authored
+> command earns no permit.)
 
 ## Notes
 
