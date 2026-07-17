@@ -4,9 +4,9 @@
 The Claude Code hook `hooks/guard-loop-vc.py` is ONE adapter over a pure decision core. Its `main()`
 does three host-specific things — read a Claude Code PreToolUse JSON envelope from stdin, check the
 arming signal, and write a Claude Code `hookSpecificOutput` decision to stdout — and then delegates the
-actual judgment to `_dangerous(command, yolo, cwd)`, which with `split_segments` / `_classify` /
-`_yolo_merge_reason` has **zero Claude Code dependency**: a command string and a little context in, a
-deny-reason-or-None out.
+actual judgment to `excubitor.core.policies.loop_vc._dangerous(command, yolo, cwd)`, which with
+`split_segments` / `_classify` / `_yolo_merge_reason` has **zero Claude Code dependency**: a command
+string and a little context in, a deny-reason-or-None out.
 
 This module drives that SAME core (imported, not reimplemented — one source of truth for the security
 logic) from a **generic** envelope, so "portable to any runtime that can intercept tool calls" is a
@@ -18,27 +18,14 @@ Only the tiny envelope/arming glue is per-runtime and lives here; the classifica
 """
 from __future__ import annotations
 
-import importlib.util
 import sys
 from pathlib import Path
-from types import ModuleType
 
-_HOOK = Path(__file__).resolve().parents[1] / "hooks" / "guard-loop-vc.py"
-
-
-def _load_core() -> ModuleType:
-    """Import the decision core from the Claude Code hook by path (its filename is hyphenated, so it
-    isn't a normal import). Importing does not run its CLI — that is behind an `if __name__` guard."""
-    spec = importlib.util.spec_from_file_location("_guard_loop_vc_core", _HOOK)
-    if spec is None or spec.loader is None:  # pragma: no cover - only if the hook file vanished
-        raise ImportError(f"cannot load guard decision core from {_HOOK}")
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = mod
-    spec.loader.exec_module(mod)
-    return mod
-
-
-_core = _load_core()
+# The decision core is now a normal importable package module — excubitor.core.policies.loop_vc — not
+# a hyphenated hook file loaded by path. Add the repo root to sys.path so this adapter, which may run
+# as a standalone CLI from any cwd, can import the package.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from excubitor.core.policies import loop_vc as _core  # noqa: E402
 
 
 def decide(event: dict) -> dict:
