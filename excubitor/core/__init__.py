@@ -10,6 +10,7 @@ one-unit, self-integrity) and the dispatcher land in later modules as the extrac
 """
 from __future__ import annotations
 
+from . import git_state
 from .events import (
     SCHEMA,
     Capability,
@@ -26,4 +27,5 @@ __all__ = [
     "Outcome",
     "Decision",
     "PreToolEvent",
+    "git_state",
 ]

@@ -26,19 +26,22 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
 import sys
 
+# The shared model-blind policy core lives in the importable `excubitor` package at the repo root.
+# This hook runs as a standalone subprocess, so it adds the repo root — resolved through any deploy
+# symlink — to sys.path before importing the core (read-only git state now lives there, not here).
+# FAIL-SOFT: a guard copied out of its package must still LOAD, never crash. Without the core this
+# guard cannot resolve repo state, so it defers (fail-open) exactly as it already does on a git fault.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
+try:
+    from excubitor.core import git_state  # noqa: E402
+except ImportError:  # copied out of its package → defer (fail-open), never crash-on-load
+    git_state = None  # type: ignore[assignment]
 
-def _git(args: list[str], cwd: str) -> subprocess.CompletedProcess[str]:
-    try:
-        return subprocess.run(
-            ["git", "-C", cwd, *args], capture_output=True, text=True, timeout=5
-        )
-    except (OSError, subprocess.SubprocessError) as e:
-        # git missing / not executable / timed out / killed → behave like a non-zero result so callers
-        # fail OPEN (the documented contract: never exit non-zero, never wedge the editor on a guard fault).
-        return subprocess.CompletedProcess(args, returncode=1, stdout="", stderr=str(e))
+# Read-only git state and default-branch resolution — the former private `_git` plus the inline
+# origin/HEAD resolution — were extracted to the shared core in C1.2 and now live in
+# `excubitor.core.git_state`, shared verbatim with guard-loop-vc.py. hooks/tests/ is the oracle.
 
 
 def _allow() -> None:
@@ -135,31 +138,24 @@ def _candidate_dirs(cwd: str, logical_target: str) -> "list[str] | None":
 def _protected_repo_deny(target_dir: str, payload: dict) -> "str | None":
     """If `target_dir` is inside a git repo checked out on its (un-opted-out) default branch,
     return the deny reason; else None (not a repo / opted out / on a feature branch)."""
-    top = _git(["rev-parse", "--show-toplevel"], target_dir)
-    if top.returncode != 0:
+    if git_state is None:  # core not importable (guard copied out of its package) → defer, never wedge
+        return None
+    repo = git_state.repo_toplevel(["-C", target_dir])
+    if repo is None:
         return None  # not a git repo → not our concern
-    repo = top.stdout.strip()
 
     # Per-repo opt-out: bless main-only repos (or a one-off) with a marker file. isfile (not exists) so a
     # stray directory / dangling symlink of that name can't silently disable the guard.
     if os.path.isfile(os.path.join(repo, ".claude", "allow-default-branch")):
         return None
 
-    branch = _git(["rev-parse", "--abbrev-ref", "HEAD"], repo).stdout.strip()
+    # Detached HEAD reads as 'HEAD'; a git fault reads as "" — both fall out of the protected set below
+    # (defer), preserving the prior `.stdout.strip()` behavior.
+    branch = git_state.current_branch(["-C", repo]) or ""
 
-    # Resolve the protected default branch: the remote's HEAD if there is one,
-    # else fall back to the conventional names (covers local-only repos).
-    origin_head = _git(
-        ["symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"], repo
-    ).stdout.strip()
-    # Always protect the conventional names; a resolved origin/HEAD ADDS to the set, never replaces it
-    # (replacing it would silently un-protect main/master whenever origin/HEAD points elsewhere).
-    protected = {"main", "master"}
-    if origin_head.startswith("refs/remotes/origin/"):
-        # Strip the fixed ref prefix, NOT rsplit("/") — a branch name can itself contain slashes
-        # (release/2.0, team/main), and rsplit would yield the wrong tail ("2.0") and silently
-        # un-protect the real default branch. removeprefix keeps the full name.
-        protected.add(origin_head.removeprefix("refs/remotes/origin/"))
+    # Always protect main/master; a resolved origin/HEAD ADDS to the set, never replaces it (replacing
+    # it would silently un-protect main/master). The slash-safe resolution now lives in the shared core.
+    protected = git_state.protected_default_names(["-C", repo])
 
     if branch not in protected:
         return None

@@ -119,6 +119,19 @@ import shlex
 import subprocess
 import sys
 
+# The shared model-blind policy core lives in the importable `excubitor` package at the repo root.
+# This hook runs as a standalone subprocess and is imported by path (runtime/spec_adapter.py), so it
+# adds the repo root — resolved through any deploy symlink — to sys.path before importing the core.
+# The import is FAIL-SOFT: a guard COPIED out of its package must still LOAD and enforce the whole
+# deny-set that needs no git state (push / branch-delete / reset / clean / ref-moves / …); only
+# YOLO-merge branch detection needs the core, and it fail-denies when the core is absent (see
+# _yolo_merge_reason). This preserves the "copied guard still denies, never crashes" process contract.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
+try:
+    from excubitor.core import git_state  # noqa: E402
+except ImportError:  # copied out of its package → degrade, never crash-on-load (fail-open contract)
+    git_state = None  # type: ignore[assignment]
+
 # Characters that, OUTSIDE quotes, separate independent commands within one Bash invocation:
 # the command separators `;` `|` `&` newline, and the subshell / command-substitution boundaries
 # `(` `)` backtick (so a dangerous verb glued inside `(git push)` / `$(git push)` / `` `git push` ``
@@ -404,64 +417,11 @@ def _deny(reason: str, payload: dict) -> None:
     sys.exit(0)
 
 
-def _git(selectors: list[str], *args: str) -> tuple[bool, str]:
-    """Run a read-only `git` query; return (ok, stdout). Never raises (fail toward not-ok).
-
-    `selectors` are the repository-selecting global options (`-C <dir>`, `--git-dir <dir>`,
-    `--work-tree <dir>`) reconstructed from the guarded command, so the query interrogates the SAME
-    repository the guarded command would mutate (P0.14) — not the payload cwd. The `-C` entry is
-    placed first by the caller, so a relative `--git-dir`/`--work-tree` resolves against the `-C`
-    base exactly as git itself resolves them (git chdirs for `-C` during option parsing and resolves
-    GIT_DIR/GIT_WORK_TREE at repository setup, i.e. after every chdir, regardless of option order).
-    """
-    try:
-        p = subprocess.run(["git", *selectors, *args], capture_output=True, text=True, timeout=5)
-    except (OSError, subprocess.SubprocessError):
-        return False, ""
-    if p.returncode != 0:
-        return False, ""
-    return True, p.stdout.strip()
-
-
-def _current_branch(selectors: list[str]) -> str | None:
-    """The checked-out branch name, or None if undeterminable. Detached HEAD reads as 'HEAD'."""
-    ok, out = _git(selectors, "rev-parse", "--abbrev-ref", "HEAD")
-    return out if ok else None
-
-
-def _default_branch(selectors: list[str]) -> str | None:
-    """The repo's default branch, or None if it can't be determined unambiguously (→ fail-deny).
-
-    Mirrors pre-merge-review's base resolution: prefer `origin/HEAD`; else, for local-only repos
-    (the common case here), the sole of `main`/`master`. If BOTH exist, disambiguate only via an
-    explicit `init.defaultBranch` naming one of them; otherwise it is genuinely ambiguous → None.
-
-    HONEST LIMIT: a local-only repo has no authoritative "default branch", so the main/master
-    fallback is a *best-effort heuristic*, not the fail-deny guarantee. A repo whose real trunk is
-    a non-standard name (e.g. `develop`) with no `origin/HEAD` and no `init.defaultBranch` would be
-    mis-resolved. `_yolo_merge_reason` compensates by *also* always protecting the literal `main`/
-    `master` names; the residual (a non-standard trunk) is bounded — the only allowed act is a
-    revertable `--no-ff` merge, and push stays denied. Set `origin/HEAD`/`init.defaultBranch` to be safe.
-    """
-    ok, out = _git(selectors, "symbolic-ref", "--quiet", "refs/remotes/origin/HEAD")
-    if ok and out.startswith("refs/remotes/origin/"):
-        # Strip the fixed ref prefix, NOT rsplit("/") — a branch name can itself contain slashes
-        # (release/2.0, team/main), and rsplit would keep only the last segment ("2.0", "main"),
-        # resolving a DIFFERENT default than the one checked out and letting a YOLO merge into the
-        # real default slip through. removeprefix keeps the full name. (This mirrors the sibling
-        # fix in guard-default-branch.py, which resolves the same trust anchor.)
-        return out.removeprefix("refs/remotes/origin/")
-    has_main = _git(selectors, "show-ref", "--verify", "--quiet", "refs/heads/main")[0]
-    has_master = _git(selectors, "show-ref", "--verify", "--quiet", "refs/heads/master")[0]
-    if has_main and not has_master:
-        return "main"
-    if has_master and not has_main:
-        return "master"
-    if has_main and has_master:
-        ok, cfg = _git(selectors, "config", "init.defaultBranch")
-        if ok and cfg in ("main", "master"):
-            return cfg
-    return None
+# Read-only git state and default-branch resolution — the former `_git` / `_current_branch` /
+# `_default_branch` — were extracted VERBATIM to the shared model-blind core in C1.2 and now live in
+# `excubitor.core.git_state` (imported at the top of this file). One source of truth, shared with
+# guard-default-branch.py; the slash-safe origin/HEAD resolution both guards carried is `git_state.
+# origin_head_name`. The behavior is unchanged — hooks/tests/ is the differential oracle.
 
 
 def _yolo_merge_reason(selectors: list[str], rest: list[str], unmodeled_selector: bool) -> str | None:
@@ -482,10 +442,12 @@ def _yolo_merge_reason(selectors: list[str], rest: list[str], unmodeled_selector
             "(attached -C, GIT_DIR-family environment variable, launcher chdir option, or a "
             "preceding cd/pushd/export segment) — branch detection can't be trusted (fail-deny)"
         )
-    current = _current_branch(selectors)
+    if git_state is None:  # core not importable (guard copied out of its package) → fail-deny
+        return "merge while the policy core is unavailable to detect the branch (fail-deny)"
+    current = git_state.current_branch(selectors)
     if not current or current == "HEAD":
         return "merge while the current branch can't be confirmed non-default (fail-deny)"
-    default = _default_branch(selectors)
+    default = git_state.default_branch(selectors)
     if default is None:
         return "merge while the repo's default branch can't be determined (fail-deny)"
     # Protect the resolved default AND the literal main/master names — so a main/master mix-up, or a
