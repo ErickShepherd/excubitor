@@ -21,6 +21,14 @@ Each bypass is classed:
 
 ## How the guards parse (why these exist)
 
+Since the C1 model-blind extraction, this parsing logic lives in the **shared core** —
+`excubitor/core/policies/loop_vc.py` and `excubitor/core/policies/self_integrity.py` — and the shipped
+`hooks/guard-loop-vc.py` / `guard-self-integrity.py` are thin Claude Code adapters over it (the generic
+`runtime/spec_adapter.py` reaches the same core). So **every residual below is a property of the core
+and travels with every adapter**, not just the Claude Code hook — the seatbelt-not-sandbox nature of the
+parse is host-independent. The guard filenames below name the shipped entry points; the behavior they
+describe is the core's.
+
 `guard-loop-vc.py` and `guard-self-integrity.py` both read the `Bash` tool's command **string**. They
 split it into segments on shell separators (`;`, `|`, `&`, newline) **and** on subshell /
 command-substitution boundaries (`(`, `)`, backtick) — honoring those boundaries **only outside

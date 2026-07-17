@@ -99,6 +99,15 @@ it for Tier 3 must add a real boundary (container/VM isolation, capability restr
 
 ## Controls — matched to the tiers, not gold-plated
 
+The four guards' decision logic now lives in a shared **model-blind core** (`excubitor/core/`); the
+shipped `hooks/guard-*.py` are thin Claude Code adapters over it, and a generic adapter
+(`runtime/spec_adapter.py`) reaches the same core. This extraction is **behavior-preserving** — the
+differential test suites are the oracle — so the threat surface, the tiers, and every control and
+residual below are unchanged by it. What the core *adds* is reach, not enforcement: the policies are
+now reachable from a neutral `excubitor.pre_tool.v1` envelope, but the only runtime with real shipped
+enforcement is still the Claude Code hooks (other hosts are designed, not built — see
+[`SPEC.md`](SPEC.md)). "Model-blind" widens the *contract*, not the *proven substrate*.
+
 | Control | What it is | Tier it addresses | Honest limit |
 |---|---|---|---|
 | `guard-default-branch.py` | deny the direct file-edit tools (Edit/Write/NotebookEdit) on `main`/`master` — branch first | 1 (mostly), 2 | registration boundary: Bash mutations bypass (R-06, accepted — see KNOWN-BYPASSES); disarmable marker → now fenced by self-integrity |

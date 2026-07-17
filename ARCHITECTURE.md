@@ -53,8 +53,15 @@ cannot forge — a strict parser, an exit code, a denied tool call, or a human.
    `state: DISCHARGED` is contradicted, and one with no `verified-by:` witness is demoted to
    SUSPECT rather than trusted.
 
-2. **Model ↔ VC irreversibility.** The hooks run *outside* the model, in the runtime's PreToolUse
-   interception. Deny decisions are emitted as JSON on stdout with exit 0 (the process contract is
+2. **Model ↔ VC irreversibility.** The four guards are now thin Claude Code adapters over a
+   **model-blind policy core** (`excubitor/core/`: the `loop-vc`, `default-branch`, `one-unit`, and
+   `self-integrity` policies + a read-only git boundary + a deny-precedence dispatcher, all stdlib-only
+   and free of host I/O); `runtime/spec_adapter.py` drives the *same* core from a generic
+   `excubitor.pre_tool.v1` envelope, so the decision is identical whichever adapter runs (the
+   differential suites prove it). The full contract is [`SPEC.md`](SPEC.md); only Claude Code is a
+   *supported* runtime today (other hosts are designed, not built — no live-host claims). The hooks run
+   *outside* the model, in the runtime's PreToolUse interception. Deny decisions are emitted as JSON on
+   stdout with exit 0 (the process contract is
    fail-open — a guard bug must never wedge the tool — while the YOLO merge *decision* fails deny:
    an undeterminable branch blocks the merge). `guard-self-integrity.py` closes the reflexive hole:
    while a loop guard is armed, the loop may not write the guards' own kill-switches (the
@@ -87,8 +94,14 @@ cannot forge — a strict parser, an exit code, a denied tool call, or a human.
 ## Layout
 
 ```
-hooks/                    # the guards + _denial_log.py telemetry helper + tests/ (stdlib only;
-                          # no imports across components — the helper is within-component)
+excubitor/core/           # the model-blind policy core (stdlib only; no host I/O):
+                          #   events.py (PreToolEvent / Decision(pass|deny)), git_state.py (read-only
+                          #   git boundary), policies/{loop_vc,default_branch,one_unit,self_integrity}.py,
+                          #   dispatch.py (deny precedence) + tests under excubitor/tests/
+excubitor/adapters/       # per-runtime adapters: claude_code.py (shared PreToolUse envelope glue)
+hooks/                    # the four Claude Code guard entry points — thin adapters over the core —
+                          # + _denial_log.py telemetry helper + tests/ (the differential oracles)
+runtime/spec_adapter.py   # the generic excubitor.pre_tool.v1 adapter (JSON CLI) + tests/
 skills/<name>/SKILL.md    # open Agent Skills format: frontmatter trigger + instructions
 skills/<name>/scripts/    # executable helpers (ralph-loop's oracle/suite/suspend checks)
 skills/<name>/tests/      # per-component pytest suites
@@ -97,7 +110,8 @@ docs/telos/               # this repo's own claims, audited by its own audit-tel
 scripts/install.sh        # symlinks + idempotent settings.json hook registration
 ```
 
-Components are deliberately decoupled: the hooks import nothing from the skills, the skills'
-scripts import nothing from the hooks, and the only vendored code is `claude_usage.py` (next to
-the one script that needs it). Any piece is usable without the rest; together they form the
-four-layer harness described in the README.
+Components are deliberately decoupled: the hooks are thin entry points that import only the model-blind
+`excubitor` package (never the skills); the skills' scripts import nothing from the hooks; the only
+vendored code is `claude_usage.py` (next to the one script that needs it). One core, many adapters — the
+policy logic lives once in `excubitor/core/` and every adapter shares it verbatim, so a decision can
+never fork between hosts. Together they form the four-layer harness described in the README.
