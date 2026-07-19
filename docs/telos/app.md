@@ -33,7 +33,7 @@ claims as proven.
 ### TELOS-001 — the conservative loop fence denies the whole irreversible VC set
 - state: DISCHARGED
 - intent: stop-and-surface is only real if every irreversible escape hatch is closed; one missed subcommand (a push, a branch delete) is the whole unattended-bad-merge failure back again
-- discharged-by: hooks/guard-loop-vc.py::_classify
+- discharged-by: excubitor/core/policies/loop_vc.py::_classify
 - contract: with CLAUDE_LOOP_GUARD set, _classify returns a deny reason for git merge, git push, git branch -d/-D, git reset --hard, non-dry-run git clean, git worktree remove, and gh pr merge
 - verified-by: hooks/tests/test_guard_loop_vc.py::TestGuardLoopVC::test_deny_set
 - last-grilled: 2026-07-07
@@ -42,7 +42,7 @@ claims as proven.
 ### TELOS-002 — YOLO integration is fenced to a revertable merge into a non-default branch
 - state: DISCHARGED
 - intent: verifiable autonomy is only safe inside the reversible/internal blast radius; a fast-forward merge leaves nothing to revert and a default-branch merge is the irreversible act the whole harness exists to prevent
-- discharged-by: hooks/guard-loop-vc.py::_yolo_merge_reason
+- discharged-by: excubitor/core/policies/loop_vc.py::_yolo_merge_reason
 - contract: in yolo mode a git merge is allowed only when it carries --no-ff and the current branch is confirmed non-default; a missing --no-ff, a default or protected-name branch, or any inability to determine the current or default branch yields a deny reason
 - verified-by: hooks/tests/test_guard_loop_vc.py::TestGuardYoloMode::test_denies_merge_when_default_ambiguous
 - last-grilled: 2026-07-07
@@ -86,9 +86,9 @@ claims as proven.
 
 ### TELOS-007 — an armed loop cannot write its guards' kill-switches with the file tools
 - state: DISCHARGED
-- intent: a judge the model can rewrite is not a judge; the allow-default-branch marker, the guard scripts, and the settings.json hook registration are each one ordinary file write away from disarming the whole fence, so while a loop guard is armed those writes must be denied
+- intent: a judge the model can rewrite is not a judge; the allow-default-branch marker, the hook entry points, the settings.json registration, and the extracted policy package are each one ordinary file write away from disarming the fence, so while a loop guard is armed those writes must be denied
 - discharged-by: hooks/guard-self-integrity.py::main
-- contract: with CLAUDE_LOOP_GUARD set, main denies Edit, Write, and NotebookEdit calls whose target resolves (including through a symlink) to an allow-default-branch marker, a guard hook script, or a settings.json or settings.local.json under a .claude directory
+- contract: with CLAUDE_LOOP_GUARD set, main denies Edit, Write, and NotebookEdit calls whose target resolves (including through a symlink) to an allow-default-branch marker, a guard hook script, a settings.json or settings.local.json under a .claude directory, or the excubitor policy package imported by the hooks
 - verified-by: hooks/tests/test_guard_self_integrity.py::TestFileToolDenials::test_deny_targets
 - last-grilled: 2026-07-07
 - anchor: none
@@ -97,7 +97,7 @@ claims as proven.
 - state: DISCHARGED
 - intent: denying the file tools alone leaves touch, rm, mv, tee, and sed as equivalent disarm paths through Bash; distinguishing shell reads from writes is a losing race, so any command segment naming a kill-switch path as a LITERAL token is denied while armed (the Read tool keeps reads wearable). Word expansions that mutate the token before bash resolves it (glob/brace/$VAR) are accepted, documented residuals, not chased — see the hook's SCOPE / LIMITS and the TestAcceptedResiduals fixtures
 - discharged-by: hooks/guard-self-integrity.py::main
-- contract: with CLAUDE_LOOP_GUARD set, main denies a Bash call when any literal token of any command segment, redirect targets and subshell/command-substitution boundaries included, resolves to an allow-default-branch marker, a guard hook script, or a settings.json or settings.local.json under a .claude directory
+- contract: with CLAUDE_LOOP_GUARD set, main denies a Bash call when any literal token of any command segment, redirect targets and subshell/command-substitution boundaries included, resolves to an allow-default-branch marker, a guard hook script, a settings.json or settings.local.json under a .claude directory, or the excubitor policy package imported by the hooks
 - verified-by: hooks/tests/test_guard_self_integrity.py::TestBashDenials::test_deny_set
 - last-grilled: 2026-07-07
 - anchor: none
@@ -105,7 +105,7 @@ claims as proven.
 ### TELOS-009 — the default-branch trust anchor cannot be repointed by the loop
 - state: DISCHARGED
 - intent: both guards read refs/remotes/origin/HEAD to decide which branch is protected; a loop that can repoint that ref re-aims its own judge, so the rewriting verbs must be denied while the read form the guards themselves depend on stays usable
-- discharged-by: hooks/guard-loop-vc.py::_classify
+- discharged-by: excubitor/core/policies/loop_vc.py::_classify
 - contract: with CLAUDE_LOOP_GUARD set in either mode, _classify returns a deny reason for git remote set-head and for the write and delete forms of git symbolic-ref, and returns none for the single-positional read form of git symbolic-ref
 - verified-by: hooks/tests/test_guard_loop_vc.py::TestGuardLoopVC::test_trust_anchor_rewrite_denied_read_allowed
 - last-grilled: 2026-07-07
@@ -122,9 +122,9 @@ claims as proven.
 
 ### TELOS-011 — the decision core is runtime-neutral, not Claude-Code-bound
 - state: DISCHARGED
-- intent: the repo claims portability to any runtime that can intercept tool calls; a claim of portability that isn't backed by a second adapter and an equivalence proof is exactly the unproven assertion this repo refuses to make, so the same decision core must yield the same deny/allow through a non-Claude-Code envelope
+- intent: the repo claims portability to any runtime that can intercept tool calls; a claim of portability that isn't backed by a second adapter and an equivalence proof is exactly the unproven assertion this repo refuses to make, so the same decision core must yield the same pass/deny through a non-Claude-Code envelope
 - discharged-by: runtime/spec_adapter.py::decide
-- contract: decide translates a host-agnostic envelope (command, cwd, loop_mode) through the guard-loop-vc decision core without reimplementing it, and reaches the same deny/allow decision the Claude Code PreToolUse hook reaches for the same command and arming mode
+- contract: decide translates a host-agnostic envelope through the shared policy core without reimplementing it, and reaches the same pass/deny decision the Claude Code PreToolUse hook reaches for the same command and arming mode
 - verified-by: runtime/tests/test_spec_adapter.py::TestRuntimeEquivalence::test_cc_and_generic_adapter_agree
 - last-grilled: 2026-07-07
 - anchor: none

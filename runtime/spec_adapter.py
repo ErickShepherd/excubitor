@@ -122,6 +122,7 @@ def _to_config(config: object) -> "dispatch.DispatchConfig":
             marker=surf.get("marker") if isinstance(surf.get("marker"), str) else "",
             settings_names=frozenset(_str_tuple(surf.get("settings_names"))),
             control_dir=surf.get("control_dir") if isinstance(surf.get("control_dir"), str) else "",
+            protected_roots=_str_tuple(surf.get("protected_roots")),
         )
     return dispatch.DispatchConfig(
         opt_out_relpath=_str_or_none(config.get("opt_out_relpath")),

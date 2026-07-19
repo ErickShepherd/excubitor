@@ -41,7 +41,10 @@ def run_git(selectors: list[str], *args: str, timeout: int = 5) -> tuple[bool, s
     """
     try:
         p = subprocess.run(["git", *selectors, *args], capture_output=True, text=True, timeout=timeout)
-    except (OSError, subprocess.SubprocessError):
+    except (OSError, TypeError, ValueError, subprocess.SubprocessError):
+        # subprocess rejects malformed argv (notably embedded NULs) with ValueError and non-string
+        # selectors with TypeError. The read boundary promises (False, "") on any invocation fault;
+        # leaking either exception would turn a malformed host event into a non-zero hook exit.
         return False, ""
     if p.returncode != 0:
         return False, ""

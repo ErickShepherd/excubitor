@@ -84,6 +84,18 @@ break ordinary globbing and lose more than it gains).
 > the *assignment* token's own basename is `allow-default-branch`, which the guard catches even though
 > `rm $F` alone would slip. Only hiding the **basename** in the variable evades it.
 
+> **The `excubitor/` policy-core containment inherits the same expansion residuals.** Since the C1
+> extraction, self-integrity also fences the policy-core **package** by realpath-prefix (editing a
+> classifier, or the adapter's `emit_deny`, or breaking the import disarms the guards — so the whole
+> `excubitor/` directory is a kill-switch). A LITERAL path into it — `rm excubitor/adapters/claude_code.py`,
+> a `Write` to `excubitor/core/policies/loop_vc.py` — is **DENIED**; but a glob
+> (`rm excubitor/adapters/claude_code.p*`), a `$VAR`-built path, or an interpreter one-liner evades it
+> exactly as the marker/basename rows above do. A pre-existing external **hard link** to a package file
+> also evades realpath containment because it presents an ordinary outside path to the same inode; that
+> path-layer residual is pinned in
+> `excubitor/tests/test_core_self_integrity.py::TestProtectedRootContainment::test_external_hardlink_is_an_accepted_residual`.
+> Same seatbelt-not-sandbox class, same accepted residual.
+
 ### A note on the quote-aware split (why the two "inside double quotes" rows exist)
 
 The segment splitter honors `(`, `)`, and backtick **only outside quotes**. That is a deliberate
@@ -225,6 +237,10 @@ resolve — so a hard link whose inode is a tracked file in a protected repo is 
 it means stat-ing inode/nlink and cross-referencing repositories on every edit, out of proportion for
 a stdlib seatbelt. Likewise a **bind mount** or other kernel-level redirection that `realpath` does
 not see is out of scope. Documented, not chased. See `guard-default-branch.py::_candidate_dirs`.
+
+The self-integrity policy's `protected_roots` containment has the same limit: a pre-existing outside
+hard-link alias can mutate the extracted package without naming or resolving into that package path.
+Closing it would likewise require inode-aware filesystem accounting outside this path-based seatbelt.
 
 ## ACCEPTED — the frozen-oracle gate binds authorship and bytes, not semantics
 

@@ -74,6 +74,11 @@ class TestRunGit(unittest.TestCase):
         self.assertFalse(ok)
         self.assertEqual(out, "")
 
+    def test_malformed_nul_selector_fails_not_ok_instead_of_raising(self):
+        ok, out = git_state.run_git(["-C", "bad\0cwd"], "status")
+        self.assertFalse(ok)
+        self.assertEqual(out, "")
+
 
 class TestCurrentBranch(unittest.TestCase):
     def test_on_named_branch(self):

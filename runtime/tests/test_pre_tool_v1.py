@@ -61,6 +61,20 @@ class TestDecisionSerialization(unittest.TestCase):
         self.assertEqual(d["policy"], "loop-vc")
         self.assertIsInstance(d["reason"], str)
 
+    def test_malformed_nul_cwd_never_crashes(self):
+        # subprocess rejects a NUL-bearing -C selector with ValueError. The shared Git boundary must
+        # convert that process fault into "unknown"; verifiable mode then fail-denies on ambiguity.
+        d = sa.decide(
+            {
+                "capability": "shell.execute",
+                "command": "git merge --no-ff topic",
+                "cwd": "bad\0cwd",
+                "loop_mode": "verifiable",
+            }
+        )
+        self.assertEqual(d["decision"], "deny")
+        self.assertEqual(d["policy"], "loop-vc")
+
 
 class TestAllFourPoliciesReachable(unittest.TestCase):
     """default-branch and one-unit need git state — prove their generic reachability with temp repos."""
@@ -108,6 +122,32 @@ class TestAllFourPoliciesReachable(unittest.TestCase):
             )
             self.assertEqual(d["decision"], "deny")
             self.assertEqual(d["policy"], "one-unit")
+
+    def test_self_integrity_protected_root_deny(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = os.path.realpath(os.path.join(td, "installed-excubitor"))
+            os.makedirs(os.path.join(root, "core", "policies"))
+            target = os.path.join(root, "core", "policies", "loop_vc.py")
+            d = sa.decide(
+                {
+                    "capability": "file.mutate",
+                    "targets": [target],
+                    "cwd": td,
+                    "loop_mode": "conservative",
+                },
+                {
+                    "protected_surface": {
+                        "guard_scripts": [],
+                        "marker": "allow-default-branch",
+                        "settings_names": [],
+                        "control_dir": ".runtime",
+                        # A trailing separator is accepted and normalized by the core.
+                        "protected_roots": [root + os.sep],
+                    }
+                },
+            )
+            self.assertEqual(d["decision"], "deny")
+            self.assertEqual(d["policy"], "self-integrity")
 
 
 if __name__ == "__main__":

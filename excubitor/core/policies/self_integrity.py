@@ -2,20 +2,30 @@
 
 A judge the model can rewrite is not a judge. This policy denies any file-tool target or Bash token
 that resolves to / names a KILL-SWITCH path — a path an unattended loop could use to disarm its own
-guards: a guard hook script, the per-repo disarm marker, or a settings file under the host's control
-directory (where hooks are registered). Matched by BASENAME, so the fence holds wherever the file lives
-(repo source, an installed symlink, or a copy).
+guards: a guard hook script, the per-repo disarm marker, a settings file under the host's control
+directory (where hooks are registered), OR a file inside a load-bearing policy-core directory
+(`protected_roots`). The first three are matched by BASENAME (so the fence holds wherever the file
+lives — repo source, an installed symlink, or a copy); the roots by REALPATH-PREFIX containment.
+
+Why the roots matter: the guards' decision logic was extracted into an importable package (`excubitor/`)
+that the thin hooks import at runtime, so editing anything there — neuter a classifier, make the
+adapter's `emit_deny` a no-op (disarms every guard at once), or just break the import (fail-open) —
+disarms the guards just as surely as editing a hook script. The extraction moved the disarm surface;
+`protected_roots` follows it. The adapter supplies the resolved package root.
 
 Extracted VERBATIM from the shipped `hooks/guard-self-integrity.py` (now a thin host adapter). The
 protected surface is HOST-SPECIFIC and adapter-supplied via `ProtectedSurface` — the guard script
-names, the disarm marker, the settings basenames, and the control-directory component are all passed
-in, so this neutral module hardcodes no host directory or arming variable. The arming check (the
-loop-guard env marker) and the full deny message (which names that marker) stay in the adapter.
+names, the disarm marker, the settings basenames, the control-directory component, and the protected
+roots are all passed in, so this neutral module hardcodes no host directory or arming variable. The
+arming check (the loop-guard env marker) and the full deny message (which names that marker) stay in
+the adapter.
 
 SCOPE / LIMITS (honest — a seatbelt for the default path, not a sandbox): matches a LITERAL path token,
 never expands the shell. Word expansions (glob / brace / `$VAR` / tilde-via-shell), a live command
 substitution inside double quotes, or a runtime-built path slip past — accepted residuals pinned in the
-shipped guard's tests and KNOWN-BYPASSES.md. Fail direction on ambiguity is DENY; a poisoned token
+shipped guard's tests and KNOWN-BYPASSES.md. Realpath containment also cannot identify an external hard
+link that shares a protected file's inode; that path-layer residual is pinned in the core tests. Fail
+direction on ambiguity is DENY; a poisoned token
 (embedded NUL) is a no-match that continues the scan, never a crash. `hooks/tests/
 test_guard_self_integrity.py` is the differential oracle — a decision change here is a regression.
 """
@@ -36,19 +46,24 @@ _REDIR_PREFIX = re.compile(r"^\d*[<>&]+")
 
 @dataclass(frozen=True)
 class ProtectedSurface:
-    """The host-supplied kill-switch surface, matched by basename. Adapter-supplied because these are
-    host-specific: the guard script names installed for the host, the per-repo disarm marker, the
-    settings basenames, and the control directory a settings file must sit under to register hooks.
-    Keeping them out of this module is what lets one policy fence any host's control surface."""
+    """The host-supplied kill-switch surface. Adapter-supplied because these are host-specific: the
+    guard script names installed for the host, the per-repo disarm marker, the settings basenames, the
+    control directory a settings file must sit under to register hooks, and — crucially —
+    `protected_roots`, the DIRECTORY ROOTS whose contents are load-bearing (the policy core the guards
+    import at runtime: editing / moving / deleting anything there disarms them). The first four are
+    matched by basename; `protected_roots` by normalized path-component containment. Keeping them out
+    of this module is what lets one policy fence any host's control surface."""
 
     guard_scripts: "frozenset[str]"
     marker: str
     settings_names: "frozenset[str]"
     control_dir: str
+    protected_roots: "tuple[str, ...]" = ()
 
 
 def _kill_switch(path: str, surface: ProtectedSurface) -> "str | None":
-    """Return what kill-switch `path` names, or None. Matches on the normalized basename."""
+    """Return what kill-switch `path` names, or None. Basename match for the scripts/marker/settings,
+    realpath-prefix containment for the protected roots."""
     norm = os.path.normpath(path)
     base = os.path.basename(norm)
     if base == surface.marker:
@@ -57,6 +72,27 @@ def _kill_switch(path: str, surface: ProtectedSurface) -> "str | None":
         return f"a guard hook script ({base})"
     if base in surface.settings_names and surface.control_dir in norm.split(os.sep):
         return f"the hook registration in {surface.control_dir}/{base}"
+    # Containment: a target inside a protected root — the policy core the guards import at runtime — is
+    # a kill-switch. The extraction moved the decision logic OUT of the basename-fenced hook scripts and
+    # INTO that core, so editing it (make a classifier return None, make the adapter's emit_deny a no-op,
+    # or just break the import → fail-open) disarms the guards. `target_kill_switch` calls this on the
+    # realpath too, so a symlink laundering a write into the core is caught; `commonpath` applies a
+    # path-component boundary (not a raw string prefix), tolerates a configured trailing separator,
+    # and handles a filesystem-root surface correctly.
+    for root in surface.protected_roots:
+        try:
+            norm_root = os.path.normpath(root)
+            if not os.path.isabs(norm_root) or os.path.commonpath((norm, norm_root)) != norm_root:
+                continue
+        except (OSError, TypeError, ValueError):
+            # A malformed or cross-drive host configuration is not a target match. Adapters are
+            # responsible for supplying absolute resolved roots; never let one bad root abort the
+            # scan of later valid roots.
+            continue
+        rel = base if norm == norm_root else os.path.join(
+            os.path.basename(norm_root) or norm_root, os.path.relpath(norm, norm_root)
+        )
+        return f"the protected policy core ({rel})"
     return None
 
 

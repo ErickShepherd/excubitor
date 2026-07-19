@@ -21,12 +21,15 @@ So: while `CLAUDE_LOOP_GUARD` is set (either mode), DENY
   * Edit/Write/NotebookEdit whose target resolves to a kill-switch path, and
   * Bash commands that *name* a kill-switch path in any segment.
 
-Kill-switch paths (matched by basename, so the fence holds wherever the file lives — repo source,
-`~/.claude` symlink, or a copy):
+Kill-switch paths — the first three matched by BASENAME (so the fence holds wherever the file lives —
+repo source, `~/.claude` symlink, or a copy), the last by REALPATH-PREFIX containment:
   * `allow-default-branch` — the per-repo disarm marker,
   * the guard scripts: `guard-default-branch.py`, `guard-loop-vc.py`, `guard-one-unit.py`,
     `guard-self-integrity.py`,
-  * `settings.json` / `settings.local.json` under a `.claude` directory (where hooks are registered).
+  * `settings.json` / `settings.local.json` under a `.claude` directory (where hooks are registered),
+  * anything inside the `excubitor/` policy-core package these hooks import at runtime — since the
+    decision logic was extracted there, editing a classifier / the adapter's `emit_deny` / any core
+    module (or breaking its import) disarms the guards, so the whole package directory is fenced.
 
 The Bash rule is deliberately blunt: a command segment that names a kill-switch path as a *literal
 token* denies, reads included. Distinguishing a read from a write in arbitrary shell is a losing
@@ -54,6 +57,9 @@ which would break ordinary globbing and lose more than it gains):
     case is the accepted cost of eliminating the false deny.
   * a rename of a parent directory, a `find ~/.claude -delete`, or an interpreter one-liner that
     builds the path at runtime (`python3 -c '...'`).
+  * a pre-existing **hard link** outside a protected root that shares a protected file's inode —
+    `realpath` has no link to resolve, so this remains the same path-layer residual documented for the
+    default-branch guard in KNOWN-BYPASSES.md.
 It protects the *default path* by which an agent would disarm the guards, not every path.
 
 Registered in settings.json for the Bash|Edit|Write|NotebookEdit tools.
@@ -68,9 +74,12 @@ from __future__ import annotations
 import os
 import sys
 
-# Add the repo root — resolved through any deploy symlink — to sys.path, then import FAIL-SOFT: a guard
-# copied out of its package fails-open (defers, per the process contract), never crash-on-load.
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
+# Resolve the hook's own dir and the repo root (through any deploy symlink), add the repo root to
+# sys.path, then import FAIL-SOFT: a guard copied out of its package fails-open (defers, per the process
+# contract), never crash-on-load.
+_HOOK_DIR = os.path.dirname(os.path.realpath(__file__))  # where the _denial_log.py sibling lives
+_REPO_ROOT = os.path.dirname(_HOOK_DIR)
+sys.path.insert(0, _REPO_ROOT)
 try:
     from excubitor.adapters import claude_code  # noqa: E402
     from excubitor.core.policies import self_integrity  # noqa: E402
@@ -78,15 +87,20 @@ except ImportError:  # copied out of its package → fail-open, never crash-on-l
     claude_code = None  # type: ignore[assignment]
     self_integrity = None  # type: ignore[assignment]
 
-_HOOK_DIR = os.path.dirname(os.path.realpath(__file__))  # where the _denial_log.py sibling lives
-# The protected surface is HOST-SPECIFIC (Claude Code's guard names + `.claude` control dir), so the
-# adapter owns it and passes it to the neutral core; the core hardcodes no host directory.
+# The protected surface is HOST-SPECIFIC, so the adapter owns it and passes it to the neutral core:
+# kill-switch BASENAMES (Claude Code's guard scripts, the disarm marker, the settings under `.claude`)
+# PLUS the load-bearing policy-core DIRECTORY. The extraction moved the guards' decision logic into the
+# `excubitor/` package, so editing anything there — neuter a classifier, make the adapter's emit_deny a
+# no-op (disarms all four at once), or just break the import (fail-open) — disarms the guards, and must
+# be fenced too. `_PACKAGE_ROOT` is realpath'd so a symlinked deploy and symlink-laundered targets both
+# resolve against it; the core matches it by realpath-prefix (not basename, so unrelated files are safe).
 _GUARD_SCRIPTS = frozenset(
     {"guard-default-branch.py", "guard-loop-vc.py", "guard-one-unit.py", "guard-self-integrity.py"}
 )
 _MARKER = "allow-default-branch"
 _SETTINGS = frozenset({"settings.json", "settings.local.json"})
 _CONTROL_DIR = ".claude"
+_PACKAGE_ROOT = os.path.realpath(os.path.join(_REPO_ROOT, "excubitor"))
 
 
 def main() -> None:
@@ -111,6 +125,7 @@ def main() -> None:
         marker=_MARKER,
         settings_names=_SETTINGS,
         control_dir=_CONTROL_DIR,
+        protected_roots=(_PACKAGE_ROOT,),
     )
 
     hit = None

@@ -95,8 +95,11 @@ correct deny; precedence only decides which reason surfaces when more than one w
 rare — the policies are largely disjoint by capability and arming):
 
 1. **self-integrity** — while a loop guard is armed, deny a file target or shell token that resolves to
-   / names a kill-switch path (a guard script, the disarm marker, or a settings file under the host's
-   control dir). The meta-guard: a judge the model can rewrite is not a judge.
+   / names a kill-switch path: a guard script, the disarm marker, a settings file under the host's
+   control dir, or a literal target **inside / resolving into the policy-core package the guards import
+   at runtime** (`protected_roots`, realpath-contained — so the extraction that moved the decision logic
+   into `excubitor/` did not become an ordinary-path disarm). Pre-existing hard-link aliases are an
+   accepted path-layer residual. The meta-guard: a judge the model can rewrite is not a judge.
 2. **loop-vc** — while armed, deny the irreversible version-control set (merge/push/branch-delete/reset/
    clean/worktree-remove/`gh pr merge`/direct ref-moves); `verifiable` mode relaxes only to a `--no-ff`
    merge into a confirmed non-default branch, fail-deny on ambiguity.
