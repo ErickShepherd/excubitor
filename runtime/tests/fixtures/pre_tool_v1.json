@@ -1,0 +1,77 @@
+{
+  "_comment": "Golden excubitor.pre_tool.v1 fixtures for the generic adapter (C1.9). Each case is a canonical event (+ optional shared surface config) run through spec_adapter.decide; the pinned decision/policy/reason is the DRIFT ORACLE (a decision change is a regression, never a fixture update). These are repo-independent (loop-vc shell classification + self-integrity basename matching); default-branch and one-unit reachability through the same protocol is proven with temp repos in test_pre_tool_v1.py.",
+  "surface": {
+    "guard_scripts": ["guard-default-branch.py", "guard-loop-vc.py", "guard-one-unit.py", "guard-self-integrity.py"],
+    "marker": "allow-default-branch",
+    "settings_names": ["settings.json", "settings.local.json"],
+    "control_dir": ".claude"
+  },
+  "cases": [
+    {
+      "name": "shell: deny a push (loop-vc, armed conservative)",
+      "event": {"schema": "excubitor.pre_tool.v1", "runtime": "generic", "native_tool": "Bash", "capability": "shell.execute", "command": "git push origin main", "cwd": "/x", "loop_mode": "conservative"},
+      "expect": {"deny": true, "policy": "loop-vc", "reason_contains": "push to a remote"}
+    },
+    {
+      "name": "shell: pass a safe command (armed)",
+      "event": {"capability": "shell.execute", "command": "echo hi", "loop_mode": "conservative"},
+      "expect": {"deny": false}
+    },
+    {
+      "name": "shell: pass a dangerous command when unarmed (loop_mode null)",
+      "event": {"capability": "shell.execute", "command": "git push", "loop_mode": null},
+      "expect": {"deny": false}
+    },
+    {
+      "name": "shell: verifiable mode denies a fast-forward merge",
+      "event": {"capability": "shell.execute", "command": "git merge topic", "loop_mode": "verifiable"},
+      "expect": {"deny": true, "policy": "loop-vc"}
+    },
+    {
+      "name": "one-file: deny editing a guard script (self-integrity)",
+      "use_surface": true,
+      "event": {"capability": "file.mutate", "native_tool": "Edit", "targets": ["/x/hooks/guard-loop-vc.py"], "cwd": "/x", "loop_mode": "conservative"},
+      "expect": {"deny": true, "policy": "self-integrity", "reason_contains": "a guard hook script (guard-loop-vc.py)"}
+    },
+    {
+      "name": "one-file: deny settings under the control dir (self-integrity)",
+      "use_surface": true,
+      "event": {"capability": "file.mutate", "targets": ["/home/u/.claude/settings.json"], "cwd": "/x", "loop_mode": "conservative"},
+      "expect": {"deny": true, "policy": "self-integrity", "reason_contains": "hook registration in .claude/settings.json"}
+    },
+    {
+      "name": "one-file: pass an innocent file (self-integrity armed)",
+      "use_surface": true,
+      "event": {"capability": "file.mutate", "targets": ["/x/README.md"], "cwd": "/x", "loop_mode": "conservative"},
+      "expect": {"deny": false}
+    },
+    {
+      "name": "notebook: pass an innocent notebook (self-integrity armed)",
+      "use_surface": true,
+      "event": {"capability": "notebook.mutate", "native_tool": "NotebookEdit", "targets": ["/x/analysis.ipynb"], "cwd": "/x", "loop_mode": "conservative"},
+      "expect": {"deny": false}
+    },
+    {
+      "name": "multi-target: deny when ANY target is a kill-switch (self-integrity)",
+      "use_surface": true,
+      "event": {"capability": "file.mutate", "targets": ["/x/app.py", "/x/hooks/guard-self-integrity.py"], "cwd": "/x", "loop_mode": "conservative"},
+      "expect": {"deny": true, "policy": "self-integrity"}
+    },
+    {
+      "name": "unrelated: read-only tool passes",
+      "use_surface": true,
+      "event": {"capability": "other", "native_tool": "Read", "cwd": "/x", "loop_mode": "conservative"},
+      "expect": {"deny": false}
+    },
+    {
+      "name": "malformed: a non-object event fails toward pass",
+      "event": "not-an-object",
+      "expect": {"deny": false}
+    },
+    {
+      "name": "malformed: an empty event passes (no opinion)",
+      "event": {},
+      "expect": {"deny": false}
+    }
+  ]
+}

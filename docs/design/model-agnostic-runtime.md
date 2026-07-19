@@ -1,7 +1,11 @@
 # Model-agnostic Excubitor — feasibility and migration design
 
-**Date:** 2026-07-15
-**Status:** feasible; proposed, not implemented
+**Date:** 2026-07-15 (Phase 1 implemented 2026-07-17)
+**Status:** Phase 1 (extract a neutral core with Claude parity) **IMPLEMENTED** as Campaign 1 —
+`excubitor/core/` (the four policies + dispatcher, model-blind), the named Claude Code adapter
+(`excubitor/adapters/claude_code.py` + the four thin hooks), and the generic `excubitor.pre_tool.v1`
+protocol (`runtime/spec_adapter.py`). Phases 2–4 (real non-Claude host packages, installers, and
+live-host probes) remain **proposed, not built** — no runtime other than Claude Code is *supported* yet.
 **Depends on:** Phase 0 in
 the review notes
 

@@ -332,20 +332,25 @@ class TestGuardsLogDenials(unittest.TestCase):
             self.assertEqual(p.stderr, "")
             self.assertLess(elapsed, 6.0)
 
-    def test_copied_guard_without_sibling_still_denies(self):
-        # A guard COPIED out of the repo (no _denial_log.py sibling anywhere in its resolved
-        # dir) must deny exactly as before — telemetry silently absent, never a crash.
+    def test_copied_guard_without_package_fails_open(self):
+        # A guard COPIED out of its package (the excubitor core unreachable from the copy's resolved
+        # dir) cannot import its classifier, so per the never-wedge fail-open contract it DEFERS —
+        # emits no decision, exits 0, never crashes on the absent import. No real install hits this:
+        # the shipped guards are ~/.claude/hooks symlinks that resolve back to the repo package (see
+        # test_symlinked_guard_finds_repo_sibling). Telemetry degrading when the package is PRESENT
+        # but a log write faults is covered by the deny-path fault tests above.
         with tempfile.TemporaryDirectory() as td:
             copied = Path(td, "guard-loop-vc.py")
             copied.write_text((HOOKS / "guard-loop-vc.py").read_text())
             log = os.path.join(td, "denials.jsonl")
             env = _base_env(log)
+            env.pop("PYTHONPATH", None)  # ensure the package is genuinely unreachable from the copy
             env["CLAUDE_LOOP_GUARD"] = "1"
             p = _run(copied, {"tool_name": "Bash", "tool_input": {"command": "git push"}}, env)
-            self.assertEqual(p.returncode, 0)
-            self.assertIsNotNone(_denied(p.stdout))
-            self.assertEqual(p.stderr, "")
-            self.assertFalse(Path(log).exists())
+            self.assertEqual(p.returncode, 0)     # never exit non-zero
+            self.assertIsNone(_denied(p.stdout))  # fail-open: no deny decision (classifier absent)
+            self.assertEqual(p.stderr, "")        # no crash / traceback on the absent import
+            self.assertFalse(Path(log).exists())  # nothing denied → nothing logged
 
     def test_symlinked_guard_finds_repo_sibling(self):
         # The install layout: ~/.claude/hooks/<guard> is a symlink into the repo. The resolved

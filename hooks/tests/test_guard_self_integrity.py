@@ -5,9 +5,9 @@ Drives the hook as a subprocess with a crafted PreToolUse stdin payload, asserti
 contract: deny = exit 0 + JSON permissionDecision=deny on stdout; defer = exit 0 with no decision.
 Pins the security-load-bearing properties: it is INACTIVE unless CLAUDE_LOOP_GUARD is set (either
 mode); while armed it denies Edit/Write/NotebookEdit targeting any guard kill-switch (the
-allow-default-branch marker, the guard hook scripts, a .claude settings.json) including through a
-symlink, and denies Bash commands naming one; it does NOT block ordinary work (the seatbelt stays
-wearable); and it fails OPEN on unparseable input.
+allow-default-branch marker, the guard hook scripts, a .claude settings.json, or the extracted
+excubitor policy package) including through a symlink, and denies Bash commands naming one; it does
+NOT block ordinary work (the seatbelt stays wearable); and it fails OPEN on unparseable input.
 
 Stdlib unittest only. Run:
   python3 hooks/tests/test_guard_self_integrity.py
@@ -23,6 +23,7 @@ import unittest
 from pathlib import Path
 
 HOOK = Path(__file__).resolve().parents[1] / "guard-self-integrity.py"
+PACKAGE_ROOT = HOOK.parents[1] / "excubitor"
 
 
 def _run(payload_or_raw, *, guard: "bool | str" = True) -> "tuple[int, str]":
@@ -63,6 +64,7 @@ class TestFileToolDenials(unittest.TestCase):
         "/home/u/.claude/settings.json",                   # hook registration (global)
         "/repo/.claude/settings.json",                     # hook registration (project)
         "/repo/.claude/settings.local.json",
+        str(PACKAGE_ROOT / "core" / "policies" / "loop_vc.py"),  # extracted decision core
     ]
 
     ALLOW_TARGETS = [
@@ -120,6 +122,7 @@ class TestBashDenials(unittest.TestCase):
         "python3 -c 'open(\"x\")' /r/.claude/settings.local.json",
         "tee /repo/.claude/allow-default-branch < /dev/null",
         "chmod -x /any/hooks/guard-self-integrity.py",
+        f"rm {PACKAGE_ROOT / 'adapters' / 'claude_code.py'}",     # shared deny renderer
     ]
 
     # Ordinary loop work must stay unblocked — the seatbelt is wearable.

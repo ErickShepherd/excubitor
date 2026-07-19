@@ -66,7 +66,8 @@ know of is catalogued in [`KNOWN-BYPASSES.md`](KNOWN-BYPASSES.md).
   can produce *backed* DISCHARGED claims. The audit's evidence tier catches *unbacked* overclaims; it
   cannot judge a backed-but-weak witness (an always-pass test). See the residual below.
 - **The guards' own kill-switches** — the `.claude/allow-default-branch` marker, the hook scripts, the
-  `settings.json` hooks block, and the `origin/HEAD` ref the default-branch detection trusts.
+  `settings.json` hooks block, the `origin/HEAD` ref the default-branch detection trusts, and — since
+  the extraction — the `excubitor/` policy-core package the hooks import at runtime.
 - **The host runtime** — the layer excubitor's hooks run *in*. This is the surface excubitor **cannot
   reach past**, and it matters (next section).
 
@@ -99,13 +100,28 @@ it for Tier 3 must add a real boundary (container/VM isolation, capability restr
 
 ## Controls — matched to the tiers, not gold-plated
 
+The four guards' decision logic now lives in a shared **model-blind core** (`excubitor/core/`); the
+shipped `hooks/guard-*.py` are thin Claude Code adapters over it, and a generic adapter
+(`runtime/spec_adapter.py`) reaches the same core. The extraction is **behavior-preserving on the
+classification surface** — the differential suites are the oracle — so the tiers and the classification
+controls/residuals below are unchanged. It **did**, however, move one part of the attack surface: the
+decision logic now lives in the importable `excubitor/` package, which is therefore a new disarm path
+(neuter a classifier, no-op the adapter's `emit_deny`, or merely break the import → fail-open). The
+self-integrity control was **extended to fence it** — `protected_roots` denies any armed-loop write
+whose realpath is inside the resolved package — so the disarm surface stays covered; but the surface
+*changed*, and this document says so rather than claiming it didn't. What the core also *adds* is
+reach, not enforcement on a new host: the policies are now reachable from a neutral
+`excubitor.pre_tool.v1` envelope, but the only runtime with real shipped enforcement is still the
+Claude Code hooks (other hosts are designed, not built — see [`SPEC.md`](SPEC.md)). "Model-blind"
+widens the *contract*, not the *proven substrate*.
+
 | Control | What it is | Tier it addresses | Honest limit |
 |---|---|---|---|
 | `guard-default-branch.py` | deny the direct file-edit tools (Edit/Write/NotebookEdit) on `main`/`master` — branch first | 1 (mostly), 2 | registration boundary: Bash mutations bypass (R-06, accepted — see KNOWN-BYPASSES); disarmable marker → now fenced by self-integrity |
 | `guard-loop-vc.py` (`=1`) | deny the irreversible VC set while looping | 1, 2 | literal-token parse; shell-expansion evades (Tier 3) |
 | `guard-loop-vc.py` (`=yolo`) | permit only a revertable `--no-ff` merge into a non-default branch, fail-deny on ambiguity | 1, 2 | presumes a hook-clean working copy |
 | `guard-one-unit.py` | cap a headless worker at one unit/session (fresh-context re-read) | 1, 2 | opt-in; a determined loop can be re-armed |
-| `guard-self-integrity.py` | while armed, deny writes to the guards' own kill-switches | 2, and Tier-3 *default paths* | literal-token parse; same expansion residual |
+| `guard-self-integrity.py` | while armed, deny writes to the guards' own kill-switches — the hook scripts, the disarm marker, the `.claude` settings, **and the `excubitor/` policy-core package** (realpath-contained, so ordinary-path edits to the extracted classifiers/adapter are denied) | 2, and Tier-3 *default paths* | literal-token parse; glob/`$VAR` paths and pre-existing outside hard-link aliases still evade |
 | `audit-telos` evidence tier | demote an unbacked DISCHARGED to SUSPECT; trust witness exit codes over the LLM | 1, 2 | cannot judge a *backed-but-weak* witness |
 | `run_frozen_oracle.py` (+ `check_oracle_frozen.py` / `check_suite_frozen.py` diagnostics) | bind the witness verdict to baseline-authored, trusted state: the command must appear in the anchor's base-tree blob as a whole authored line / `verify:` suffix, never a substring (`--anchor`, base pinned to the **remote-tracking** default `refs/remotes/origin/<name>` — the highest-bar in-repo anchor; a local-only default is trivially loop-movable and fail-denies), the executable must be tracked-in-repo or non-user-writable (the untracked `.venv/bin/python` class refuses; a resolved symlink target outside the repo is writability-checked too), conftest/runner-config/module-shadow companions join the frozen surface, then precheck vs base, snapshot, shell-less sanitized-env run, recheck | 2 (forged done-signal) | binds authorship and bytes, not semantics (a baseline-authored vacuous/delegating command is the DoD author's risk); proves start==end state, not *adequate*; a mid-run edit restored before the recheck remains; the base OID is defense-in-depth not absolute — a `git fetch` refspec or direct `.git/refs` write can move even the remote-tracking ref, so true baseline immutability is the driver's (loop isolation / out-of-band `--base`); system site-packages content and direct-script sys.path shadowing are outside the surface |
 

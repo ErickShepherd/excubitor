@@ -21,6 +21,14 @@ Each bypass is classed:
 
 ## How the guards parse (why these exist)
 
+Since the C1 model-blind extraction, this parsing logic lives in the **shared core** —
+`excubitor/core/policies/loop_vc.py` and `excubitor/core/policies/self_integrity.py` — and the shipped
+`hooks/guard-loop-vc.py` / `guard-self-integrity.py` are thin Claude Code adapters over it (the generic
+`runtime/spec_adapter.py` reaches the same core). So **every residual below is a property of the core
+and travels with every adapter**, not just the Claude Code hook — the seatbelt-not-sandbox nature of the
+parse is host-independent. The guard filenames below name the shipped entry points; the behavior they
+describe is the core's.
+
 `guard-loop-vc.py` and `guard-self-integrity.py` both read the `Bash` tool's command **string**. They
 split it into segments on shell separators (`;`, `|`, `&`, newline) **and** on subshell /
 command-substitution boundaries (`(`, `)`, backtick) — honoring those boundaries **only outside
@@ -75,6 +83,18 @@ break ordinary globbing and lose more than it gains).
 > **Near-miss, for the record:** `F=.claude/allow-default-branch; rm $F` is **DENIED**, not allowed —
 > the *assignment* token's own basename is `allow-default-branch`, which the guard catches even though
 > `rm $F` alone would slip. Only hiding the **basename** in the variable evades it.
+
+> **The `excubitor/` policy-core containment inherits the same expansion residuals.** Since the C1
+> extraction, self-integrity also fences the policy-core **package** by realpath-prefix (editing a
+> classifier, or the adapter's `emit_deny`, or breaking the import disarms the guards — so the whole
+> `excubitor/` directory is a kill-switch). A LITERAL path into it — `rm excubitor/adapters/claude_code.py`,
+> a `Write` to `excubitor/core/policies/loop_vc.py` — is **DENIED**; but a glob
+> (`rm excubitor/adapters/claude_code.p*`), a `$VAR`-built path, or an interpreter one-liner evades it
+> exactly as the marker/basename rows above do. A pre-existing external **hard link** to a package file
+> also evades realpath containment because it presents an ordinary outside path to the same inode; that
+> path-layer residual is pinned in
+> `excubitor/tests/test_core_self_integrity.py::TestProtectedRootContainment::test_external_hardlink_is_an_accepted_residual`.
+> Same seatbelt-not-sandbox class, same accepted residual.
 
 ### A note on the quote-aware split (why the two "inside double quotes" rows exist)
 
@@ -217,6 +237,10 @@ resolve — so a hard link whose inode is a tracked file in a protected repo is 
 it means stat-ing inode/nlink and cross-referencing repositories on every edit, out of proportion for
 a stdlib seatbelt. Likewise a **bind mount** or other kernel-level redirection that `realpath` does
 not see is out of scope. Documented, not chased. See `guard-default-branch.py::_candidate_dirs`.
+
+The self-integrity policy's `protected_roots` containment has the same limit: a pre-existing outside
+hard-link alias can mutate the extracted package without naming or resolving into that package path.
+Closing it would likewise require inode-aware filesystem accounting outside this path-based seatbelt.
 
 ## ACCEPTED — the frozen-oracle gate binds authorship and bytes, not semantics
 

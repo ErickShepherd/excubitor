@@ -1,0 +1,107 @@
+{
+  "_comment": "Golden Claude Code PreToolUse fixtures for the four guard entry points (C1.8). Each case is a native PreToolUse payload + env + optional temp-repo setup, driven through the real hook subprocess; the pinned decision (deny/allow, and a deny-reason substring) is the DRIFT ORACLE. A decision change here is a regression, never a fixture update. {REPO} is substituted with a per-case temp repo path.",
+  "cases": [
+    {
+      "name": "loop-vc: push denied (armed conservative)",
+      "hook": "guard-loop-vc.py",
+      "env": {"CLAUDE_LOOP_GUARD": "1"},
+      "payload": {"tool_name": "Bash", "tool_input": {"command": "git push origin main"}},
+      "deny": true,
+      "reason_contains": "may not push to a remote"
+    },
+    {
+      "name": "loop-vc: echo allowed (armed)",
+      "hook": "guard-loop-vc.py",
+      "env": {"CLAUDE_LOOP_GUARD": "1"},
+      "payload": {"tool_name": "Bash", "tool_input": {"command": "echo hi"}},
+      "deny": false
+    },
+    {
+      "name": "loop-vc: push allowed when unarmed (inert)",
+      "hook": "guard-loop-vc.py",
+      "env": {},
+      "payload": {"tool_name": "Bash", "tool_input": {"command": "git push origin main"}},
+      "deny": false
+    },
+    {
+      "name": "loop-vc: yolo allows --no-ff merge on a feature branch",
+      "hook": "guard-loop-vc.py",
+      "env": {"CLAUDE_LOOP_GUARD": "yolo"},
+      "repo": {"branch": "main", "switch_to": "feat/x"},
+      "payload": {"tool_name": "Bash", "tool_input": {"command": "git merge --no-ff topic"}, "cwd": "{REPO}"},
+      "deny": false
+    },
+    {
+      "name": "default-branch: edit on main denied",
+      "hook": "guard-default-branch.py",
+      "env": {},
+      "repo": {"branch": "main"},
+      "payload": {"tool_name": "Edit", "tool_input": {"file_path": "{REPO}/f.py"}, "cwd": "{REPO}"},
+      "deny": true,
+      "reason_contains": "On the default branch 'main'"
+    },
+    {
+      "name": "default-branch: edit on feature branch allowed",
+      "hook": "guard-default-branch.py",
+      "env": {},
+      "repo": {"branch": "main", "switch_to": "feat/x"},
+      "payload": {"tool_name": "Edit", "tool_input": {"file_path": "{REPO}/f.py"}, "cwd": "{REPO}"},
+      "deny": false
+    },
+    {
+      "name": "one-unit: denied once the unit commit lands (baseline 0, now 1)",
+      "hook": "guard-one-unit.py",
+      "env": {"ONE_UNIT_CAP_SCOPE": "alpha", "ONE_UNIT_CAP_BASELINE": "0", "ONE_UNIT_CAP_REPO": "{REPO}"},
+      "repo": {"branch": "main", "commits": ["feat(alpha): the one unit"]},
+      "payload": {"tool_name": "Bash", "tool_input": {"command": "echo x"}, "cwd": "{REPO}"},
+      "deny": true,
+      "reason_contains": "one-unit cap"
+    },
+    {
+      "name": "one-unit: allowed at baseline (count == baseline)",
+      "hook": "guard-one-unit.py",
+      "env": {"ONE_UNIT_CAP_SCOPE": "alpha", "ONE_UNIT_CAP_BASELINE": "1", "ONE_UNIT_CAP_REPO": "{REPO}"},
+      "repo": {"branch": "main", "commits": ["feat(alpha): pre-existing"]},
+      "payload": {"tool_name": "Bash", "tool_input": {"command": "echo x"}, "cwd": "{REPO}"},
+      "deny": false
+    },
+    {
+      "name": "one-unit: inert when unarmed",
+      "hook": "guard-one-unit.py",
+      "env": {},
+      "repo": {"branch": "main", "commits": ["feat(alpha): x"]},
+      "payload": {"tool_name": "Bash", "tool_input": {"command": "echo x"}, "cwd": "{REPO}"},
+      "deny": false
+    },
+    {
+      "name": "self-integrity: edit of a guard script denied (armed)",
+      "hook": "guard-self-integrity.py",
+      "env": {"CLAUDE_LOOP_GUARD": "1"},
+      "payload": {"tool_name": "Edit", "tool_input": {"file_path": "/x/hooks/guard-loop-vc.py"}, "cwd": "/x"},
+      "deny": true,
+      "reason_contains": "a guard hook script (guard-loop-vc.py)"
+    },
+    {
+      "name": "self-integrity: bash naming a kill-switch denied (armed)",
+      "hook": "guard-self-integrity.py",
+      "env": {"CLAUDE_LOOP_GUARD": "1"},
+      "payload": {"tool_name": "Bash", "tool_input": {"command": "rm hooks/guard-self-integrity.py"}, "cwd": "/x"},
+      "deny": true,
+      "reason_contains": "a guard hook script"
+    },
+    {
+      "name": "self-integrity: innocent edit allowed (armed)",
+      "hook": "guard-self-integrity.py",
+      "env": {"CLAUDE_LOOP_GUARD": "1"},
+      "payload": {"tool_name": "Edit", "tool_input": {"file_path": "/x/README.md"}, "cwd": "/x"},
+      "deny": false
+    },
+    {
+      "name": "self-integrity: inert when unarmed (guard edit allowed)",
+      "hook": "guard-self-integrity.py",
+      "env": {},
+      "payload": {"tool_name": "Edit", "tool_input": {"file_path": "/x/hooks/guard-loop-vc.py"}, "cwd": "/x"},
+      "deny": false
+    }
+  ]
+}

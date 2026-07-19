@@ -1,196 +1,61 @@
 #!/usr/bin/env python3
-"""PreToolUse guard: block the direct file-edit tools while on a repo's default branch.
+"""PreToolUse guard (Claude Code adapter): block the direct file-edit tools while on a repo's default.
 
-Enforces a branch-first workflow (see this repo's README, "The workflow these
-fences assume"): no editing on main/master — branch first. Registered in
-settings.json for the Edit|Write|NotebookEdit tools ONLY — a Bash mutation
-(redirection, `sed -i`, …) is out of this guard's surface (R-06 accepted
-residual, named in KNOWN-BYPASSES.md); the honest claim is "the direct
-file-edit tools", not "all file mutations".
+Thin Claude Code entry point over the model-blind default-branch policy in
+`excubitor.core.policies.default_branch`. The shared PreToolUse I/O glue (stdin parse, the
+`hookSpecificOutput` render, best-effort telemetry) lives in `excubitor.adapters.claude_code`; this
+file carries only the host-specific concerns — the blanket `CLAUDE_ALLOW_DEFAULT_BRANCH` off-switch and
+the per-repo `.claude/allow-default-branch` opt-out marker — and hands (cwd, target, marker-relpath) to
+the core. The symlink-laundering target resolution and the protected-default-branch decision live in
+the core.
 
-Defers to the normal permission flow (no decision) when:
-  - the target file isn't inside a git repo,
-  - the current branch isn't the repo's default branch,
-  - a `.claude/allow-default-branch` marker file exists at the repo root, or
-  - CLAUDE_ALLOW_DEFAULT_BRANCH is set in the environment.
-Otherwise it denies the call with a message telling Claude to branch first.
+Enforces a branch-first workflow (README, "The workflow these fences assume"): no editing on
+main/master — branch first. Registered in settings.json for the Edit|Write|NotebookEdit tools ONLY — a
+Bash mutation is out of this guard's surface (R-06 accepted residual, KNOWN-BYPASSES.md); the honest
+claim is "the direct file-edit tools", not "all file mutations".
 
-Contract (docs/en/hooks): deny = exit 0 + JSON on stdout with
-hookSpecificOutput.permissionDecision="deny"; emitting no decision defers. We never
-exit non-zero — a guard bug must not wedge the editor, only fail open.
-
-Every deny is also appended, strictly best-effort AFTER the decision is on stdout, to a local
-JSONL telemetry log (see hooks/_denial_log.py) — a telemetry fault never changes the decision.
+Defers when: the target isn't in a git repo; the branch isn't the default; a `.claude/allow-default-
+branch` marker exists; `CLAUDE_ALLOW_DEFAULT_BRANCH` is set; or — a guard copied out of its package —
+the core is unreachable (fail-open, never crash). Contract (docs/en/hooks): deny = exit 0 + JSON;
+emitting no decision defers; we never exit non-zero.
 """
 from __future__ import annotations
 
-import json
 import os
-import subprocess
 import sys
 
+# Add the repo root — resolved through any deploy symlink — to sys.path, then import FAIL-SOFT: a guard
+# copied out of its package can reach neither the shared adapter glue nor the policy, so it fails-open
+# (defers) exactly as it already does on a git fault.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
+try:
+    from excubitor.adapters import claude_code  # noqa: E402
+    from excubitor.core.policies import default_branch  # noqa: E402
+except ImportError:  # copied out of its package → fail-open, never crash-on-load
+    claude_code = None  # type: ignore[assignment]
+    default_branch = None  # type: ignore[assignment]
 
-def _git(args: list[str], cwd: str) -> subprocess.CompletedProcess[str]:
-    try:
-        return subprocess.run(
-            ["git", "-C", cwd, *args], capture_output=True, text=True, timeout=5
-        )
-    except (OSError, subprocess.SubprocessError) as e:
-        # git missing / not executable / timed out / killed → behave like a non-zero result so callers
-        # fail OPEN (the documented contract: never exit non-zero, never wedge the editor on a guard fault).
-        return subprocess.CompletedProcess(args, returncode=1, stdout="", stderr=str(e))
-
-
-def _allow() -> None:
-    """Emit no decision → defer to the normal permission flow. Always exit 0."""
-    sys.exit(0)
-
-
-def _record_denial(reason: str, payload: dict) -> None:
-    """Best-effort denial telemetry via the sibling hooks/_denial_log.py (loaded by resolved
-    path, the runtime/spec_adapter.py pattern, so the ~/.claude symlink layout finds it). ANY
-    fault — module missing (a copied guard with no sibling), unwritable log, anything — is
-    swallowed: the deny already flushed to stdout must never be affected."""
-    try:
-        import importlib.util
-
-        mod_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "_denial_log.py")
-        spec = importlib.util.spec_from_file_location("_denial_log", mod_path)
-        if spec is None or spec.loader is None:
-            return
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-        mod.record("guard-default-branch", reason, payload)
-    except Exception:
-        pass
-
-
-def _deny(reason: str, payload: dict) -> None:
-    json.dump(
-        {
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "deny",
-                "permissionDecisionReason": reason,
-            }
-        },
-        sys.stdout,
-    )
-    # Decision first, telemetry second: flush the deny to the harness BEFORE any telemetry I/O.
-    # Flushing alone is necessary but not sufficient — a hung write would still hold this process
-    # past the hook timeout (which fails OPEN and lets the fenced call run) — so record() also
-    # time-bounds the filesystem I/O in an abandonable daemon thread (see hooks/_denial_log.py).
-    sys.stdout.flush()
-    _record_denial(reason, payload)
-    sys.exit(0)
-
-
-def _nearest_existing_dir(path: str, fallback: str) -> str:
-    """Walk up from `path` to the first directory that exists on disk.
-
-    Handles Write creating a brand-new file (and even new parent dirs) inside a repo:
-    the file itself doesn't exist yet, so resolve to its nearest existing ancestor.
-    """
-    candidate = path if os.path.isdir(path) else os.path.dirname(path)
-    while candidate and not os.path.isdir(candidate):
-        parent = os.path.dirname(candidate)
-        if parent == candidate:
-            break
-        candidate = parent
-    return candidate if os.path.isdir(candidate) else fallback
-
-
-def _candidate_dirs(cwd: str, logical_target: str) -> "list[str] | None":
-    """The existing directories to test for protected-repo membership.
-
-    Both the LOGICAL target's container AND the realpath-resolved container, because a symlink can
-    launder a write across a repo boundary: a symlink in a feature-branch repo can point at a
-    tracked file in a *different* repo checked out on its default branch. Inspecting only the
-    logical container (as the original code did) misses that — the resolved path lands in the
-    protected repo. `realpath` resolves symlinks in every existing path component even when the
-    leaf does not exist yet (a Write creating a new file through a symlinked directory).
-
-    Returns a de-duplicated, order-preserving list, or None on malformed input (embedded NUL, etc.)
-    so the caller fails OPEN — never wedge the editor on a crafted-but-broken path.
-    """
-    try:
-        abs_target = os.path.abspath(os.path.join(cwd, logical_target))
-        dirs = [_nearest_existing_dir(abs_target, cwd)]
-        real_target = os.path.realpath(abs_target)
-        if real_target != abs_target:  # a symlink (or /./ , .. , etc.) actually moved the path
-            dirs.append(_nearest_existing_dir(real_target, cwd))
-    except (TypeError, ValueError, OSError):
-        # TypeError is belt-and-suspenders for a non-string that slips past main()'s field-type
-        # checks (P0.16) — os.path.join raising must fail OPEN, never exit 1 against the contract.
-        return None
-    seen: set[str] = set()
-    out: list[str] = []
-    for d in dirs:
-        if d not in seen:
-            seen.add(d)
-            out.append(d)
-    return out
-
-
-def _protected_repo_deny(target_dir: str, payload: dict) -> "str | None":
-    """If `target_dir` is inside a git repo checked out on its (un-opted-out) default branch,
-    return the deny reason; else None (not a repo / opted out / on a feature branch)."""
-    top = _git(["rev-parse", "--show-toplevel"], target_dir)
-    if top.returncode != 0:
-        return None  # not a git repo → not our concern
-    repo = top.stdout.strip()
-
-    # Per-repo opt-out: bless main-only repos (or a one-off) with a marker file. isfile (not exists) so a
-    # stray directory / dangling symlink of that name can't silently disable the guard.
-    if os.path.isfile(os.path.join(repo, ".claude", "allow-default-branch")):
-        return None
-
-    branch = _git(["rev-parse", "--abbrev-ref", "HEAD"], repo).stdout.strip()
-
-    # Resolve the protected default branch: the remote's HEAD if there is one,
-    # else fall back to the conventional names (covers local-only repos).
-    origin_head = _git(
-        ["symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"], repo
-    ).stdout.strip()
-    # Always protect the conventional names; a resolved origin/HEAD ADDS to the set, never replaces it
-    # (replacing it would silently un-protect main/master whenever origin/HEAD points elsewhere).
-    protected = {"main", "master"}
-    if origin_head.startswith("refs/remotes/origin/"):
-        # Strip the fixed ref prefix, NOT rsplit("/") — a branch name can itself contain slashes
-        # (release/2.0, team/main), and rsplit would yield the wrong tail ("2.0") and silently
-        # un-protect the real default branch. removeprefix keeps the full name.
-        protected.add(origin_head.removeprefix("refs/remotes/origin/"))
-
-    if branch not in protected:
-        return None
-    return (
-        f"On the default branch '{branch}' in {repo} — branch before editing. "
-        f"`git switch -c <type>/<slug>` carries your current changes onto a new "
-        f"branch (branching-strategy: feature/, fix/, docs/, chore/, refactor/, …). "
-        f"To intentionally allow the default branch in this repo, create the marker: "
-        f"touch {os.path.join(repo, '.claude', 'allow-default-branch')}"
-    )
+_HOOK_DIR = os.path.dirname(os.path.realpath(__file__))  # where the _denial_log.py sibling lives
+# The per-repo opt-out marker is host-specific (Claude Code's control dir), so the adapter owns it and
+# passes it to the neutral core; the core hardcodes no host directory.
+_OPT_OUT_MARKER = os.path.join(".claude", "allow-default-branch")
 
 
 def main() -> None:
-    try:
-        payload = json.load(sys.stdin)
-    except ValueError:  # JSONDecodeError is a ValueError subclass — one catch suffices
-        _allow()  # unparseable input → fail open, never wedge the tool
-    if not isinstance(payload, dict):
-        _allow()  # valid-JSON-but-not-an-object → fail open; payload.get(...) must never raise AttributeError
+    if claude_code is None or default_branch is None:
+        sys.exit(0)  # copied out of its package: no adapter/policy reachable → fail OPEN (never wedge)
+    payload = claude_code.read_payload()
+    if payload is None:
+        claude_code.emit_pass()  # unparseable / non-object input → fail open
 
     # Blanket off-switch (set via settings.json "env" to disable globally).
     if os.environ.get("CLAUDE_ALLOW_DEFAULT_BRANCH"):
-        _allow()
+        claude_code.emit_pass()
 
     ti = payload.get("tool_input")
     tool_input = ti if isinstance(ti, dict) else {}
-    # P0.16: the fields below come off the wire as strings, but the never-exit-non-zero contract is
-    # unconditional — a truthy NON-string cwd/file_path/notebook_path (a crafted or buggy payload)
-    # used to reach os.path.join, TypeError, and exit 1 against the documented fail-open contract.
-    # A malformed field fails OPEN like every other malformed input (a non-string target also means
-    # the edit tool itself will reject the call — there is no write here to protect against).
+    # P0.16: a truthy NON-string cwd/file_path/notebook_path (a crafted or buggy payload) must fail OPEN,
+    # not TypeError inside os.path.join against the never-exit-non-zero contract.
     cwd = payload.get("cwd")
     if not isinstance(cwd, str) or not cwd:
         cwd = os.getcwd()
@@ -199,26 +64,15 @@ def main() -> None:
     if (file_path is not None and not isinstance(file_path, str)) or (
         notebook_path is not None and not isinstance(notebook_path, str)
     ):
-        _allow()  # malformed target field → fail open, never wedge the editor
+        claude_code.emit_pass()  # malformed target field → fail open, never wedge the editor
     # Edit/Write use file_path; NotebookEdit uses notebook_path. Resolve a relative target against the
     # payload cwd, else repo detection lands on the wrong directory (e.g. a sibling repo).
     logical_target = file_path or notebook_path or cwd
 
-    candidates = _candidate_dirs(cwd, logical_target)
-    if candidates is None:
-        _allow()  # malformed target → fail open
-
-    # Deny if ANY candidate (logical container OR symlink-resolved container) is a protected repo.
-    # A safe logical container must NOT override an unsafe physical target — so we never short-circuit
-    # to allow on the first non-protected candidate; only after every candidate has cleared.
-    # NOTE (residual): a hard link is indistinguishable from an ordinary file at the path layer (no
-    # link to resolve), so a hard link into a protected repo is NOT caught here — documented in
-    # KNOWN-BYPASSES.md, not chased (detecting it means stat-ing inode/nlink across repos).
-    for target_dir in candidates:
-        reason = _protected_repo_deny(target_dir, payload)
-        if reason is not None:
-            _deny(reason, payload)
-    _allow()
+    reason = default_branch.deny_reason(cwd, logical_target, _OPT_OUT_MARKER)
+    if reason is not None:
+        claude_code.emit_deny(reason, "guard-default-branch", payload, _HOOK_DIR)
+    claude_code.emit_pass()
 
 
 if __name__ == "__main__":
