@@ -12,6 +12,8 @@ from __future__ import annotations
 import argparse
 
 from excubitor.commands import install as _install
+from excubitor.commands import print_config as _print_config
+from excubitor.commands import status as _status
 from excubitor.commands import uninstall as _uninstall
 
 __all__ = ["register_all"]
@@ -21,3 +23,5 @@ def register_all(subparsers: "argparse._SubParsersAction") -> None:
     """Register every implemented subcommand onto ``subparsers``."""
     _install.register(subparsers)
     _uninstall.register(subparsers)
+    _status.register(subparsers)
+    _print_config.register(subparsers)
