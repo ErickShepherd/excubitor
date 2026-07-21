@@ -42,7 +42,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="print the installed Excubitor version and exit",
     )
     parser.set_defaults(_handler=None)
-    parser.add_subparsers(dest="command", metavar="<command>")
+    subparsers = parser.add_subparsers(dest="command", metavar="<command>")
+
+    # Register implemented subcommands. Imported lazily so `excubitor --version` stays cheap and a
+    # single command's import error can never break the whole CLI.
+    from excubitor import commands
+
+    commands.register_all(subparsers)
     return parser
 
 
