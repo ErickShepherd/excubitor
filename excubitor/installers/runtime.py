@@ -174,10 +174,16 @@ class RuntimeProfile:
         return out
 
     def registrations(self, target: RuntimeTarget) -> "list[Registration]":
-        """The exact-tuple pre-tool registrations for ``target`` (commands use the absolute hooks dir)."""
+        """The exact-tuple pre-tool registrations for ``target`` (commands use the absolute hooks dir).
+
+        The script path is double-quoted so a hooks directory containing spaces or non-ASCII characters
+        does not break the command when the host runs it through a shell — a real cross-platform hazard
+        (a bare ``python3 /a home/guard.py`` would split on the space). Double quotes are portable
+        across POSIX ``sh`` and Windows ``cmd`` for a path with spaces.
+        """
         out: "list[Registration]" = []
         for script, matcher in _GUARD_REGISTRATIONS:
-            command = f"python3 {target.hooks_dir / script}"
+            command = f'python3 "{target.hooks_dir / script}"'
             out.append(Registration(script=script, matcher=matcher, command=command))
         return out
 

@@ -75,8 +75,9 @@ def test_pyz_carries_the_full_cli(tmp_path: Path) -> None:
     """
     pyz = builder.build_pyz(tmp_path)
     import json
+    import os
 
-    env = {"EXCUBITOR_STATE_HOME": str(tmp_path / "state"), "PATH": "/usr/bin:/bin"}
+    env = {**os.environ, "EXCUBITOR_STATE_HOME": str(tmp_path / "state")}
     result = subprocess.run([sys.executable, str(pyz), "status", "--json"],
                             capture_output=True, text=True, timeout=60, env=env)
     assert result.returncode == 0

@@ -15,7 +15,6 @@ import pytest
 from excubitor.installers import receipts as receipts_mod
 from excubitor.installers import runtime as rt
 from excubitor.installers import transaction as tx
-from excubitor.installers.plan import build_install_plan
 from excubitor.installers.receipts import Receipt
 
 
