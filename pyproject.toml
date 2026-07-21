@@ -1,0 +1,81 @@
+# Packaging metadata for the model-blind Excubitor policy core and its `excubitor` CLI.
+#
+# Two producers read this file and MUST agree:
+#   1. A standard PEP 517 frontend (`pip install .`, `python -m build`) via the setuptools backend
+#      declared below — the interoperable path for anyone who has a build backend.
+#   2. `packaging/build.py` — the repo's stdlib-only, byte-reproducible builder, which needs no build
+#      backend at all (so the reproducibility and offline-install tests run in the stdlib-only CI
+#      gate). It reads the metadata here through `tomllib` and the version through the package.
+#
+# The distribution ships the importable `excubitor` package only (core + adapters + cli + installers).
+# The Claude Code hook entry points, skills, and native plugins are bundled by later campaigns; this
+# campaign is the package + transactional-installer foundation, not the plugin.
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "excubitor"
+dynamic = ["version"]
+description = "Installable, model-blind safety policy for coding-agent runtimes: mechanical version-control guards, loop discipline, and a falsifiable intent-record system."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Erick Edward Shepherd", email = "dev@erickshepherd.com" }]
+keywords = [
+    "ai-agents",
+    "autonomous-agents",
+    "ai-safety",
+    "guardrails",
+    "claude-code",
+    "version-control",
+    "python",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Quality Assurance",
+    "Topic :: Security",
+]
+# The runtime is deliberately stdlib-only: no install-time dependencies. This is a load-bearing
+# property (offline enforcement, an auditable supply chain), not an omission.
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/ErickShepherd/excubitor"
+Repository = "https://github.com/ErickShepherd/excubitor"
+Documentation = "https://github.com/ErickShepherd/excubitor#readme"
+
+[project.scripts]
+excubitor = "excubitor.cli:main"
+
+[tool.setuptools.dynamic]
+version = { attr = "excubitor.__version__" }
+
+[tool.setuptools.packages.find]
+include = ["excubitor*"]
+exclude = ["excubitor.tests", "excubitor.tests.*"]
+namespaces = false
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+# The reproducible build outputs and the local scratch dir are never linted.
+extend-exclude = ["dist", "build", "tmp", ".venv"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+
+[tool.pytest.ini_options]
+# Marker registration only — test discovery is left at pytest's default so the existing
+# hooks/, runtime/, skills/, scripts/, and excubitor/ suites are collected exactly as before.
+markers = [
+    "slow: a test that spawns a subprocess/venv (still run by default; deselect with -m 'not slow')",
+]

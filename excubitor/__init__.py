@@ -20,4 +20,10 @@ differential oracle, so a decision change during extraction is a regression, not
 """
 from __future__ import annotations
 
-__all__ = ["core"]
+#: Single source of truth for the distribution version. `pyproject.toml` reads this attribute
+#: dynamically (`[tool.setuptools.dynamic]`), and the stdlib reproducible builder
+#: (`packaging/build.py`) imports it directly, so the wheel/sdist/pyz names can never drift from
+#: the package. A consistency test pins the two together.
+__version__ = "0.1.0"
+
+__all__ = ["__version__", "core"]

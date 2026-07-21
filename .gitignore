@@ -8,3 +8,8 @@ scripts/demo.gif
 
 # local scratch (WSL-safe durable temp; never committed)
 tmp/
+
+# reproducible build artifacts (regenerated from packaging/build.py; hashes recorded, bytes not)
+dist/
+build/
+*.egg-info/
