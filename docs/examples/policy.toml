@@ -1,0 +1,24 @@
+# Example `.excubitor/policy.toml` — the committed, reviewable neutral policy for a repo.
+#
+# Place this at `.excubitor/policy.toml` in the root of a repo you want Excubitor to govern. It holds
+# the STATIC, reviewable knobs only. It deliberately CANNOT arm the loop guard: whether enforcement is
+# active (conservative vs. verifiable autonomy) is a runtime signal set through the environment
+# (`EXCUBITOR_LOOP_GUARD=conservative|verifiable`), never a checked-in value — so no one can arm
+# verifiable autonomy just by committing a file.
+#
+# Precedence for every setting (highest first): EXCUBITOR_* env var → CLAUDE_* env var (legacy, warned)
+# → this file → built-in default. See `excubitor/config.py`.
+
+[default_branch]
+# The per-repo opt-out marker relpath the branch-first guard recognizes. Default:
+# ".excubitor/allow-default-branch" (the legacy ".claude/allow-default-branch" is also recognized).
+opt_out_marker = ".excubitor/allow-default-branch"
+
+[one_unit]
+# Cap a headless loop worker at one unit-advancing commit per session. Default: true.
+enabled = true
+
+[self_integrity]
+# Extra protected-root paths (relative to the repo) to fence beyond the built-ins, so an armed loop
+# cannot rewrite them. The Excubitor policy package is always fenced; this only adds to it.
+protected_roots = []
