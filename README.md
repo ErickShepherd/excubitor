@@ -222,7 +222,7 @@ rewrite is not a judge") that most runtime-enforcement work assumes away.
 
 ## Glossary — referenced but not included
 
-This library is extracted from a larger private skill set; the shipped files occasionally
+This library is extracted from a larger internal harness; the shipped files occasionally
 reference siblings that did not ship. One line each, so nothing dangles:
 
 - **`pre-merge-review`** — spawns a fresh-context, read-only, highest-capability reviewer over a
@@ -245,17 +245,14 @@ This is not a demo repo. Its mechanisms are extracted from the harness I actuall
 here are the same code as the **live PreToolUse hooks** in my own Claude Code environment (the three
 original guards are symlinked from the upstream harness and fire on every commit my agents make; the
 fourth, `guard-self-integrity`, and the hardening docs were authored for this publication). The telos
-intent-record system is likewise **in active use across seven of my other repositories** — an
-internal-toolkit library, developer tooling, a code-translation system, and a game engine among them — not
+intent-record system is likewise **in active use across seven of my other repositories**, not
 just this one; each keeps its own `docs/telos/` record audited by this same tooling. To be equally
 clear about what this is *not*: excubitor has no external users, stars, or third-party adoption. The
 evidence here is that the author runs it, tests it, and audits it — not that a community has.
 
-This repo is a **curated extraction** of the agent-governance subset of a private library, with a
-fresh history. the extraction notes records the source commit, the per-file origins,
-and every edit made during extraction. The private library remains the upstream; this snapshot is
-re-published manually when upstream changes materially. It describes what the harness looked like
-as of the recorded commit — a claim that stays true — rather than pretending to be a live mirror.
+This repo is a **curated extraction** of the agent-governance subset of that harness, with a
+fresh history, re-published manually when the upstream changes materially. It describes what the
+harness looked like as of this snapshot rather than pretending to be a live mirror.
 
 ## License
 
