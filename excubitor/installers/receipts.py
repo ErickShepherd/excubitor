@@ -118,6 +118,9 @@ class Receipt:
     installed_at: str
     files: "tuple[OwnedFile, ...]" = field(default=())
     registrations: "tuple[OwnedRegistration, ...]" = field(default=())
+    #: Whether the settings file existed before this install. If False, an uninstall that empties the
+    #: file removes it — restoring "absent" so the round trip is byte-for-byte.
+    settings_preexisted: bool = True
     schema: str = RECEIPT_SCHEMA
 
     def to_dict(self) -> dict:
@@ -128,6 +131,7 @@ class Receipt:
             "settings_path": self.settings_path,
             "excubitor_version": self.excubitor_version,
             "installed_at": self.installed_at,
+            "settings_preexisted": self.settings_preexisted,
             "files": [f.to_dict() for f in self.files],
             "registrations": [r.to_dict() for r in self.registrations],
         }
@@ -148,6 +152,7 @@ class Receipt:
             installed_at=str(d.get("installed_at", "")),
             files=tuple(OwnedFile.from_dict(f) for f in d.get("files", [])),
             registrations=tuple(OwnedRegistration.from_dict(r) for r in d.get("registrations", [])),
+            settings_preexisted=bool(d.get("settings_preexisted", True)),
             schema=str(d["schema"]),
         )
 

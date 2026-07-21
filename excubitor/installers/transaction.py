@@ -45,7 +45,15 @@ from excubitor.installers.receipts import (
 )
 from excubitor.installers.runtime import RuntimeProfile, RuntimeTarget
 
-__all__ = ["TransactionError", "InstallResult", "apply_install", "rollback", "recover"]
+__all__ = [
+    "TransactionError",
+    "InstallResult",
+    "UninstallResult",
+    "apply_install",
+    "apply_uninstall",
+    "rollback",
+    "recover",
+]
 
 _FILE_MODE = 0o644
 _STATE_MODE = 0o600
@@ -62,6 +70,24 @@ class InstallResult:
     receipt: Receipt
     changed: bool
     messages: "tuple[str, ...]"
+
+
+@dataclass(frozen=True)
+class UninstallResult:
+    """The outcome (or dry-run preview) of an uninstall.
+
+    ``removed_files`` are receipt-owned files whose bytes still matched (safe to remove);
+    ``preserved_drifted`` are receipt-owned paths whose bytes changed since install (NOT removed —
+    the user's edit is kept); ``settings_deleted`` is True when a file this install created and this
+    uninstall emptied was removed.
+    """
+
+    found: bool
+    removed_files: "tuple[str, ...]" = ()
+    preserved_drifted: "tuple[str, ...]" = ()
+    removed_registrations: int = 0
+    settings_deleted: bool = False
+    dry_run: bool = False
 
 
 def _now_iso() -> str:
@@ -275,6 +301,7 @@ def apply_install(
             installed_at=now or _now_iso(),
             files=tuple(owned_files),
             registrations=tuple(wanted),
+            settings_preexisted=prior_settings_bytes is not None,
         )
         _atomic_write_bytes(
             receipt_path(runtime, scope, state_home, environ), receipt.to_json().encode(), _STATE_MODE
@@ -328,6 +355,131 @@ def recover(runtime: str, scope: str, state_home: "str | None" = None,
             environ: "dict[str, str] | None" = None) -> bool:
     """Recover from an interrupted install: if a journal exists, roll its target back. Idempotent."""
     return rollback(runtime, scope, state_home, environ)
+
+
+def remove_registrations(pre: list, owned: "list[OwnedRegistration]") -> bool:
+    """Remove receipt-owned handlers (exact tuple) from ``pre`` (mutated in place), preserving all else.
+
+    A handler is removed only when its ``(matcher-set, type, command, timeout)`` exactly matches a
+    receipt-owned registration — never a substring. User handlers sharing an entry are kept in place;
+    an entry left with no handlers is dropped. Returns whether anything changed.
+    """
+    owned_tuples = {(matcher_key(r.matcher), r.handler_type, r.command, r.timeout) for r in owned}
+    result: list = []
+    changed = False
+    for entry in pre:
+        if not isinstance(entry, dict):
+            result.append(entry)
+            continue
+        handlers = entry.get("hooks", [])
+        if not isinstance(handlers, list):
+            result.append(entry)
+            continue
+        kept = [h for h in handlers
+                if not (isinstance(h, dict) and _handler_tuple(entry.get("matcher"), h) in owned_tuples)]
+        if len(kept) != len(handlers):
+            changed = True
+            if kept:
+                new_entry = dict(entry)
+                new_entry["hooks"] = kept
+                result.append(new_entry)
+            # else: entry held only our handlers → drop it
+        else:
+            result.append(entry)
+    pre[:] = result
+    return changed
+
+
+def _settings_effectively_empty(data: dict) -> bool:
+    """True iff ``data`` carries no content beyond empty hook lists — so a file we created can be
+    removed to restore 'absent' rather than leaving a hollow ``{"hooks": {"PreToolUse": []}}`` behind."""
+    if not isinstance(data, dict):
+        return False
+    if set(data) - {"hooks"}:
+        return False
+    hooks = data.get("hooks", {})
+    if not isinstance(hooks, dict):
+        return False
+    return all(not v for v in hooks.values())
+
+
+def apply_uninstall(
+    runtime: str,
+    scope: str,
+    state_home: "str | None" = None,
+    environ: "dict[str, str] | None" = None,
+    dry_run: bool = False,
+) -> UninstallResult:
+    """Remove exactly what the receipt for ``runtime``/``scope`` owns; preserve everything else.
+
+    Receipt-owned files are removed only when their bytes still match (a drifted file is preserved and
+    reported); receipt-owned registrations are removed by exact tuple, keeping unrelated entries. A
+    settings file this install created and this uninstall empties is removed, so the round trip is
+    byte-for-byte. ``dry_run`` previews the disposition without writing. Journalled, so a failure rolls
+    back the exact prior state.
+    """
+    recover(runtime, scope, state_home, environ)
+    receipt = _load_prior_receipt(runtime, scope, state_home, environ)
+    if receipt is None:
+        return UninstallResult(found=False, dry_run=dry_run)
+
+    # Disposition of owned files: removable (hash matches), drifted (kept), or already gone.
+    removable: list[str] = []
+    drifted: list[str] = []
+    for owned in receipt.files:
+        current = _read_bytes_or_none(Path(owned.path))
+        if current is None:
+            continue
+        if hashlib.sha256(current).hexdigest() == owned.sha256:
+            removable.append(owned.path)
+        else:
+            drifted.append(owned.path)
+
+    settings_path = Path(receipt.settings_path)
+    prior_settings_bytes = _read_bytes_or_none(settings_path)
+    data = json.loads(prior_settings_bytes) if prior_settings_bytes else {}
+    pre = data.get("hooks", {}).get("PreToolUse", []) if isinstance(data.get("hooks"), dict) else []
+    reg_changed = remove_registrations(pre, list(receipt.registrations))
+    delete_settings = (not receipt.settings_preexisted) and _settings_effectively_empty(data)
+    new_settings = (json.dumps(data, indent=2) + "\n").encode("utf-8")
+    settings_changes = delete_settings or (
+        prior_settings_bytes is not None and new_settings != prior_settings_bytes
+    )
+
+    if dry_run:
+        return UninstallResult(
+            found=True, removed_files=tuple(removable), preserved_drifted=tuple(drifted),
+            removed_registrations=sum(1 for _ in receipt.registrations) if reg_changed else 0,
+            settings_deleted=delete_settings, dry_run=True,
+        )
+
+    # Journal the exact prior state (settings + every file we may delete) before mutating.
+    file_backups = {p: _b64(_read_bytes_or_none(Path(p))) for p in removable}
+    journal = {
+        "runtime": runtime, "scope": scope, "settings_path": str(settings_path),
+        "settings_backup": _b64(prior_settings_bytes), "file_backups": file_backups, "created_at": _now_iso(),
+    }
+    jpath = _journal_path(runtime, scope, state_home, environ)
+    _atomic_write_bytes(jpath, (json.dumps(journal, indent=2, sort_keys=True) + "\n").encode(), _STATE_MODE)
+
+    try:
+        if delete_settings:
+            settings_path.unlink(missing_ok=True)
+        elif settings_changes:
+            _atomic_write_bytes(settings_path, new_settings, _FILE_MODE)
+        for path_str in removable:
+            Path(path_str).unlink(missing_ok=True)
+        receipt_path(runtime, scope, state_home, environ).unlink(missing_ok=True)
+    except Exception as exc:
+        rollback(runtime, scope, state_home, environ)
+        raise TransactionError(f"uninstall failed and was rolled back: {exc}") from exc
+
+    jpath.unlink(missing_ok=True)
+    return UninstallResult(
+        found=True, removed_files=tuple(removable), preserved_drifted=tuple(drifted),
+        removed_registrations=sum(1 for _ in receipt.registrations) if reg_changed else 0,
+        settings_deleted=delete_settings, dry_run=False,
+    )
 
 
 def _is_newer(a: str, b: str) -> bool:
