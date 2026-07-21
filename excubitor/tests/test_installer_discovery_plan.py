@@ -141,14 +141,19 @@ def test_cli_install_dry_run_writes_nothing(tmp_path: Path, capsys) -> None:
     assert _snapshot(tmp_path) == before
 
 
-def test_cli_install_without_dry_run_refuses(tmp_path: Path, capsys) -> None:
+def test_cli_install_apply_creates_files_and_reports_unprotected(
+    tmp_path: Path, capsys, monkeypatch
+) -> None:
     home = tmp_path / "home"
     home.mkdir()
+    monkeypatch.setenv("EXCUBITOR_STATE_HOME", str(tmp_path / "state"))
     code = cli_main(["install", "--runtime", "claude-code", "--home", str(home)])
-    err = capsys.readouterr().err
-    assert code == 2
-    assert "dry-run" in err
-    assert _snapshot(tmp_path / "home") == {}  # nothing created
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "installed claude-code/user" in out
+    assert "NOT protected yet" in out  # never claims protection without a real host probe
+    assert (home / ".claude" / "hooks" / "guard-loop-vc.py").exists()
+    assert (home / ".claude" / "settings.json").exists()
 
 
 def test_cli_install_auto_reports_no_runtime_when_absent(tmp_path: Path, capsys) -> None:

@@ -1,11 +1,12 @@
-"""``excubitor install`` — deterministic install planning (dry-run) for a runtime integration.
+"""``excubitor install`` — plan or apply an Excubitor install for a runtime integration.
 
-Campaign 2 lands this in two steps: this item (C2.3) implements ``--dry-run``, which computes and prints
-the exact plan while writing nothing; the transaction that *applies* a plan (atomic stage/register with
-a hash-bound receipt and rollback) lands in a later item. Until then a non-dry-run invocation refuses
-with a precise message rather than silently no-op an apply the user asked for.
+``--dry-run`` computes and prints the exact plan while writing nothing (C2.3). Without it, the plan is
+applied transactionally (C2.5): the neutral policy is validated first (an unknown version stops), then
+the artifacts are staged atomically, the exact-tuple hooks registered, and a hash-bound receipt
+committed — any failure rolls back the exact prior state. Installation is reported as *not protected
+yet*: only a real harmless-denial host probe (``excubitor doctor --probe``) earns that.
 
-``--runtime auto`` plans only for *detected* runtimes; an explicit ``--runtime`` plans even when the
+``--runtime auto`` acts only on *detected* runtimes; an explicit ``--runtime`` acts even when the
 runtime's control dir is absent (it would be created). Only Claude Code is supported.
 """
 from __future__ import annotations
@@ -14,8 +15,10 @@ import argparse
 import sys
 from pathlib import Path
 
+from excubitor import config
 from excubitor.installers import plan as plan_mod
 from excubitor.installers import runtime as rt
+from excubitor.installers import transaction, validate
 
 __all__ = ["register", "run"]
 
@@ -25,8 +28,8 @@ _SUPPORTED = ["claude-code"]
 def register(subparsers: "argparse._SubParsersAction") -> None:
     parser = subparsers.add_parser(
         "install",
-        help="plan (and, later, apply) an Excubitor install into a coding-agent runtime",
-        description="Plan an Excubitor install. Only --dry-run is available in this build.",
+        help="plan (--dry-run) or apply an Excubitor install into a coding-agent runtime",
+        description="Plan or apply an Excubitor install transactionally.",
     )
     parser.add_argument(
         "--runtime", default="auto",
@@ -38,7 +41,9 @@ def register(subparsers: "argparse._SubParsersAction") -> None:
     parser.add_argument("--project-root", type=Path, default=None,
                         help="project root for PROJECT scope (default: current directory)")
     parser.add_argument("--dry-run", action="store_true",
-                        help="print the exact plan and write nothing (required in this build)")
+                        help="print the exact plan and write nothing")
+    parser.add_argument("--allow-downgrade", action="store_true",
+                        help="allow installing over a receipt from a newer Excubitor (default: refuse)")
     parser.set_defaults(_handler=run)
 
 
@@ -54,12 +59,12 @@ def run(args: argparse.Namespace) -> int:
     home = args.home if args.home is not None else Path.home()
     project_root = args.project_root if args.project_root is not None else Path.cwd()
 
-    if not args.dry_run:
-        print(
-            "excubitor install: only --dry-run is available in this build; the apply transaction "
-            "lands in a later Campaign 2 item. Re-run with --dry-run to preview the plan.",
-            file=sys.stderr,
-        )
+    # Validate the neutral policy before any mutation — an unknown version stops the install.
+    policy, _policy_path = config.load_policy_file(project_root if scope is rt.Scope.PROJECT else home)
+    policy_result = validate.validate_policy(policy)
+    if not policy_result.ok:
+        for problem in policy_result.problems:
+            print(f"excubitor install: policy error: {problem}", file=sys.stderr)
         return 2
 
     try:
@@ -71,7 +76,7 @@ def run(args: argparse.Namespace) -> int:
     if args.runtime == "auto":
         profiles = _selected_profiles("auto", targets)
         if not profiles:
-            print("excubitor install: no supported runtime detected (use --runtime to force a plan).",
+            print("excubitor install: no supported runtime detected (use --runtime to force it).",
                   file=sys.stderr)
             return 1
     else:
@@ -90,5 +95,20 @@ def run(args: argparse.Namespace) -> int:
             print(f"excubitor install: {exc}", file=sys.stderr)
             exit_code = 1
             continue
-        sys.stdout.write(plan_mod.render_plan(plan))
+        if args.dry_run:
+            sys.stdout.write(plan_mod.render_plan(plan))
+            continue
+        try:
+            result = transaction.apply_install(
+                profile, target, plan, allow_downgrade=args.allow_downgrade
+            )
+        except (ValueError, transaction.TransactionError) as exc:
+            print(f"excubitor install: {exc}", file=sys.stderr)
+            exit_code = 1
+            continue
+        status = "changed" if result.changed else "already current"
+        print(f"installed {target.runtime}/{target.scope.value}: {status} "
+              f"({', '.join(result.messages)})")
+        print("  NOT protected yet — run `excubitor doctor --probe` for a real harmless-denial "
+              "host probe (installation earns 'protected' only after that probe succeeds).")
     return exit_code
