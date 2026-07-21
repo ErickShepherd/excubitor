@@ -149,13 +149,14 @@ def run_in_process(sandbox: ProbeSandbox) -> ProbeOutcome:
 
 
 def run_hook_subprocess(guard_script: "str | Path", sandbox: ProbeSandbox,
-                        python: "str | None" = None) -> ProbeOutcome:
+                        python: "str | None" = None, env: "dict[str, str] | None" = None) -> ProbeOutcome:
     """Drive an installed guard *script* end-to-end as a subprocess with a real Claude Code payload.
 
     Sends a ``PreToolUse`` envelope on stdin and parses the hook's structured decision. The hook only
     *reports* a decision (it never performs the edit), so the marker is expected to remain absent
-    regardless; ``marker_untouched`` guards against a misbehaving hook writing it. Returns the verdict,
-    or ``denied=False`` if the hook cannot be invoked.
+    regardless; ``marker_untouched`` guards against a misbehaving hook writing it. ``env`` overrides the
+    subprocess environment (e.g. a ``PYTHONPATH`` so a staged guard can import the installed core, as it
+    would in a pip-installed host). Returns the verdict, or ``denied=False`` if the hook cannot be run.
     """
     payload = {
         "tool_name": "Write",
@@ -165,7 +166,7 @@ def run_hook_subprocess(guard_script: "str | Path", sandbox: ProbeSandbox,
     try:
         completed = subprocess.run(
             [python or sys.executable, str(guard_script)],
-            input=json.dumps(payload), capture_output=True, text=True, timeout=30,
+            input=json.dumps(payload), capture_output=True, text=True, timeout=30, env=env,
         )
     except (subprocess.SubprocessError, OSError) as exc:
         return ProbeOutcome(denied=False, marker_untouched=not sandbox.marker.exists(),
