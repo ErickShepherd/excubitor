@@ -131,6 +131,29 @@ realistic adversary is Tiers 1–2.** So the controls concentrate on those few i
 its own work), and they *decline* to chase completeness against Tier 3 — which would be theater on this
 substrate. That declared scope is the design's spine, recorded across `docs/design/`.
 
+## The installer surface (Campaign 2) — a user-invoked mutator, not part of enforcement
+
+The `excubitor` CLI's installer (`excubitor/installers/`) *mutates* a runtime's configuration — it
+stages guard scripts and registers hooks in a settings file. That is a new **mutation** surface, so its
+boundaries are stated here rather than implied:
+
+- **It is user-invoked, not part of guard enforcement.** The installer runs when a human (or a
+  provisioning step) asks it to; it is not on the pre-tool decision path. The guards' own kill-switch
+  fence (`guard-self-integrity`, still covering the settings file and hook scripts under an armed loop)
+  is unchanged — an *armed loop* still cannot rewrite those, installer or not.
+- **Every mutation is transactional and receipt-owned.** Writes are journalled and atomic
+  (temp + `os.replace`), validated before mutation (a malformed settings structure or unknown policy
+  version stops with no write), and rolled back to the exact prior state on any failure. Upgrade and
+  uninstall remove **only** bytes/entries the hash-bound receipt records (exact path+SHA-256 for files,
+  exact tuple for registrations) — never a substring match, so an unrelated user hook or a file the user
+  edited since install is preserved.
+- **Installation does not imply protection.** The installer never claims enforcement works. `status`
+  and `doctor` report `needs-probe` — never `protected` — until a *real host* harmless-denial probe
+  succeeds; the CLI cannot fabricate that witness (it cannot drive the runtime's dispatch), so the honest
+  verdict is `needs-probe`. Only Claude Code is a supported runtime; other hosts are reported
+  designed-not-built. The supply-chain boundary of the *distributed* package (native plugin publication)
+  is deliberately gated behind an independent installer/supply-chain review before any publication.
+
 ## Residual risks (accepted, documented, and where pinned)
 
 - **Shell-expansion evasion of the command parsers** (glob/brace/`$VAR`/quoted substitution) — Tier 3.

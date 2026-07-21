@@ -99,16 +99,45 @@ excubitor/core/           # the model-blind policy core (stdlib only; no host I/
                           #   git boundary), policies/{loop_vc,default_branch,one_unit,self_integrity}.py,
                           #   dispatch.py (deny precedence) + tests under excubitor/tests/
 excubitor/adapters/       # per-runtime adapters: claude_code.py (shared PreToolUse envelope glue)
+excubitor/cli.py          # the `excubitor` console entry point (a thin argparse dispatcher)
+excubitor/config.py       # neutral .excubitor/policy.toml + EXCUBITOR_* precedence (host I/O; not core)
+excubitor/commands/       # CLI subcommands: install, uninstall, status, print-config, doctor
+excubitor/installers/     # the transactional installer foundation (Campaign 2):
+                          #   runtime.py (Claude Code profile + discovery), plan.py (write-nothing
+                          #   dry-run), validate.py (nested config validation), receipts.py (exact,
+                          #   hash-bound ownership), transaction.py (atomic stage/register/rollback/
+                          #   recover + uninstall), status.py, doctor.py
+excubitor/probe.py        # the harmless-denial probe framework (disposable sandbox + marker)
 hooks/                    # the four Claude Code guard entry points — thin adapters over the core —
                           # + _denial_log.py telemetry helper + tests/ (the differential oracles)
 runtime/spec_adapter.py   # the generic excubitor.pre_tool.v1 adapter (JSON CLI) + tests/
 skills/<name>/SKILL.md    # open Agent Skills format: frontmatter trigger + instructions
 skills/<name>/scripts/    # executable helpers (ralph-loop's oracle/suite/suspend checks)
 skills/<name>/tests/      # per-component pytest suites
+pyproject.toml            # package metadata (excubitor console script; stdlib-only, no runtime deps)
+packaging/build.py        # stdlib-only, byte-reproducible wheel/sdist/pyz builder (+ tests/)
 docs/design/              # the deliberation records behind each mechanism
 docs/telos/               # this repo's own claims, audited by its own audit-telos
-scripts/install.sh        # symlinks + idempotent settings.json hook registration
+scripts/install.sh        # legacy symlink + settings.json registration (superseded by `excubitor install`)
 ```
+
+## The installer foundation (Campaign 2)
+
+The package ships an `excubitor` CLI whose `install`/`uninstall`/`status`/`print-config`/`doctor`
+subcommands drive a **transactional** installer over a runtime's config. Its spine:
+
+- **Discover → validate → plan** are read-only; `install --dry-run` writes nothing (proven by a
+  byte-for-byte filesystem snapshot). Validation rejects a malformed settings structure or an unknown
+  policy version *before* any mutation.
+- **Stage → register → receipt** run as one journalled transaction: artifacts are staged atomically
+  (temp + `os.replace`, hash-verified), the exact-tuple hooks are merged while unrelated entries survive
+  byte-for-byte, and a **hash-bound receipt** records exactly what the install owns. Any failure rolls
+  back the exact prior state; a leftover journal (a crash) is recovered on the next run.
+- **Ownership is never a substring.** Upgrade/uninstall touch only what the receipt records by exact
+  path+SHA-256 (files) and exact tuple (registrations); a file edited since install is preserved.
+- **Protection is earned, not assumed.** `status`/`doctor` never infer "protected" from file presence —
+  only a real host harmless-denial probe does, and absent a real runtime-dispatch witness they report
+  `needs-probe`. Only Claude Code is a supported runtime; other hosts are reported designed-not-built.
 
 Components are deliberately decoupled: the hooks are thin entry points that import only the model-blind
 `excubitor` package (never the skills); the skills' scripts import nothing from the hooks; the only
