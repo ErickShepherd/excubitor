@@ -49,6 +49,26 @@ def test_uninstall_removes_owned_files_and_registrations(env) -> None:
     assert not (state / "receipts" / "claude-code-user.json").exists()
 
 
+def test_uninstall_on_corrupted_settings_fails_cleanly(env) -> None:
+    # A user who hand-breaks settings.json after install must get a clean TransactionError, not an
+    # unhandled JSONDecodeError/AttributeError traceback (mirrors apply_install's guarding).
+    home, _state, target = env
+    _install(target)
+    settings_path = home / ".claude" / "settings.json"
+    settings_path.write_text("{ not json", encoding="utf-8")
+    with pytest.raises(tx.TransactionError):
+        _uninstall(target)
+
+
+def test_uninstall_on_non_object_settings_root_fails_cleanly(env) -> None:
+    home, _state, target = env
+    _install(target)
+    settings_path = home / ".claude" / "settings.json"
+    settings_path.write_text("[]", encoding="utf-8")  # valid JSON, non-object root
+    with pytest.raises(tx.TransactionError):
+        _uninstall(target)
+
+
 def test_roundtrip_preserves_unrelated_config_byte_for_byte(env) -> None:
     home, _state, target = env
     settings_path = home / ".claude" / "settings.json"
