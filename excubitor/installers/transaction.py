@@ -694,7 +694,20 @@ def apply_uninstall(
 
     settings_path = absolute_path(receipt.settings_path)
     prior_settings_bytes = _read_bytes_or_none(settings_path, control_root)
-    data = json.loads(prior_settings_bytes) if prior_settings_bytes else {}
+    if prior_settings_bytes:
+        # Mirror apply_install's guarding: a user-corrupted settings.json (invalid JSON, or a valid
+        # non-object root like `[]`) must fail as a clean TransactionError, not an unhandled
+        # JSONDecodeError/AttributeError traceback out of the uninstall command handler.
+        try:
+            data = json.loads(prior_settings_bytes)
+        except ValueError as exc:
+            raise TransactionError(f"cannot uninstall: {settings_path} is not valid JSON ({exc})") from exc
+        if not isinstance(data, dict):
+            raise TransactionError(
+                f"cannot uninstall: {settings_path} root is {type(data).__name__}, expected a JSON object"
+            )
+    else:
+        data = {}
     pre = data.get("hooks", {}).get("PreToolUse", []) if isinstance(data.get("hooks"), dict) else []
     reg_changed = remove_registrations(pre, list(receipt.registrations))
     delete_settings = (not receipt.settings_preexisted) and _settings_effectively_empty(data)

@@ -106,8 +106,11 @@ def target_kill_switch(target: str, cwd: str, surface: ProtectedSurface) -> "str
     module (the neutrality invariant otherwise bars global-path reads)."""
     try:
         resolved = os.path.abspath(os.path.join(cwd, os.path.expanduser(target)))
-    except ValueError:
-        return None  # e.g. an embedded NUL byte — treat as no-match (the caller's scan continues)
+    except (ValueError, TypeError):
+        # ValueError: an embedded NUL byte. TypeError: a non-string cwd/target reaching os.path.join
+        # (defense-in-depth for a direct caller — the hook already fails open on a non-string field).
+        # Either way, treat as no-match so the caller's scan of the remaining tokens continues.
+        return None
     hit = _kill_switch(resolved, surface)
     if hit:
         return hit

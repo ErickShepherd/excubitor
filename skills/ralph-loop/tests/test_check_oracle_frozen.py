@@ -344,5 +344,34 @@ class TestDirectorySymlinkSurface(unittest.TestCase):
         self.assertEqual(_run(self.d, "main", self.VB), 1)
 
 
+class TestCanonicalPrefix(unittest.TestCase):
+    """_canonical_prefix resolves only the environmental prefix, never an in-repo self-link hop."""
+
+    def setUp(self) -> None:
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location("check_oracle_frozen", SCRIPT)
+        self.mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.mod)
+        self.d = tempfile.mkdtemp(prefix="canonprefix-")
+        self.addCleanup(shutil.rmtree, self.d, ignore_errors=True)
+        self.top = os.path.realpath(self.d)  # toplevel is always realpath'd upstream
+
+    def test_environmental_prefix_is_resolved(self) -> None:
+        # A symlink standing in for macOS $TMPDIR -> /private/var above the repo root is resolved.
+        link = os.path.join(os.path.dirname(self.top), "canonlink-" + os.path.basename(self.top))
+        os.symlink(self.top, link)
+        self.addCleanup(os.unlink, link)
+        got = self.mod._canonical_prefix(os.path.join(link, "tests", "oracle.py"), self.top)
+        self.assertEqual(got, os.path.join(self.top, "tests", "oracle.py"))
+
+    def test_in_repo_self_link_hop_is_preserved(self) -> None:
+        # `self -> .` resolves to the repo root but is IN-repo; its hop must NOT be collapsed, or the
+        # R-04 surface would lose a retargetable component. Shortest-first stops at the true root.
+        os.symlink(".", os.path.join(self.top, "self"))
+        got = self.mod._canonical_prefix(os.path.join(self.top, "self", "tests", "oracle.py"), self.top)
+        self.assertEqual(got, os.path.join(self.top, "self", "tests", "oracle.py"))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

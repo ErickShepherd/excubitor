@@ -99,7 +99,11 @@ def _canonical_prefix(abs_candidate: str, toplevel: str) -> str:
     if not os.path.isabs(norm):
         return norm
     parts = norm.split(os.sep)
-    for i in range(len(parts), 0, -1):
+    # SHORTEST-prefix-first: stop at the HIGHEST ancestor whose realpath is the repo root. An in-repo
+    # symlink that itself resolves to the root (e.g. `self -> .`) would match at a deeper ancestor and
+    # collapse its own hop out of the R-04 surface; the highest match always lands on the true root and
+    # can never drop an in-repo component (identical on the macOS $TMPDIR -> /private/var prefix).
+    for i in range(1, len(parts) + 1):
         ancestor = os.sep.join(parts[:i]) or os.sep
         try:
             if os.path.realpath(ancestor) == toplevel:

@@ -3,8 +3,8 @@
 **Date:** 2026-07-15
 **Status:** proposed, not implemented
 **Depends on:**
-[`model-agnostic-runtime.md`](model-agnostic-runtime.md) and Phase 0 of the
-the review notes
+[`model-agnostic-runtime.md`](model-agnostic-runtime.md) and the Phase 0 guard-hardening review
+(items R-01–R-08, pinned in [`KNOWN-BYPASSES.md`](../../KNOWN-BYPASSES.md) and the guard test suites)
 
 ## Decision
 

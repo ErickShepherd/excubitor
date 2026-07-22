@@ -367,6 +367,35 @@ class TestGuardsLogDenials(unittest.TestCase):
             self.assertEqual(event["guard"], "guard-loop-vc")
 
 
+class TestModuleLoadIsBounded(unittest.TestCase):
+    """The adapter's _record_denial LOADS _denial_log.py (spec_from_file_location + exec_module) —
+    filesystem I/O that used to run on the MAIN thread, before record()'s bounded write thread even
+    existed. A hooks dir on a hung mount would then block the guard past the hook timeout (fails OPEN,
+    runs the fenced call). The load now runs inside the same abandonable daemon thread as the write, so
+    a blocking load is abandoned and _record_denial returns promptly. A reader-less FIFO named
+    _denial_log.py stands in for the stalled mount: open('rb') on it blocks in exec_module's source read."""
+
+    def _adapter(self):
+        root = str(HOOKS.parent)
+        if root not in sys.path:
+            sys.path.insert(0, root)
+        from excubitor.adapters import claude_code
+        return claude_code
+
+    def test_blocked_module_load_returns_promptly(self):
+        claude_code = self._adapter()
+        with tempfile.TemporaryDirectory() as td:
+            os.mkfifo(os.path.join(td, "_denial_log.py"))  # no writer → exec_module's read blocks
+            saved = claude_code._DENIAL_TELEMETRY_TIMEOUT_S
+            claude_code._DENIAL_TELEMETRY_TIMEOUT_S = 0.5  # keep the test fast; real bound is 2.0s
+            self.addCleanup(setattr, claude_code, "_DENIAL_TELEMETRY_TIMEOUT_S", saved)
+            payload = {"tool_name": "Bash", "tool_input": {"command": "git push"}, "cwd": "/w"}
+            start = time.monotonic()
+            claude_code._record_denial("guard-loop-vc", "why", payload, td)  # must not block, must not raise
+            elapsed = time.monotonic() - start
+            self.assertLess(elapsed, 3.0, "a hung module load must be abandoned, not waited on")
+
+
 class TestLogIsNotAKillSwitch(unittest.TestCase):
     """Bidirectional pin for the KNOWN-BYPASSES.md entry: the telemetry log is deliberately NOT
     fenced by guard-self-integrity — an armed agent CAN touch its own denial history (the log is

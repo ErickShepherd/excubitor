@@ -224,6 +224,22 @@ class TestActivationAndContract(unittest.TestCase):
             rc, out = _run(raw)
             self.assertEqual((rc, out.strip()), (0, ""), f"non-object payload must defer: {raw!r}")
 
+    def test_non_string_cwd_never_crashes(self):
+        # P0.16: a non-string cwd must not TypeError inside os.path.join → non-zero exit. It falls back
+        # to getcwd() (NOT fail-open), so a guard-script write is still caught — the point is exit 0.
+        rc, _out = _run({"tool_name": "Write",
+                         "tool_input": {"file_path": "/repo/hooks/guard-loop-vc.py"}, "cwd": 123})
+        self.assertEqual(rc, 0, "non-string cwd must never exit non-zero (never-exit-non-zero contract)")
+
+    def test_non_string_target_or_command_fails_open(self):
+        # A truthy non-string target/command field must fail OPEN (exit 0, no output), not crash.
+        for payload in (
+            {"tool_name": "Write", "tool_input": {"file_path": ["not", "a", "string"]}, "cwd": "/repo"},
+            {"tool_name": "Bash", "tool_input": {"command": 42}, "cwd": "/repo"},
+        ):
+            rc, out = _run(payload)
+            self.assertEqual((rc, out.strip()), (0, ""), f"non-string field must defer: {payload!r}")
+
     def test_nul_byte_does_not_crash_or_suppress_sibling(self):
         # A NUL byte in one segment used to raise ValueError out of realpath (uncaught) → non-zero exit
         # → under fail-open the whole compound command ran, disarming the guard. Now the NUL segment is
