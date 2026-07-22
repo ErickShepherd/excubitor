@@ -7,11 +7,9 @@ which pre-tool registrations it merges. Discovery resolves those templates into 
 only reports what exists.
 
 Only Claude Code is modeled. The artifact set is the four shipped guard scripts plus their telemetry
-helper, sourced from the single canonical copy under the repo's ``hooks/`` directory (or an override).
-Bundling those artifacts *inside a distributed native plugin* is a later campaign's job
-(``docs/design/installable-multi-runtime-distribution.md`` assigns the marketplace plugin to Campaign
-3); Campaign 2's installer transaction is proven here against isolated test homes using the real guard
-scripts as the staged artifacts.
+helper. Source checkouts read the single canonical copy under ``hooks/``; wheel, sdist, and zipapp
+builds carry exact-byte package resources generated from those same files, so installed artifacts do
+not depend on a repository sibling directory and do not fork policy implementation.
 
 Nothing in this module mutates the filesystem. It resolves paths and reads artifact bytes so a plan can
 be computed; the actual staging/registration is the transaction layer's job.
@@ -19,7 +17,12 @@ be computed; the actual staging/registration is the transaction layer's job.
 from __future__ import annotations
 
 import hashlib
+import importlib.resources
 import os
+import shlex
+import stat
+import subprocess
+import sys
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -106,17 +109,55 @@ _UNREGISTERED_ARTIFACTS: "tuple[str, ...]" = ("_denial_log.py",)
 def _artifacts_source() -> Path:
     """Resolve the directory holding the canonical guard scripts.
 
-    Order: the ``EXCUBITOR_ARTIFACTS_DIR`` override (tests / a future bundled location), then the repo's
-    ``hooks/`` directory relative to the installed package (present in a source checkout). Raising here
+    Order: the ``EXCUBITOR_ARTIFACTS_DIR`` override (tests), then the repo's ``hooks/`` directory relative
+    to the installed package (present in a source checkout). Packaged resources are checked separately.
+    Raising here
     is correct: an install with no artifact source cannot proceed, and a silent empty stage would be a
-    worse failure than a precise error. Distributing these artifacts inside a native plugin is Campaign
-    3's job.
+    worse failure than a precise error.
     """
     override = os.environ.get("EXCUBITOR_ARTIFACTS_DIR")
     if override:
         return Path(override)
     repo_hooks = Path(excubitor.__file__).resolve().parent.parent / "hooks"
     return repo_hooks
+
+
+def _packaged_artifact(name: str) -> "bytes | None":
+    """Read a guard bundled inside the distribution, including directly from a zipapp."""
+    resource = importlib.resources.files("excubitor").joinpath("_artifacts", name)
+    try:
+        return resource.read_bytes()
+    except (FileNotFoundError, IsADirectoryError, OSError):
+        return None
+
+
+def _validated_interpreter() -> str:
+    """Return the current distribution's real, executable Python interpreter."""
+    try:
+        interpreter = Path(sys.executable).resolve(strict=True)
+        mode = interpreter.stat().st_mode
+    except (OSError, RuntimeError) as exc:
+        raise RuntimeError(f"cannot resolve the Python interpreter for hook registration: {exc}") from exc
+    if not stat.S_ISREG(mode) or (os.name != "nt" and not os.access(interpreter, os.X_OK)):
+        raise RuntimeError(f"Python interpreter is not an executable regular file: {interpreter}")
+    return str(interpreter)
+
+
+def _installed_python_path() -> str:
+    """Path that makes the installed core importable by a separately staged guard script."""
+    package_file = str(excubitor.__file__)
+    marker = ".pyz" + os.sep
+    if marker in package_file:
+        return package_file.split(marker, 1)[0] + ".pyz"
+    return str(Path(package_file).resolve().parent.parent)
+
+
+def _registration_command(script: Path) -> str:
+    args = [_validated_interpreter(), str(Path(os.path.abspath(script)))]
+    python_path = _installed_python_path()
+    if os.name == "nt":
+        return f'set "PYTHONPATH={python_path}" && {subprocess.list2cmdline(args)}'
+    return f"PYTHONPATH={shlex.quote(python_path)} {shlex.join(args)}"
 
 
 @dataclass(frozen=True)
@@ -167,10 +208,13 @@ class RuntimeProfile:
         names = sorted({s for s, _ in _GUARD_REGISTRATIONS} | set(_UNREGISTERED_ARTIFACTS))
         out: "list[Artifact]" = []
         for name in names:
-            path = source / name
-            if not path.is_file():
-                raise FileNotFoundError(f"install artifact not found: {path}")
-            out.append(Artifact(basename=name, content=path.read_bytes()))
+            content = _packaged_artifact(name)
+            if content is None:
+                path = source / name
+                if not path.is_file():
+                    raise FileNotFoundError(f"install artifact not found: {path}")
+                content = path.read_bytes()
+            out.append(Artifact(basename=name, content=content))
         return out
 
     def registrations(self, target: RuntimeTarget) -> "list[Registration]":
@@ -183,7 +227,7 @@ class RuntimeProfile:
         """
         out: "list[Registration]" = []
         for script, matcher in _GUARD_REGISTRATIONS:
-            command = f'python3 "{target.hooks_dir / script}"'
+            command = _registration_command(target.hooks_dir / script)
             out.append(Registration(script=script, matcher=matcher, command=command))
         return out
 

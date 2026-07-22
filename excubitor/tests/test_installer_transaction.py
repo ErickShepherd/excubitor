@@ -15,7 +15,8 @@ import pytest
 from excubitor.installers import receipts as receipts_mod
 from excubitor.installers import runtime as rt
 from excubitor.installers import transaction as tx
-from excubitor.installers.receipts import Receipt
+from excubitor.installers.plan import build_install_plan
+from excubitor.installers.receipts import Receipt, receipt_path
 
 
 @pytest.fixture
@@ -162,20 +163,18 @@ def test_recovery_rolls_back_an_interrupted_transaction(env) -> None:
     partial = hooks / "guard-loop-vc.py"
     partial.write_text("# half-written\n")
     settings_path.write_text('{"model": "x", "hooks": {"PreToolUse": [{"matcher": "Bash"}]}}')
-    import base64
-
-    journal = {
-        "runtime": "claude-code", "scope": "user",
-        "settings_path": str(settings_path),
-        "settings_backup": base64.b64encode(prior.encode()).decode(),
-        "file_backups": {str(partial): None},  # None = we created it → rollback deletes it
-        "created_at": "t",
-    }
+    plan = build_install_plan(rt.CLAUDE_CODE, target)
+    backups = {a.target_path: None for a in plan.staged_files}
+    journal = tx._journal_bytes(
+        operation="install", runtime="claude-code", scope="user", settings_path=settings_path,
+        settings_backup=prior.encode(), receipt_file=receipt_path("claude-code", "user"),
+        receipt_backup=None, file_backups=backups, now="t",
+    )
     jpath = state / "journals" / "claude-code-user.json"
     jpath.parent.mkdir(parents=True)
-    jpath.write_text(json.dumps(journal))
+    jpath.write_bytes(journal)
 
-    assert tx.recover("claude-code", "user") is True
+    assert tx.recover("claude-code", "user", profile=rt.CLAUDE_CODE, target=target, plan=plan) is True
     assert settings_path.read_text() == prior  # settings restored verbatim
     assert not partial.exists()  # the partially-staged file removed
     assert not jpath.exists()  # journal cleared
@@ -187,10 +186,12 @@ def test_apply_recovers_before_installing(env) -> None:
     jpath = state / "journals" / "claude-code-user.json"
     jpath.parent.mkdir(parents=True)
     settings_path = home / ".claude" / "settings.json"
-    jpath.write_text(json.dumps({
-        "runtime": "claude-code", "scope": "user", "settings_path": str(settings_path),
-        "settings_backup": None, "file_backups": {}, "created_at": "t",
-    }))
+    plan = build_install_plan(rt.CLAUDE_CODE, target)
+    jpath.write_bytes(tx._journal_bytes(
+        operation="install", runtime="claude-code", scope="user", settings_path=settings_path,
+        settings_backup=None, receipt_file=receipt_path("claude-code", "user"),
+        receipt_backup=None, file_backups={a.target_path: None for a in plan.staged_files}, now="t",
+    ))
     _install(target)
     assert not jpath.exists()  # recovered, then a clean install committed
     assert (state / "receipts" / "claude-code-user.json").exists()

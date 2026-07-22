@@ -31,10 +31,16 @@ def _install(target, **kw):
     return tx.apply_install(rt.CLAUDE_CODE, target, **kw)
 
 
+def _uninstall(target, **kw):
+    return tx.apply_uninstall(
+        "claude-code", "user", profile=rt.CLAUDE_CODE, target=target, **kw
+    )
+
+
 def test_uninstall_removes_owned_files_and_registrations(env) -> None:
     home, state, target = env
     _install(target)
-    result = tx.apply_uninstall("claude-code", "user")
+    result = _uninstall(target)
     assert result.found
     assert len(result.removed_files) == 5
     assert result.removed_registrations == 4
@@ -62,7 +68,7 @@ def test_roundtrip_preserves_unrelated_config_byte_for_byte(env) -> None:
 
     _install(target)
     assert settings_path.read_bytes() != before  # our entries were added
-    tx.apply_uninstall("claude-code", "user")
+    _uninstall(target)
     assert settings_path.read_bytes() == before  # …and removing them restores the exact prior bytes
 
 
@@ -72,7 +78,7 @@ def test_uninstall_deletes_a_settings_file_it_created(env) -> None:
     assert not settings_path.exists()
     _install(target)
     assert settings_path.exists()  # install created it
-    tx.apply_uninstall("claude-code", "user")
+    _uninstall(target)
     assert not settings_path.exists()  # uninstall restores 'absent'
 
 
@@ -84,7 +90,7 @@ def test_uninstall_preserves_a_created_settings_file_with_user_content(env) -> N
     data = json.loads(settings_path.read_text())
     data["model"] = "sonnet"  # user edits the file we created
     settings_path.write_text(json.dumps(data, indent=2) + "\n")
-    tx.apply_uninstall("claude-code", "user")
+    _uninstall(target)
     assert settings_path.exists()
     after = json.loads(settings_path.read_text())
     assert after == {"model": "sonnet", "hooks": {"PreToolUse": []}}
@@ -95,13 +101,14 @@ def test_drifted_owned_file_is_preserved_not_removed(env) -> None:
     _install(target)
     guard = home / ".claude" / "hooks" / "guard-loop-vc.py"
     guard.write_text("# user modified this after install\n")  # drift
-    result = tx.apply_uninstall("claude-code", "user")
+    result = _uninstall(target)
     assert guard.exists()  # not ours to remove — bytes changed
     assert str(guard) in result.preserved_drifted
 
 
 def test_uninstall_of_nothing_is_a_clean_noop(env) -> None:
-    result = tx.apply_uninstall("claude-code", "user")
+    _home, _state, target = env
+    result = _uninstall(target)
     assert result.found is False
 
 
@@ -109,7 +116,7 @@ def test_dry_run_uninstall_writes_nothing(env) -> None:
     home, state, target = env
     _install(target)
     settings_bytes = (home / ".claude" / "settings.json").read_bytes()
-    result = tx.apply_uninstall("claude-code", "user", dry_run=True)
+    result = _uninstall(target, dry_run=True)
     assert result.dry_run and result.found
     assert len(result.removed_files) == 5
     # Nothing was actually removed.
@@ -125,15 +132,17 @@ def test_uninstall_leaves_user_pretooluse_hook_in_place(env) -> None:
     user_entry = {"matcher": "Bash", "hooks": [{"type": "command", "command": "echo mine"}]}
     settings_path.write_text(json.dumps({"hooks": {"PreToolUse": [user_entry]}}, indent=2) + "\n")
     _install(target)
-    tx.apply_uninstall("claude-code", "user")
+    _uninstall(target)
     after = json.loads(settings_path.read_text())
     assert user_entry in after["hooks"]["PreToolUse"]
 
 
 def test_cli_uninstall(env, capsys) -> None:
-    _home, _state, target = env
+    home, _state, target = env
     _install(target)
-    code = cli_main(["uninstall", "--runtime", "claude-code", "--scope", "user"])
+    code = cli_main([
+        "uninstall", "--runtime", "claude-code", "--scope", "user", "--home", str(home)
+    ])
     out = capsys.readouterr().out
     assert code == 0
     assert "removed 5 file(s), 4 registration(s)" in out

@@ -142,18 +142,33 @@ class Receipt:
 
     @classmethod
     def from_dict(cls, d: dict) -> "Receipt":
+        if not isinstance(d, dict):
+            raise ValueError("receipt root is not an object")
         if d.get("schema") != RECEIPT_SCHEMA:
             raise ValueError(f"unrecognized receipt schema {d.get('schema')!r}")
+        required = {
+            "schema", "runtime", "scope", "settings_path", "excubitor_version", "installed_at",
+            "settings_preexisted", "files", "registrations",
+        }
+        if set(d) != required:
+            raise ValueError("receipt has an invalid field set")
+        for name in ("runtime", "scope", "settings_path", "excubitor_version", "installed_at"):
+            if not isinstance(d[name], str):
+                raise ValueError(f"receipt field {name} is not a string")
+        if not isinstance(d["settings_preexisted"], bool):
+            raise ValueError("receipt field settings_preexisted is not a boolean")
+        if not isinstance(d["files"], list) or not isinstance(d["registrations"], list):
+            raise ValueError("receipt files and registrations must be lists")
         return cls(
-            runtime=str(d["runtime"]),
-            scope=str(d["scope"]),
-            settings_path=str(d["settings_path"]),
-            excubitor_version=str(d.get("excubitor_version", "")),
-            installed_at=str(d.get("installed_at", "")),
-            files=tuple(OwnedFile.from_dict(f) for f in d.get("files", [])),
-            registrations=tuple(OwnedRegistration.from_dict(r) for r in d.get("registrations", [])),
-            settings_preexisted=bool(d.get("settings_preexisted", True)),
-            schema=str(d["schema"]),
+            runtime=d["runtime"],
+            scope=d["scope"],
+            settings_path=d["settings_path"],
+            excubitor_version=d["excubitor_version"],
+            installed_at=d["installed_at"],
+            files=tuple(OwnedFile.from_dict(f) for f in d["files"]),
+            registrations=tuple(OwnedRegistration.from_dict(r) for r in d["registrations"]),
+            settings_preexisted=d["settings_preexisted"],
+            schema=d["schema"],
         )
 
     @classmethod

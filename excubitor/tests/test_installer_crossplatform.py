@@ -11,13 +11,15 @@ the macOS/Windows rows remain explicitly PENDING (a mock cannot substitute for a
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
 
 from excubitor.installers import runtime as rt
 from excubitor.installers import transaction as tx
-from excubitor.installers.receipts import Receipt
+from excubitor.installers.plan import build_install_plan
+from excubitor.installers.receipts import Receipt, receipt_path
 
 # Path shapes that trip up naive installers: a plain name, spaces, and non-ASCII characters.
 PATH_SHAPES = ["plain", "a home with spaces", "ünïcödé-家-мир"]
@@ -37,6 +39,12 @@ def _install(target, **kw):
     return tx.apply_install(rt.CLAUDE_CODE, target, **kw)
 
 
+def _uninstall(target, **kw):
+    return tx.apply_uninstall(
+        "claude-code", "user", profile=rt.CLAUDE_CODE, target=target, **kw
+    )
+
+
 # --- clean install across path shapes --------------------------------------------------------------
 
 def test_clean_install(env) -> None:
@@ -49,15 +57,17 @@ def test_clean_install(env) -> None:
         assert Receipt.hash_file(owned.path) == owned.sha256  # hash-bound even through odd paths
 
 
-def test_registration_command_quotes_the_path(env) -> None:
+def test_exact_registered_command_executes(env) -> None:
     home, _state, target = env
     _install(target)
     settings = json.loads((home / ".claude" / "settings.json").read_text())
     for entry in settings["hooks"]["PreToolUse"]:
         for handler in entry["hooks"]:
-            # The staged script path is double-quoted, so spaces/non-ASCII don't split the command.
-            assert handler["command"].startswith('python3 "')
-            assert handler["command"].endswith('.py"')
+            completed = subprocess.run(
+                handler["command"], shell=True, input="{}\n", text=True,
+                capture_output=True, timeout=30,
+            )
+            assert completed.returncode == 0, completed.stderr
 
 
 def test_repeat_install_is_idempotent(env) -> None:
@@ -78,7 +88,7 @@ def test_uninstall_roundtrip_is_byte_for_byte(env) -> None:
     settings_path.write_text(original, encoding="utf-8")
     before = settings_path.read_bytes()
     _install(target)
-    tx.apply_uninstall("claude-code", "user")
+    _uninstall(target)
     assert settings_path.read_bytes() == before
 
 
@@ -142,11 +152,13 @@ def test_interrupted_operation_recovers(env) -> None:
     # A leftover journal (crash mid-transaction) is recovered at the next apply.
     jpath = state / "journals" / "claude-code-user.json"
     jpath.parent.mkdir(parents=True)
-    jpath.write_text(json.dumps({
-        "runtime": "claude-code", "scope": "user",
-        "settings_path": str(home / ".claude" / "settings.json"),
-        "settings_backup": None, "file_backups": {}, "created_at": "t",
-    }))
+    plan = build_install_plan(rt.CLAUDE_CODE, target)
+    jpath.write_bytes(tx._journal_bytes(
+        operation="install", runtime="claude-code", scope="user",
+        settings_path=home / ".claude" / "settings.json", settings_backup=None,
+        receipt_file=receipt_path("claude-code", "user"), receipt_backup=None,
+        file_backups={a.target_path: None for a in plan.staged_files}, now="t",
+    ))
     _install(target)
     assert not jpath.exists()
     assert (state / "receipts" / "claude-code-user.json").exists()

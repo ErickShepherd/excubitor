@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from pathlib import Path
 
 from excubitor.installers import runtime as rt
 from excubitor.installers import transaction
@@ -25,19 +26,29 @@ def register(subparsers: "argparse._SubParsersAction") -> None:
     )
     parser.add_argument("--runtime", default="claude-code")
     parser.add_argument("--scope", choices=[s.value for s in rt.Scope], default=rt.Scope.USER.value)
+    parser.add_argument("--home", type=Path, default=None,
+                        help="home directory for USER scope (default: the current user's home)")
+    parser.add_argument("--project-root", type=Path, default=None,
+                        help="project root for PROJECT scope (default: current directory)")
     parser.add_argument("--dry-run", action="store_true", help="preview what would be removed; write nothing")
     parser.set_defaults(_handler=run)
 
 
 def run(args: argparse.Namespace) -> int:
     try:
-        rt.profile_for(args.runtime)
+        profile = rt.profile_for(args.runtime)
     except KeyError as exc:
         print(f"excubitor uninstall: {exc}", file=sys.stderr)
         return 2
 
     try:
-        result = transaction.apply_uninstall(args.runtime, args.scope, dry_run=args.dry_run)
+        scope = rt.Scope(args.scope)
+        home = args.home if args.home is not None else Path.home()
+        project_root = args.project_root if args.project_root is not None else Path.cwd()
+        target = profile.target(scope, home, project_root)
+        result = transaction.apply_uninstall(
+            args.runtime, args.scope, dry_run=args.dry_run, profile=profile, target=target
+        )
     except transaction.TransactionError as exc:
         print(f"excubitor uninstall: {exc}", file=sys.stderr)
         return 1
