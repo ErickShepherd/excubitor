@@ -25,6 +25,7 @@ prior file verbatim from the journal regardless of formatting.
 from __future__ import annotations
 
 import base64
+import binascii
 import hashlib
 import json
 from dataclasses import dataclass
@@ -123,7 +124,12 @@ def _b64(data: "bytes | None") -> "str | None":
 
 
 def _unb64(text: "str | None") -> "bytes | None":
-    return None if text is None else base64.b64decode(text.encode("ascii"))
+    if text is None:
+        return None
+    try:
+        return base64.b64decode(text.encode("ascii"), validate=True)
+    except (UnicodeEncodeError, binascii.Error) as exc:
+        raise ValueError("invalid base64 backup data") from exc
 
 
 def _read_bytes_or_none(path: Path, root: "Path | None" = None) -> "bytes | None":

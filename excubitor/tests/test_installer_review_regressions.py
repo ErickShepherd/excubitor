@@ -166,6 +166,37 @@ def test_invalid_journal_fails_closed_without_mutation(env, contents: bytes) -> 
     assert jpath.read_bytes() == contents
 
 
+@pytest.mark.parametrize("field", ["settings_backup", "receipt_backup", "file_backup"])
+def test_invalid_base64_journal_backup_is_retained_without_mutation(env, field: str) -> None:
+    home, state, target = env
+    plan = build_install_plan(rt.CLAUDE_CODE, target)
+    settings = target.settings_path
+    settings.parent.mkdir(parents=True)
+    settings.write_bytes(b'{"model": "user-state"}\n')
+    file_backups = {a.target_path: None for a in plan.staged_files}
+    journal = json.loads(tx._journal_bytes(
+        operation="install", runtime="claude-code", scope="user",
+        settings_path=settings, settings_backup=settings.read_bytes(),
+        receipt_file=state / "receipts" / "claude-code-user.json", receipt_backup=None,
+        file_backups=file_backups, now="t",
+    ))
+    if field == "file_backup":
+        journal["file_backups"][next(iter(journal["file_backups"]))] = "@@@"
+    else:
+        journal[field] = "@@@"
+    jpath = state / "journals" / "claude-code-user.json"
+    jpath.parent.mkdir(parents=True)
+    original = (json.dumps(journal, sort_keys=True) + "\n").encode()
+    jpath.write_bytes(original)
+    before = tree_bytes(home)
+
+    with pytest.raises(tx.RecoveryError, match="invalid backup data"):
+        tx.recover("claude-code", "user", profile=rt.CLAUDE_CODE, target=target, plan=plan)
+
+    assert tree_bytes(home) == before
+    assert jpath.read_bytes() == original
+
+
 def test_symlinked_hooks_directory_cannot_redirect_writes(env) -> None:
     home, state, target = env
     external = home.parent / "external"
