@@ -17,7 +17,8 @@ for this repo:
 
 The metadata is read from `pyproject.toml` (via `tomllib`) and the version from `excubitor.__version__`
 so this producer can never drift from the standard setuptools path declared in `pyproject.toml`. The
-distribution contains the importable `excubitor` package only — never its tests.
+distribution contains the importable package plus exact-byte guard resources generated from the
+canonical `hooks/` entry points — never its tests.
 
 CLI: `python packaging/build.py [wheel|sdist|pyz|all] [--outdir dist]`.
 """
@@ -36,6 +37,13 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 PACKAGE = "excubitor"
+GUARD_NAMES = (
+    "_denial_log.py",
+    "guard-default-branch.py",
+    "guard-loop-vc.py",
+    "guard-one-unit.py",
+    "guard-self-integrity.py",
+)
 
 #: Default pinned timestamp: 1980-01-01T00:00:00Z, the earliest a ZIP local-file header can represent.
 #: Overridable with the `SOURCE_DATE_EPOCH` environment variable (the reproducible-builds convention).
@@ -108,6 +116,15 @@ def package_files() -> "list[Path]":
     root = PROJECT_ROOT / PACKAGE
     files = [p for p in root.rglob("*") if p.is_file() and _is_shippable(p)]
     return sorted(files, key=lambda p: p.relative_to(PROJECT_ROOT).as_posix())
+
+
+def package_members() -> "list[tuple[str, bytes]]":
+    """Canonical package sources plus exact-byte guard resources from the single ``hooks/`` source."""
+    members = [(p.relative_to(PROJECT_ROOT).as_posix(), p.read_bytes()) for p in package_files()]
+    for name in GUARD_NAMES:
+        source = PROJECT_ROOT / "hooks" / name
+        members.append((f"excubitor/_artifacts/{name}", source.read_bytes()))
+    return sorted(members, key=lambda item: item[0])
 
 
 def _metadata_body(meta: dict) -> str:
@@ -191,9 +208,7 @@ def build_wheel(outdir: Path) -> Path:
 
     # Collect (arcname, bytes) for every member except RECORD, in deterministic order.
     members: "list[tuple[str, bytes]]" = []
-    for path in package_files():
-        arcname = path.relative_to(PROJECT_ROOT).as_posix()
-        members.append((arcname, path.read_bytes()))
+    members.extend(package_members())
     members.append((f"{dist_info}/METADATA", _metadata_body(meta).encode("utf-8")))
     members.append((f"{dist_info}/WHEEL", _wheel_metadata().encode("utf-8")))
     members.append((f"{dist_info}/entry_points.txt", _entry_points_txt(meta).encode("utf-8")))
@@ -242,9 +257,8 @@ def build_sdist(outdir: Path) -> Path:
         if source.exists():
             members.append((f"{prefix}/{rel}", source.read_bytes()))
     members.append((f"{prefix}/PKG-INFO", _metadata_body(meta).encode("utf-8")))
-    for path in package_files():
-        arcname = f"{prefix}/{path.relative_to(PROJECT_ROOT).as_posix()}"
-        members.append((arcname, path.read_bytes()))
+    for arcname, data in package_members():
+        members.append((f"{prefix}/{arcname}", data))
     members.sort(key=lambda m: m[0])
 
     # Build the tar in memory, then gzip it with a pinned header (mtime=0, no name) for determinism.
@@ -277,9 +291,7 @@ def build_pyz(outdir: Path) -> Path:
     # only borrow zipapp's __main__ convention).
     main_shim = "import excubitor.cli\nimport sys\nsys.exit(excubitor.cli.main())\n"
     members: "list[tuple[str, bytes]]" = [("__main__.py", main_shim.encode("utf-8"))]
-    for path in package_files():
-        arcname = path.relative_to(PROJECT_ROOT).as_posix()
-        members.append((arcname, path.read_bytes()))
+    members.extend(package_members())
     members.sort(key=lambda m: m[0])
 
     tmp = pyz_path.with_suffix(".pyz.tmp")

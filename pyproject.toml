@@ -7,9 +7,9 @@
 #      backend at all (so the reproducibility and offline-install tests run in the stdlib-only CI
 #      gate). It reads the metadata here through `tomllib` and the version through the package.
 #
-# The distribution ships the importable `excubitor` package only (core + adapters + cli + installers).
-# The Claude Code hook entry points, skills, and native plugins are bundled by later campaigns; this
-# campaign is the package + transactional-installer foundation, not the plugin.
+# The distribution ships the importable package plus exact-byte resources for the canonical Claude
+# guard entry points. Native plugins remain later-campaign work; these resources make the Campaign 2
+# CLI usable from wheel, sdist, and zipapp without duplicating policy logic.
 
 [build-system]
 requires = ["setuptools>=61"]
@@ -63,6 +63,9 @@ version = { attr = "excubitor.__version__" }
 include = ["excubitor*"]
 exclude = ["excubitor.tests", "excubitor.tests.*"]
 namespaces = false
+
+[tool.setuptools.package-data]
+excubitor = ["_artifacts/*.py"]
 
 [tool.ruff]
 line-length = 110

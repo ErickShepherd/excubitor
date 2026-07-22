@@ -7,6 +7,8 @@ offline install smoke test (fresh venv, `--no-index` install, run the installed 
 from __future__ import annotations
 
 import hashlib
+import json
+import os
 import subprocess
 import sys
 import tarfile
@@ -100,6 +102,14 @@ def test_wheel_excludes_tests_and_bytecode(tmp_path: Path) -> None:
     assert "excubitor/core/dispatch.py" in names
 
 
+def test_wheel_bundles_canonical_guard_bytes(tmp_path: Path) -> None:
+    wheel = builder.build_wheel(tmp_path)
+    with zipfile.ZipFile(wheel) as zf:
+        for name in builder.GUARD_NAMES:
+            expected = (builder.PROJECT_ROOT / "hooks" / name).read_bytes()
+            assert zf.read(f"excubitor/_artifacts/{name}") == expected
+
+
 def test_sdist_contains_sources_and_pyproject(tmp_path: Path) -> None:
     sdist = builder.build_sdist(tmp_path)
     prefix = f"excubitor-{VERSION}"
@@ -108,6 +118,44 @@ def test_sdist_contains_sources_and_pyproject(tmp_path: Path) -> None:
     for required in ("pyproject.toml", "PKG-INFO", "README.md", "LICENSE", "excubitor/__init__.py"):
         assert f"{prefix}/{required}" in names
     assert not any("/tests/" in n for n in names)
+
+
+@pytest.mark.slow
+def test_isolated_wheel_installer_lifecycle(tmp_path: Path) -> None:
+    wheel = builder.build_wheel(tmp_path / "dist")
+    venv_dir = tmp_path / "venv"
+    subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=True, timeout=120)
+    bindir = venv_dir / ("Scripts" if sys.platform == "win32" else "bin")
+    pip = bindir / ("pip.exe" if sys.platform == "win32" else "pip")
+    exe = bindir / ("excubitor.exe" if sys.platform == "win32" else "excubitor")
+    subprocess.run([str(pip), "install", "--no-index", "--no-deps", str(wheel)], check=True, timeout=180)
+    home, state = tmp_path / "home", tmp_path / "state"
+    home.mkdir()
+    env = {**os.environ, "EXCUBITOR_STATE_HOME": str(state)}
+    dry = subprocess.run(
+        [str(exe), "install", "--runtime", "claude-code", "--home", str(home), "--dry-run"],
+        env=env, capture_output=True, text=True, timeout=60,
+    )
+    assert dry.returncode == 0, dry.stderr
+    assert not (home / ".claude").exists()
+    install = subprocess.run(
+        [str(exe), "install", "--runtime", "claude-code", "--home", str(home)],
+        env=env, capture_output=True, text=True, timeout=60,
+    )
+    assert install.returncode == 0, install.stderr
+    doctor = subprocess.run(
+        [str(exe), "doctor", "--runtime", "claude-code", "--scope", "user", "--probe", "--json"],
+        env=env, capture_output=True, text=True, timeout=60,
+    )
+    assert doctor.returncode == 0, doctor.stderr
+    assert json.loads(doctor.stdout)["protection"] == "needs-probe"
+    remove = subprocess.run(
+        [str(exe), "uninstall", "--runtime", "claude-code", "--scope", "user", "--home", str(home)],
+        env=env, capture_output=True, text=True, timeout=60,
+    )
+    assert remove.returncode == 0, remove.stderr
+    assert not (state / "receipts" / "claude-code-user.json").exists()
+    assert not (home / ".claude" / "settings.json").exists()
 
 
 @pytest.mark.slow

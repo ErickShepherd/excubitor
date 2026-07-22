@@ -48,6 +48,14 @@ def test_pyz_built_from_same_source_as_wheel(tmp_path: Path) -> None:
     assert pyz_pkg == wheel_pkg  # identical package source in both artifacts
 
 
+def test_pyz_bundles_canonical_guard_bytes(tmp_path: Path) -> None:
+    pyz = builder.build_pyz(tmp_path)
+    with zipfile.ZipFile(pyz) as zf:
+        for name in builder.GUARD_NAMES:
+            expected = (builder.PROJECT_ROOT / "hooks" / name).read_bytes()
+            assert zf.read(f"excubitor/_artifacts/{name}") == expected
+
+
 def test_pyz_is_stdlib_only_and_excludes_tests(tmp_path: Path) -> None:
     members = _pyz_members(builder.build_pyz(tmp_path))
     assert "__main__.py" in members
@@ -83,4 +91,28 @@ def test_pyz_carries_the_full_cli(tmp_path: Path) -> None:
     assert result.returncode == 0
     data = json.loads(result.stdout)
     assert data["schema"] == "excubitor.status.v1"
-    assert data["supported_runtimes"] == ["claude-code"]
+    assert data["supported_runtimes"] == []
+    assert data["available_adapters"] == ["claude-code"]
+
+
+@pytest.mark.slow
+def test_pyz_installer_lifecycle(tmp_path: Path) -> None:
+    pyz = builder.build_pyz(tmp_path / "dist")
+    import os
+
+    home, state = tmp_path / "home", tmp_path / "state"
+    home.mkdir()
+    env = {**os.environ, "EXCUBITOR_STATE_HOME": str(state)}
+    base = [sys.executable, str(pyz), "install", "--runtime", "claude-code", "--home", str(home)]
+    dry = subprocess.run([*base, "--dry-run"], env=env, capture_output=True, text=True, timeout=60)
+    assert dry.returncode == 0, dry.stderr
+    assert not (home / ".claude").exists()
+    applied = subprocess.run(base, env=env, capture_output=True, text=True, timeout=60)
+    assert applied.returncode == 0, applied.stderr
+    removed = subprocess.run(
+        [sys.executable, str(pyz), "uninstall", "--runtime", "claude-code", "--scope", "user",
+         "--home", str(home)],
+        env=env, capture_output=True, text=True, timeout=60,
+    )
+    assert removed.returncode == 0, removed.stderr
+    assert not (home / ".claude" / "settings.json").exists()
