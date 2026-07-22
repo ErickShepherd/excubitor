@@ -26,6 +26,13 @@ from __future__ import annotations
 import json
 import os
 import sys
+import threading
+
+# Outer bound on the WHOLE telemetry step (module load + record). record() time-bounds its own write
+# thread (~1.0s); this covers the module LOAD too, which is filesystem I/O and would otherwise run
+# unbounded on the main thread. Comfortably under any hook timeout, and >record()'s internal bound so a
+# healthy write is never cut short.
+_DENIAL_TELEMETRY_TIMEOUT_S = 2.0
 
 
 def read_payload() -> "dict | None":
@@ -71,16 +78,31 @@ def emit_deny(reason: str, guard_name: str, payload: dict, denial_log_dir: str) 
 def _record_denial(guard_name: str, reason: str, payload: dict, denial_log_dir: str) -> None:
     """Best-effort denial telemetry via the sibling `_denial_log.py` in `denial_log_dir`. ANY fault —
     module missing (a guard copied with no sibling), unwritable log, anything — is swallowed: the deny
-    already flushed to stdout must never be affected."""
-    try:
-        import importlib.util
+    already flushed to stdout must never be affected.
 
-        mod_path = os.path.join(denial_log_dir, "_denial_log.py")
-        spec = importlib.util.spec_from_file_location("_denial_log", mod_path)
-        if spec is None or spec.loader is None:
-            return
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-        mod.record(guard_name, reason, payload)
+    The module LOAD (spec_from_file_location + exec_module) is filesystem I/O, and it used to run on the
+    MAIN thread before record()'s bounded write thread even existed — so a hooks dir on a hung mount would
+    block this process past the hook timeout (which fails OPEN and lets the fenced call run). Load AND
+    record now run inside one abandonable daemon thread with the same bounded-join posture as the write:
+    if the load hangs, it is abandoned and this process still exits with the deny it already flushed."""
+
+    def _load_and_record() -> None:
+        try:
+            import importlib.util
+
+            mod_path = os.path.join(denial_log_dir, "_denial_log.py")
+            spec = importlib.util.spec_from_file_location("_denial_log", mod_path)
+            if spec is None or spec.loader is None:
+                return
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            mod.record(guard_name, reason, payload)
+        except Exception:
+            pass
+
+    try:
+        worker = threading.Thread(target=_load_and_record, daemon=True)
+        worker.start()
+        worker.join(_DENIAL_TELEMETRY_TIMEOUT_S)
     except Exception:
         pass
