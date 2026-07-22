@@ -5,7 +5,8 @@ guard file and a settings registration mean an install *happened*, not that enfo
 is only established by a real harmless-denial host probe (C2.8/C2.9). So every installation reports a
 ``protection`` verdict that comes from the recorded probe result, defaulting to ``needs-probe`` until a
 probe has actually succeeded on a real host. Files present with no probe is ``needs-probe``, never
-``protected``.
+``protected``. Campaign 2 has no trusted producer for that evidence, so even a hand-written
+``state=protected`` v1 record is rejected as invalid evidence and resolves to ``needs-probe``.
 
 The output is a plain dict with a schema marker so the ``--json`` form is stable and machine-readable.
 """
@@ -22,6 +23,7 @@ __all__ = [
     "STATUS_SCHEMA",
     "PROBE_SCHEMA",
     "SUPPORTED_RUNTIMES",
+    "AVAILABLE_ADAPTERS",
     "DESIGNED_NOT_SUPPORTED",
     "probe_path",
     "read_probe_state",
@@ -31,8 +33,10 @@ __all__ = [
 STATUS_SCHEMA = "excubitor.status.v1"
 PROBE_SCHEMA = "excubitor.probe.v1"
 
-#: Runtimes with real, shipped enforcement today. Only Claude Code — the others are designed, not built.
-SUPPORTED_RUNTIMES = ("claude-code",)
+#: Campaign 2 has an installable Claude Code adapter foundation but no real-host witness, so no runtime
+#: has earned the project's "supported enforcement" claim yet.
+AVAILABLE_ADAPTERS = ("claude-code",)
+SUPPORTED_RUNTIMES: tuple[str, ...] = ()
 #: Runtimes designed in docs/design but NOT supported (no built adapter, no host probe). Reported
 #: honestly so `status` never implies coverage the code does not have.
 DESIGNED_NOT_SUPPORTED = ("codex", "gemini-cli", "github-copilot")
@@ -58,8 +62,15 @@ def read_probe_state(runtime: str, scope: str, state_home: "str | None" = None,
         return {"state": "needs-probe", "at": None, "detail": "no host probe has been recorded"}
     if not isinstance(data, dict) or data.get("schema") != PROBE_SCHEMA:
         return {"state": "needs-probe", "at": None, "detail": "unreadable probe record"}
-    return {"state": data.get("state", "needs-probe"), "at": data.get("at"),
-            "detail": data.get("detail")}
+    state = data.get("state")
+    if state == "protected":
+        return {
+            "state": "needs-probe", "at": data.get("at"),
+            "detail": "invalid Campaign 2 evidence: protected requires a future versioned host witness",
+        }
+    if state not in {"needs-probe", "failed"}:
+        return {"state": "needs-probe", "at": data.get("at"), "detail": "invalid probe state"}
+    return {"state": state, "at": data.get("at"), "detail": data.get("detail")}
 
 
 def _file_dispositions(receipt: Receipt) -> dict:
@@ -79,8 +90,8 @@ def _installation_status(receipt: Receipt, state_home, environ) -> dict:
     probe = read_probe_state(receipt.runtime, receipt.scope, state_home, environ)
     # Protection verdict: ONLY a recorded successful probe yields "protected". Everything else — files
     # present, registrations intact, but no probe — is "needs-probe". Presence is never protection.
-    protection = "protected" if probe["state"] == "protected" else probe["state"]
-    if protection not in ("protected", "failed"):
+    protection = probe["state"]
+    if protection != "failed":
         protection = "needs-probe"
     return {
         "runtime": receipt.runtime,
@@ -111,6 +122,7 @@ def gather_status(state_home: "str | None" = None, environ: "dict[str, str] | No
         "excubitor_version": excubitor.__version__,
         "core_protocol": CORE_PROTOCOL,
         "supported_runtimes": list(SUPPORTED_RUNTIMES),
+        "available_adapters": list(AVAILABLE_ADAPTERS),
         "designed_not_supported": list(DESIGNED_NOT_SUPPORTED),
         "installations": installations,
     }

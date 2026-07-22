@@ -75,6 +75,13 @@ def test_malformed_policy_nesting_is_caught() -> None:
     assert "default_branch.opt_out_marker" in joined
 
 
+def test_unknown_policy_fields_are_rejected_as_likely_misspellings() -> None:
+    result = validate.validate_policy({"one_unitt": {"enabled": True}, "one_unit": {"enable": True}})
+    assert not result.ok
+    assert "one_unitt" in " ".join(result.problems)
+    assert "one_unit.enable" in " ".join(result.problems)
+
+
 # --- receipts: exact, hash-bound ownership ---------------------------------------------------------
 
 def _sample_receipt() -> Receipt:

@@ -60,7 +60,13 @@ def run(args: argparse.Namespace) -> int:
     project_root = args.project_root if args.project_root is not None else Path.cwd()
 
     # Validate the neutral policy before any mutation — an unknown version stops the install.
-    policy, _policy_path = config.load_policy_file(project_root if scope is rt.Scope.PROJECT else home)
+    try:
+        policy, _policy_path = config.load_policy_file(
+            project_root if scope is rt.Scope.PROJECT else home, strict=True
+        )
+    except config.PolicyFileError as exc:
+        print(f"excubitor install: policy error: {exc}", file=sys.stderr)
+        return 2
     policy_result = validate.validate_policy(policy)
     if not policy_result.ok:
         for problem in policy_result.problems:
@@ -109,6 +115,6 @@ def run(args: argparse.Namespace) -> int:
         status = "changed" if result.changed else "already current"
         print(f"installed {target.runtime}/{target.scope.value}: {status} "
               f"({', '.join(result.messages)})")
-        print("  NOT protected yet — run `excubitor doctor --probe` for a real harmless-denial "
-              "host probe (installation earns 'protected' only after that probe succeeds).")
+        print("  NOT protected — `excubitor doctor --probe` can run a hook diagnostic, but Campaign 2 "
+              "has no real-host witness and remains needs-probe.")
     return exit_code

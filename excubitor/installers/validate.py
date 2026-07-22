@@ -99,6 +99,10 @@ def validate_policy(policy: object) -> ValidationResult:
     if not isinstance(policy, dict):
         return ValidationResult((f"policy is not a table (got {type(policy).__name__})",))
 
+    allowed_root = {"version", "default_branch", "one_unit", "self_integrity"}
+    for field_name in sorted(set(policy) - allowed_root):
+        problems.append(f"unknown policy field {field_name!r} (possible misspelling)")
+
     version = policy.get("version", 1)
     if not isinstance(version, int) or version not in SUPPORTED_POLICY_VERSIONS:
         supported = sorted(SUPPORTED_POLICY_VERSIONS)
@@ -113,21 +117,29 @@ def validate_policy(policy: object) -> ValidationResult:
     if db is not None:
         if not isinstance(db, dict):
             problems.append(f"default_branch is not a table (got {type(db).__name__})")
-        elif "opt_out_marker" in db and not isinstance(db["opt_out_marker"], str):
-            problems.append("default_branch.opt_out_marker is not a string")
+        else:
+            for field_name in sorted(set(db) - {"opt_out_marker"}):
+                problems.append(f"unknown policy field default_branch.{field_name}")
+            if "opt_out_marker" in db and not isinstance(db["opt_out_marker"], str):
+                problems.append("default_branch.opt_out_marker is not a string")
 
     ou = policy.get("one_unit")
     if ou is not None:
         if not isinstance(ou, dict):
             problems.append(f"one_unit is not a table (got {type(ou).__name__})")
-        elif "enabled" in ou and not isinstance(ou["enabled"], bool):
-            problems.append("one_unit.enabled is not a boolean")
+        else:
+            for field_name in sorted(set(ou) - {"enabled"}):
+                problems.append(f"unknown policy field one_unit.{field_name}")
+            if "enabled" in ou and not isinstance(ou["enabled"], bool):
+                problems.append("one_unit.enabled is not a boolean")
 
     si = policy.get("self_integrity")
     if si is not None:
         if not isinstance(si, dict):
             problems.append(f"self_integrity is not a table (got {type(si).__name__})")
         else:
+            for field_name in sorted(set(si) - {"protected_roots"}):
+                problems.append(f"unknown policy field self_integrity.{field_name}")
             roots = si.get("protected_roots")
             if roots is not None and (
                 not isinstance(roots, list) or not all(isinstance(r, str) for r in roots)

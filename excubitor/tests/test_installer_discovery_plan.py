@@ -151,7 +151,8 @@ def test_cli_install_apply_creates_files_and_reports_unprotected(
     out = capsys.readouterr().out
     assert code == 0
     assert "installed claude-code/user" in out
-    assert "NOT protected yet" in out  # never claims protection without a real host probe
+    assert "NOT protected" in out  # never claims protection without a real host probe
+    assert "no real-host witness" in out
     assert (home / ".claude" / "hooks" / "guard-loop-vc.py").exists()
     assert (home / ".claude" / "settings.json").exists()
 
@@ -163,3 +164,19 @@ def test_cli_install_auto_reports_no_runtime_when_absent(tmp_path: Path, capsys)
     err = capsys.readouterr().err
     assert code == 1
     assert "no supported runtime detected" in err
+
+
+def test_cli_malformed_policy_writes_nothing(tmp_path: Path, capsys, monkeypatch) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    policy = home / ".excubitor" / "policy.toml"
+    policy.parent.mkdir()
+    policy.write_bytes(b"not = valid = [ toml")
+    state = tmp_path / "state"
+    monkeypatch.setenv("EXCUBITOR_STATE_HOME", str(state))
+    before = _snapshot(tmp_path)
+    code = cli_main(["install", "--runtime", "claude-code", "--home", str(home)])
+    assert code == 2
+    assert "policy error" in capsys.readouterr().err
+    assert _snapshot(tmp_path) == before
+    assert not state.exists()

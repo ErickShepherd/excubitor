@@ -20,7 +20,8 @@ from pathlib import Path
 
 import excubitor
 from excubitor import probe as probe_mod
-from excubitor.installers.receipts import Receipt, matcher_key, receipt_path
+from excubitor.installers.filesystem import absolute_path, atomic_write_bytes, ensure_contained_no_symlinks
+from excubitor.installers.receipts import Receipt, matcher_key, receipt_path, state_home_dir
 from excubitor.installers.status import PROBE_SCHEMA, probe_path
 
 __all__ = ["DOCTOR_SCHEMA", "run_doctor", "record_probe_state"]
@@ -82,11 +83,18 @@ def _staged_guard(receipt: Receipt, basename: str) -> "str | None":
 
 def record_probe_state(runtime: str, scope: str, state: str, detail: str,
                        state_home=None, environ=None, now: "str | None" = None) -> None:
-    """Persist a probe result so ``status`` reflects it. Written atomically-enough for a state file."""
+    """Persist only Campaign-2-honest states; ``protected`` requires a future witness schema."""
+    if state not in {"needs-probe", "failed"}:
+        raise ValueError(
+            f"Campaign 2 cannot record probe state {state!r}; protected requires a versioned host witness"
+        )
     path = probe_path(runtime, scope, state_home, environ)
-    path.parent.mkdir(parents=True, exist_ok=True)
+    root = absolute_path(state_home_dir(state_home, environ))
+    ensure_contained_no_symlinks(path, root, label="probe state path")
     record = {"schema": PROBE_SCHEMA, "state": state, "at": now or _now_iso(), "detail": detail}
-    path.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    atomic_write_bytes(
+        path, (json.dumps(record, indent=2, sort_keys=True) + "\n").encode("utf-8"), 0o600, root
+    )
 
 
 def run_doctor(runtime: str, scope: str, do_probe: bool = False, state_home: "str | None" = None,

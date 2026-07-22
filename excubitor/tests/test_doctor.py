@@ -55,6 +55,11 @@ def test_doctor_probe_records_state_reflected_by_status(installed) -> None:
     assert inst["protection"] == "needs-probe"
 
 
+def test_campaign2_api_cannot_record_protected(installed) -> None:
+    with pytest.raises(ValueError, match="cannot record probe state"):
+        doctor_mod.record_probe_state("claude-code", "user", "protected", "fabricated")
+
+
 def test_doctor_reports_drift_and_missing_registrations(installed) -> None:
     home, _state = installed
     # Tamper: drift a file and drop a registration from settings.

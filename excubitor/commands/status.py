@@ -35,7 +35,8 @@ def run(args: argparse.Namespace) -> int:
         return 0
 
     print(f"excubitor {data['excubitor_version']}  (core protocol {data['core_protocol']})")
-    print(f"supported runtimes:    {', '.join(data['supported_runtimes'])}")
+    print(f"verified enforcement:  {', '.join(data['supported_runtimes']) or 'none'}")
+    print(f"adapter foundations:   {', '.join(data['available_adapters'])}")
     print(f"designed, not built:   {', '.join(data['designed_not_supported'])}")
     if not data["installations"]:
         print("installations:         none")

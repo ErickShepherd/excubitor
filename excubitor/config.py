@@ -42,6 +42,7 @@ __all__ = [
     "ALLOW_DEFAULT_BRANCH_MARKERS",
     "Resolved",
     "Config",
+    "PolicyFileError",
     "load_policy_file",
     "resolve_loop_mode",
     "resolve_config",
@@ -98,25 +99,34 @@ class Config:
     warnings: "tuple[str, ...]" = field(default=())
 
 
+class PolicyFileError(ValueError):
+    """A discovered policy exists but cannot be safely parsed."""
+
+
 def _env(environ: "dict[str, str]", name: str) -> "str | None":
     """A present, non-empty environment value, else None (an empty string does not arm anything)."""
     raw = environ.get(name)
     return raw if raw else None
 
 
-def load_policy_file(start_dir: "str | os.PathLike[str]") -> "tuple[dict, str | None]":
+def load_policy_file(
+    start_dir: "str | os.PathLike[str]", *, strict: bool = False
+) -> "tuple[dict, str | None]":
     """Find and parse `.excubitor/policy.toml`, searching from ``start_dir`` upward to the filesystem
-    root (git-toplevel style). Returns ``(policy_dict, path)`` or ``({}, None)`` when none is found or it
-    is unreadable/malformed — a bad policy file degrades to defaults, it never raises into a host tool.
+    root (git-toplevel style). Returns ``({}, None)`` only when absent. In fail-soft display/host mode,
+    an invalid discovered file returns ``({}, path)``; installer callers pass ``strict=True`` and get a
+    precise :class:`PolicyFileError` before planning or mutation.
     """
     current = Path(start_dir).resolve()
     for _ in range(_MAX_SEARCH_DEPTH):
         candidate = current / _POLICY_RELPATH
-        if candidate.is_file():
+        if candidate.exists() or candidate.is_symlink():
             try:
                 return tomllib.loads(candidate.read_text(encoding="utf-8")), str(candidate)
-            except (OSError, tomllib.TOMLDecodeError, UnicodeDecodeError):
-                return {}, None
+            except (OSError, tomllib.TOMLDecodeError, UnicodeDecodeError) as exc:
+                if strict:
+                    raise PolicyFileError(f"invalid policy file {candidate}: {exc}") from exc
+                return {}, str(candidate)
         if current.parent == current:
             break
         current = current.parent

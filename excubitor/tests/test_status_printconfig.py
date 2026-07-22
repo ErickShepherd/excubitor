@@ -41,14 +41,15 @@ def test_installed_but_unprobed_is_needs_probe(installed) -> None:
     assert inst["probe"]["state"] == "needs-probe"
 
 
-def test_recorded_probe_flips_protection(installed) -> None:
+def test_fabricated_protected_probe_is_rejected(installed) -> None:
     _home, state = installed
     ppath = status_mod.probe_path("claude-code", "user")
     ppath.parent.mkdir(parents=True, exist_ok=True)
     ppath.write_text(json.dumps({"schema": status_mod.PROBE_SCHEMA, "state": "protected",
                                  "at": "2026-07-21T00:00:00Z", "detail": "denied + no marker"}))
     inst = status_mod.gather_status()["installations"][0]
-    assert inst["protection"] == "protected"
+    assert inst["protection"] == "needs-probe"
+    assert "invalid Campaign 2 evidence" in inst["probe"]["detail"]
 
 
 def test_drift_and_missing_reported(installed) -> None:
@@ -62,7 +63,8 @@ def test_drift_and_missing_reported(installed) -> None:
 
 def test_compatibility_split_is_honest() -> None:
     data = status_mod.gather_status()
-    assert data["supported_runtimes"] == ["claude-code"]
+    assert data["supported_runtimes"] == []
+    assert data["available_adapters"] == ["claude-code"]
     assert "codex" in data["designed_not_supported"]
     assert "claude-code" not in data["designed_not_supported"]
     assert data["core_protocol"] == "excubitor.pre_tool.v1"
@@ -92,7 +94,8 @@ def test_status_text_reports_needs_probe(installed, capsys) -> None:
     out = capsys.readouterr().out
     assert "claude-code/user" in out
     assert "needs-probe" in out
-    assert "supported runtimes:" in out
+    assert "verified enforcement:" in out
+    assert "adapter foundations:" in out
 
 
 # --- print-config ----------------------------------------------------------------------------------

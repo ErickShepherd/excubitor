@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from excubitor import config
 from excubitor.core.events import LoopMode
 
@@ -110,8 +112,14 @@ def test_one_unit_and_protected_roots_from_policy(tmp_path: Path) -> None:
 def test_malformed_policy_file_degrades_to_defaults(tmp_path: Path) -> None:
     _write_policy(tmp_path, "this is not valid = = toml [[[")
     cfg = config.resolve_config(tmp_path, {})
-    assert cfg.policy_path is None  # unreadable/malformed → treated as absent, never raises
+    assert cfg.policy_path is not None  # discovered-invalid stays distinguishable from absent
     assert cfg.opt_out_marker.value == config.DEFAULT_OPT_OUT_MARKER
+
+
+def test_malformed_policy_file_strict_mode_fails_closed(tmp_path: Path) -> None:
+    _write_policy(tmp_path, "this is not valid = = toml [[[")
+    with pytest.raises(config.PolicyFileError, match="invalid policy file"):
+        config.load_policy_file(tmp_path, strict=True)
 
 
 def test_state_home_resolution(tmp_path: Path) -> None:
