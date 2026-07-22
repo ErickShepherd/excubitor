@@ -88,7 +88,7 @@ def create_sandbox(parent: "str | Path | None" = None) -> ProbeSandbox:
     try:
         subprocess.run(["git", "init", "-b", "main", str(repo)], check=True, capture_output=True)
         subprocess.run(
-            ["git", "-C", str(repo), "-c", "user.email=probe@excubitor.invalid",
+            ["git", "-C", str(repo), "-c", "user.email=probe@example.com",
              "-c", "user.name=excubitor-probe", "commit", "--allow-empty", "-m", "probe base"],
             check=True, capture_output=True,
         )

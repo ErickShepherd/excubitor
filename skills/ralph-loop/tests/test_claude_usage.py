@@ -43,7 +43,7 @@ class TestCredentialDegradation(unittest.TestCase):
         # a well-formed creds file whose token is present but the endpoint is unreachable: the token
         # must never appear in the raised message. Force an unreachable host via a bogus creds token and
         # a get_usage call — but to stay offline, assert only the credential-load messages here.
-        secret = "sk-SUPERSECRETTOKENVALUE-do-not-leak"
+        secret = "sk-" + "SUPERSECRETTOKENVALUE" + "-do-not-leak"
         creds = self._creds(json.dumps({"claudeAiOauth": {"accessToken": secret}}))
         # _load_token succeeds; the network call will fail — capture whatever message surfaces.
         try:

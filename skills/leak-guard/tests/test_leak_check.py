@@ -57,7 +57,8 @@ class TestBuiltinDetection(unittest.TestCase):
         self._td.cleanup()
 
     def test_detects_private_key_block(self):
-        f = _file(self.dir, "leaked.pem", "-----BEGIN RSA PRIVATE KEY-----\nMIIabc\n")
+        marker = "-----BEGIN RSA " + "PRIVATE KEY-----"
+        f = _file(self.dir, "leaked.pem", marker + "\nMIIabc\n")
         rc, out, _ = _run([str(f)])
         self.assertEqual(rc, 1)
         self.assertIn("private-key-block", out)

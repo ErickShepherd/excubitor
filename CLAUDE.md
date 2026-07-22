@@ -38,7 +38,7 @@ CLAUDE_LOOP_GUARD=1 claude --model claude-opus-4-8
 Then start the repo plan from the Claude Code session:
 
 ```text
-/loop /ralph-loop --anchor checklist --repo ~/projects/excubitor \
+/loop /ralph-loop --anchor checklist --repo /path/to/excubitor \
   --plan the build checklist
 ```
 
