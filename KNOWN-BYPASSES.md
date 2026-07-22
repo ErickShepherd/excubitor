@@ -221,8 +221,8 @@ mutations": a shell redirection, `sed -i`, a formatter, a generator, or `git app
 unimpeded. This is a *registration* boundary, not a parsing gap — the guard, handed a Bash payload,
 would deny **every** command whose `cwd` is a protected repo (it falls back to `cwd` when there is no
 file path), which is why registering it for `Bash` is not the fix: the honest alternatives are the
-disruptive all-shell-deny or an OS-level sandbox, both declined (decision recorded 2026-07-16 in
-`the build checklist`, R-06). A Bash-string *mutation parser* is not a
+disruptive all-shell-deny or an OS-level sandbox, both declined (recorded 2026-07-16 as
+Phase 0 review item R-06). A Bash-string *mutation parser* is not a
 credible complete solution (see the expansion residuals above). Pinned bidirectionally in
 `hooks/tests/test_guard_default_branch.py::TestR06RegistrationBoundary` — the matcher excludes
 `Bash`, a shell mutation on the default branch succeeds (the residual, so the docs must change if the
