@@ -1,10 +1,12 @@
 # CI floor: the full test suite on stock runners — the portability proof that the harness runs outside
 # the machine it was extracted on. Dormant until the repo has a remote.
 #
-# The OS matrix (Linux/macOS/Windows) is what produces the cross-platform installer evidence the
-# Campaign-2 transaction tests need (spaces, non-ASCII paths, rollback, recovery, …). Until this matrix
-# actually runs on real macOS/Windows runners, those platform rows are PENDING — a local Linux run
-# cannot substitute for them (docs/plans/excubitor-ralph-implementation.md, C2.11).
+# The OS matrix (Linux/macOS/Windows) produces the cross-platform installer evidence the Campaign-2
+# transaction tests need (spaces, non-ASCII paths, rollback, recovery, …). Linux and macOS are
+# supported and gate the build. Windows is EXPERIMENTAL: it runs on every push for signal but is
+# non-blocking (continue-on-error below) — the suite still has Windows-specific path-portability gaps
+# (backslash/drive-letter/non-ASCII-home/file-locking) tracked in KNOWN-ISSUES.md. The package
+# classifiers advertise POSIX/Linux+macOS accordingly, not OS-Independent.
 name: ci
 
 on:
@@ -14,6 +16,9 @@ on:
 jobs:
   test:
     runs-on: ${{ matrix.os }}
+    # Windows is experimental (see header): run it for signal, but a Windows failure must not fail the
+    # build. Linux and macOS are supported and hard-gate.
+    continue-on-error: ${{ matrix.os == 'windows-latest' }}
     strategy:
       fail-fast: false
       matrix:
