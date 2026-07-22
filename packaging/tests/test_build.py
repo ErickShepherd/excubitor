@@ -143,6 +143,12 @@ def test_isolated_wheel_installer_lifecycle(tmp_path: Path) -> None:
         env=env, capture_output=True, text=True, timeout=60,
     )
     assert install.returncode == 0, install.stderr
+    settings = json.loads((home / ".claude" / "settings.json").read_text())
+    registered = settings["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+    exact = subprocess.run(
+        registered, shell=True, input="{}\n", text=True, capture_output=True, timeout=30
+    )
+    assert exact.returncode == 0, exact.stderr
     doctor = subprocess.run(
         [str(exe), "doctor", "--runtime", "claude-code", "--scope", "user", "--probe", "--json"],
         env=env, capture_output=True, text=True, timeout=60,

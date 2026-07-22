@@ -98,6 +98,7 @@ def test_pyz_carries_the_full_cli(tmp_path: Path) -> None:
 @pytest.mark.slow
 def test_pyz_installer_lifecycle(tmp_path: Path) -> None:
     pyz = builder.build_pyz(tmp_path / "dist")
+    import json
     import os
 
     home, state = tmp_path / "home", tmp_path / "state"
@@ -109,6 +110,19 @@ def test_pyz_installer_lifecycle(tmp_path: Path) -> None:
     assert not (home / ".claude").exists()
     applied = subprocess.run(base, env=env, capture_output=True, text=True, timeout=60)
     assert applied.returncode == 0, applied.stderr
+    settings = json.loads((home / ".claude" / "settings.json").read_text())
+    registered = settings["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+    exact = subprocess.run(
+        registered, shell=True, input="{}\n", text=True, capture_output=True, timeout=30
+    )
+    assert exact.returncode == 0, exact.stderr
+    doctor = subprocess.run(
+        [sys.executable, str(pyz), "doctor", "--runtime", "claude-code", "--scope", "user",
+         "--probe", "--json"],
+        env=env, capture_output=True, text=True, timeout=60,
+    )
+    assert doctor.returncode == 0, doctor.stderr
+    assert json.loads(doctor.stdout)["protection"] == "needs-probe"
     removed = subprocess.run(
         [sys.executable, str(pyz), "uninstall", "--runtime", "claude-code", "--scope", "user",
          "--home", str(home)],
