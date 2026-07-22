@@ -5,7 +5,8 @@
 `excubitor/core/` (the four policies + dispatcher, model-blind), the named Claude Code adapter
 (`excubitor/adapters/claude_code.py` + the four thin hooks), and the generic `excubitor.pre_tool.v1`
 protocol (`runtime/spec_adapter.py`). Phases 2–4 (real non-Claude host packages, installers, and
-live-host probes) remain **proposed, not built** — no runtime other than Claude Code is *supported* yet.
+live-host probes) remain **proposed, not built**. Claude Code has an adapter and installer foundation,
+but no runtime has yet earned the project's verified supported-enforcement label through a real host.
 **Depends on:** Phase 0 in
 the review notes
 

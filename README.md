@@ -22,8 +22,9 @@ produced it. Built for and battle-tested
 with Claude Code; **all four guards now share a model-blind policy core** (`excubitor/core/`) — the
 shipped hooks are thin Claude Code adapters over it, and a second, non-Claude-Code adapter drives the
 *same* core with an equivalence test to prove it ([`SPEC.md`](SPEC.md)), so its portability to any
-runtime that can intercept tool calls is demonstrated, not just asserted. (Claude Code is the only
-*supported* runtime today; other hosts are designed, not yet built.)
+runtime that can intercept tool calls is demonstrated, not just asserted. Claude Code has the only
+available adapter and installer foundation today, but no runtime is yet claimed as verified supported
+enforcement: that label still requires a released-package, real-host denial witness.
 
 ## 60-second crash test
 
