@@ -88,6 +88,28 @@ def _existed_at_base(repo: str, base: str, rel: str) -> bool:
     return _git(repo, "cat-file", "-e", f"{base}:{rel}")[0]
 
 
+def _canonical_prefix(abs_candidate: str, toplevel: str) -> str:
+    """Resolve only the ENVIRONMENTAL symlink prefix above the repo root, matching the realpath'd
+    `toplevel`, while keeping every IN-REPO component (dir/file symlinks) lexical so _surface_paths
+    can still capture their retargeting (R-04). Needed for absolute verified-by candidates on macOS
+    ($TMPDIR -> /private/var) / Windows, where the un-resolved prefix otherwise makes an in-repo path
+    compute a `..`-relpath and drop out of the surface. Finds the ancestor whose realpath IS the repo
+    root, then rebases the in-repo tail lexically onto `toplevel`. Left unchanged if out-of-tree."""
+    norm = os.path.normpath(abs_candidate)
+    if not os.path.isabs(norm):
+        return norm
+    parts = norm.split(os.sep)
+    for i in range(len(parts), 0, -1):
+        ancestor = os.sep.join(parts[:i]) or os.sep
+        try:
+            if os.path.realpath(ancestor) == toplevel:
+                tail = parts[i:]
+                return os.path.join(toplevel, *tail) if tail else toplevel
+        except OSError:
+            continue
+    return norm
+
+
 def _surface_paths(toplevel: str, abs_candidate: str) -> list[str]:
     """Every path whose retargeting would change which bytes the witness executes: the lexical
     candidate, every symlink hop along the WHOLE in-repo path — a DIRECTORY symlink in the prefix is
@@ -195,6 +217,7 @@ def _oracle_files(repo: str, base: str, verified_by: str) -> tuple[dict[str, str
         if not candidate or candidate.startswith("-"):
             continue
         abs_candidate = candidate if os.path.isabs(candidate) else os.path.join(repo, candidate)
+        abs_candidate = _canonical_prefix(abs_candidate, toplevel)
         _collect_surface(repo, base, toplevel, abs_candidate, files, tampered)
     return files, tampered
 
@@ -283,6 +306,12 @@ def evaluate(repo: str, base: str, verified_by: str,
     deleted since base is tampering; one that never existed is skipped."""
     if not os.path.isdir(os.path.join(repo, ".git")) and not _git(repo, "rev-parse", "--git-dir")[0]:
         return f"{repo} is not a git repo", {}
+    # Normalize the repo root's environmental symlink prefix ONCE, to match the realpath'd `toplevel`
+    # used throughout (macOS $TMPDIR -> /private/var, Windows). Without it, os.path.join(repo, ...)
+    # candidate paths disagree with `toplevel`, so os.path.relpath yields a `..`-prefixed surface path
+    # and in-repo oracle surfaces are mis-walked. Only the ROOT prefix resolves — in-repo symlink hops
+    # stay unresolved for _surface_paths / _collect_surface to capture (the R-04 retarget guard).
+    repo = os.path.realpath(repo)
 
     oracle_files, tampered = _oracle_files(repo, base, verified_by)
     witness_named_an_oracle = bool(oracle_files)
@@ -293,7 +322,8 @@ def evaluate(repo: str, base: str, verified_by: str,
         toplevel = os.path.realpath(top.strip())
         unbindable: list[str] = []
         for abs_p in extra_required:
-            unbindable += _collect_surface(repo, base, toplevel, os.path.normpath(abs_p),
+            unbindable += _collect_surface(repo, base, toplevel,
+                                           _canonical_prefix(os.path.normpath(abs_p), toplevel),
                                            oracle_files, tampered)
         if unbindable:
             return ("verdict-affecting path(s) exist but are not tracked, so they cannot be bound "
