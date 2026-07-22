@@ -390,6 +390,13 @@ def run(repo: str, base: str, anchor: str, verified_by: str, timeout: float) -> 
     if toplevel is None:
         print(f"REFUSED: {repo} is not a git repo (fail-deny)", file=sys.stderr)
         return EXIT_REFUSED
+    # Normalize the repo root's environmental symlink prefix ONCE, to match `toplevel` (which _toplevel
+    # already realpaths). Without this, on macOS ($TMPDIR -> /private/var) and Windows the un-resolved
+    # prefix makes every os.path.join(repo, ...) path (anchor, witness executable) disagree with
+    # `toplevel`, so in-repo paths look external and fail-deny wrongly. Only the ROOT prefix is
+    # resolved — in-repo symlink COMPONENTS stay unresolved (abspath below), preserving the lexical-vs-
+    # resolved (`lex` vs `real`) executable trust distinction in _bind_executable.
+    repo = os.path.realpath(repo)
 
     # 0. BASE PIN — the baseline must be the remote-tracking default (origin/<name>), the highest-bar
     #    in-repo anchor; a local-only movable default fail-denies. True immutability is the driver's

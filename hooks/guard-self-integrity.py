@@ -118,7 +118,12 @@ def main() -> None:
     tool = payload.get("tool_name")
     ti = payload.get("tool_input")
     tool_input = ti if isinstance(ti, dict) else {}
-    cwd = payload.get("cwd") or os.getcwd()
+    # Same P0.16 posture as guard-default-branch.py / guard-loop-vc.py: a truthy NON-string cwd or
+    # target field (crafted or buggy payload) must fail OPEN, not TypeError inside os.path.join —
+    # this is the meta-guard protecting the others, so it must honor the never-exit-non-zero contract.
+    cwd = payload.get("cwd")
+    if not isinstance(cwd, str) or not cwd:
+        cwd = os.getcwd()
 
     surface = self_integrity.ProtectedSurface(
         guard_scripts=_GUARD_SCRIPTS,
@@ -131,10 +136,15 @@ def main() -> None:
     hit = None
     if tool in ("Edit", "Write", "NotebookEdit"):
         target = tool_input.get("file_path") or tool_input.get("notebook_path")
+        if target is not None and not isinstance(target, str):
+            claude_code.emit_pass()  # malformed target field → fail open, never wedge the editor
         if target:
             hit = self_integrity.target_kill_switch(target, cwd, surface)
     elif tool == "Bash":
-        hit = self_integrity.bash_kill_switch(tool_input.get("command") or "", cwd, surface)
+        command = tool_input.get("command")
+        if command is not None and not isinstance(command, str):
+            claude_code.emit_pass()  # malformed command field → fail open
+        hit = self_integrity.bash_kill_switch(command or "", cwd, surface)
 
     if hit:
         claude_code.emit_deny(

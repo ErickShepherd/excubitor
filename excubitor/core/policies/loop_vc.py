@@ -260,6 +260,34 @@ def _subcommand_path(args: list[str], value_opts: set[str], depth: int) -> list[
     return path
 
 
+def _merge_forces_no_ff(rest: list[str]) -> bool:
+    """True iff this `git merge` will create a merge commit (effective `--no-ff`), so it is revertable.
+
+    git resolves the `--ff` / `--no-ff` / `--ff-only` family LAST-WINS and accepts unambiguous
+    abbreviations (`--no-f` -> `--no-ff`, `--ff-o` -> `--ff-only`). Testing only for `--no-ff`
+    presence let a trailing `--ff`/`--ff-only` override it and fast-forward anyway (`git merge
+    --no-ff --ff topic`), defeating the revertability invariant the YOLO permit rests on. Track the
+    last flag in the family; the merge forces a merge commit only when that last flag is `--no-ff`.
+    A bare merge (none present) defaults to `--ff` (may fast-forward) -> not forced. Anything not
+    provably `--no-ff` returns False -> deny (fail-deny)."""
+    mode: str | None = None  # None | "no-ff" | "ff" | "ff-only"
+    for t in rest:
+        if t == "--" or t == "--end-of-options":
+            break  # everything after is a positional, never a flag
+        if not t.startswith("--"):
+            continue
+        name = t[2:].split("=", 1)[0]
+        if not name:
+            continue
+        if name.startswith("no-") and "no-ff".startswith(name):
+            mode = "no-ff"
+        elif name != "ff" and "ff-only".startswith(name):
+            mode = "ff-only"
+        elif "ff".startswith(name):
+            mode = "ff"
+    return mode == "no-ff"
+
+
 def _yolo_merge_reason(selectors: list[str], rest: list[str], unmodeled_selector: bool) -> str | None:
     """In YOLO mode, return a deny reason for this `git merge`, or None if the merge is allowed.
 
@@ -270,8 +298,8 @@ def _yolo_merge_reason(selectors: list[str], rest: list[str], unmodeled_selector
     assignment, a launcher chdir option, or a preceding `cd`/`pushd`/`export` segment), so branch
     detection would interrogate the WRONG repo (P0.14).
     """
-    if "--no-ff" not in rest:
-        return "fast-forward merge in YOLO (only --no-ff merges are allowed, so the merge is revertable)"
+    if not _merge_forces_no_ff(rest):
+        return "fast-forward-capable merge in YOLO (only an effective --no-ff merge is allowed, so the merge is revertable)"
     if unmodeled_selector:
         return (
             "merge behind a repository/directory selector the guard does not model "
@@ -346,16 +374,19 @@ def _has_delete_flag(
     a `delete_letter` anywhere in it (before a value-taking option) is a delete. A `value_taking`
     short consumes the cluster remainder — and, if it is the cluster's last letter, the NEXT token —
     as its value, so letters/tokens after it are NOT flags (mirrors `_clean_is_dry_run`'s `-e`
-    handling). Stop at the `--`/`--end-of-options` terminator; long forms match as whole tokens.
+    handling). Stop at the `--`/`--end-of-options` terminator; long forms match by unambiguous prefix.
     """
+    long_names = tuple(lf.removeprefix("--") for lf in long_forms)
     i = 0
     while i < len(rest):
         t = rest[i]
         if t == "--" or t == "--end-of-options":
             break  # everything after is a positional (a ref/pathspec), never a flag
-        if t in long_forms:
-            return True
         if t.startswith("--"):
+            # long forms match by unambiguous prefix (git takes `--del` for `--delete`), not exact
+            # token equality — the exact `t in long_forms` test missed every abbreviated spelling.
+            if _long_opt_matches(t, long_names):
+                return True
             i += 1
             continue
         if t.startswith("-") and len(t) > 1:
@@ -585,7 +616,10 @@ def _classify(
         return _yolo_merge_reason(selectors, rest, unmodeled_sel) if yolo else "merge a branch (git merge)"
     if sub == "push":
         return "push to a remote (git push)"
-    if sub == "reset" and "--hard" in rest:
+    # `--hard` matched by unambiguous prefix (git accepts `--har`/`--ha`): reset's other modes are
+    # `--soft/--mixed/--merge/--keep`, none of which start with `h`, so any non-empty prefix of
+    # `hard` uniquely resolves to it. Exact `"--hard" in rest` missed the abbreviated spellings.
+    if sub == "reset" and any(_long_opt_matches(t, ("hard",)) for t in rest):
         return "hard-reset the working tree (git reset --hard)"
     if sub == "clean" and not _clean_is_dry_run(rest):
         return "delete untracked files (git clean)"

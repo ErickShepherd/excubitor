@@ -7,8 +7,8 @@
 protocol (`runtime/spec_adapter.py`). Phases 2–4 (real non-Claude host packages, installers, and
 live-host probes) remain **proposed, not built**. Claude Code has an adapter and installer foundation,
 but no runtime has yet earned the project's verified supported-enforcement label through a real host.
-**Depends on:** Phase 0 in
-the review notes
+**Depends on:** the Phase 0 guard-hardening review (items R-01–R-08, pinned in
+[`KNOWN-BYPASSES.md`](../../KNOWN-BYPASSES.md) and the guard test suites)
 
 ## Decision
 
