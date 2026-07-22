@@ -16,8 +16,8 @@ authors:
     given-names: "Erick Edward"
     email: "dev@erickshepherd.com"
     orcid: "https://orcid.org/0000-0002-4750-6100"
-version: "0.1.0"
-date-released: "2026-07-11"
+version: "0.2.0"
+date-released: "2026-07-22"
 doi: "10.5281/zenodo.21315916"
 license: MIT
 repository-code: "https://github.com/ErickShepherd/excubitor"

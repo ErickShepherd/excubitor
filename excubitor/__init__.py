@@ -24,6 +24,6 @@ from __future__ import annotations
 #: dynamically (`[tool.setuptools.dynamic]`), and the stdlib reproducible builder
 #: (`packaging/build.py`) imports it directly, so the wheel/sdist/pyz names can never drift from
 #: the package. A consistency test pins the two together.
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = ["__version__", "core"]
