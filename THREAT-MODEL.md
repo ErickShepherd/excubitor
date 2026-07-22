@@ -141,18 +141,24 @@ boundaries are stated here rather than implied:
   provisioning step) asks it to; it is not on the pre-tool decision path. The guards' own kill-switch
   fence (`guard-self-integrity`, still covering the settings file and hook scripts under an armed loop)
   is unchanged — an *armed loop* still cannot rewrite those, installer or not.
-- **Every mutation is transactional and receipt-owned.** Writes are journalled and atomic
-  (temp + `os.replace`), validated before mutation (a malformed settings structure or unknown policy
-  version stops with no write), and rolled back to the exact prior state on any failure. Upgrade and
-  uninstall remove **only** bytes/entries the hash-bound receipt records (exact path+SHA-256 for files,
-  exact tuple for registrations) — never a substring match, so an unrelated user hook or a file the user
-  edited since install is preserved.
-- **Installation does not imply protection.** The installer never claims enforcement works. `status`
-  and `doctor` report `needs-probe` — never `protected` — until a *real host* harmless-denial probe
-  succeeds; the CLI cannot fabricate that witness (it cannot drive the runtime's dispatch), so the honest
-  verdict is `needs-probe`. Only Claude Code is a supported runtime; other hosts are reported
-  designed-not-built. The supply-chain boundary of the *distributed* package (native plugin publication)
-  is deliberately gated behind an independent installer/supply-chain review before any publication.
+- **Every replacement proves receipt ownership first.** An occupied path on fresh install is a collision,
+  not an invitation to adopt it. Upgrade requires the current hash to match the prior receipt. Drifted
+  current or stale artifacts stop the operation without mutation; uninstall still preserves drift.
+- **The crash boundary includes the receipt.** The target-bound journal stores prior artifact, settings,
+  and receipt bytes plus exact expected post-state digests. Its deletion is the commit boundary. Before
+  rollback mutates anything, every surface must still equal its journalled pre-state or post-state; a
+  truncated, malformed, target-mismatched, or third-state journal is retained and fails closed rather
+  than becoming authority to overwrite post-crash user changes or arbitrary paths.
+- **Filesystem redirection is rejected.** The installer refuses symlink components across the selected
+  control and state trees, uses unique exclusive same-directory temporaries, creates sensitive state with
+  restrictive permissions, and fsyncs supported parent directories after replace or unlink.
+- **Malformed policy and missing policy are different states.** Invalid discovered TOML, invalid encoding,
+  and unknown fields stop the mutating installer before planning. Fail-soft parsing remains only for
+  non-mutating display or host-facing paths.
+- **Installation does not imply protection.** Campaign 2 has no trusted producer for real-host evidence,
+  so neither hand-written nor API-written `protected` state is accepted. Claude Code has an adapter and
+  installer foundation, but no runtime is yet claimed as verified supported enforcement. Publication and
+  the real-host transition remain separately gated.
 
 ## Residual risks (accepted, documented, and where pinned)
 

@@ -157,7 +157,9 @@ def test_interrupted_operation_recovers(env) -> None:
         operation="install", runtime="claude-code", scope="user",
         settings_path=home / ".claude" / "settings.json", settings_backup=None,
         receipt_file=receipt_path("claude-code", "user"), receipt_backup=None,
-        file_backups={a.target_path: None for a in plan.staged_files}, now="t",
+        file_backups={a.target_path: None for a in plan.staged_files},
+        post_settings_sha256=None, post_receipt_sha256=None,
+        post_file_sha256={a.target_path: None for a in plan.staged_files}, now="t",
     ))
     _install(target)
     assert not jpath.exists()

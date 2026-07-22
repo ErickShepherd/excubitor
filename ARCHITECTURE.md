@@ -126,18 +126,27 @@ scripts/install.sh        # legacy symlink + settings.json registration (superse
 The package ships an `excubitor` CLI whose `install`/`uninstall`/`status`/`print-config`/`doctor`
 subcommands drive a **transactional** installer over a runtime's config. Its spine:
 
-- **Discover → validate → plan** are read-only; `install --dry-run` writes nothing (proven by a
-  byte-for-byte filesystem snapshot). Validation rejects a malformed settings structure or an unknown
-  policy version *before* any mutation.
-- **Stage → register → receipt** run as one journalled transaction: artifacts are staged atomically
-  (temp + `os.replace`, hash-verified), the exact-tuple hooks are merged while unrelated entries survive
-  byte-for-byte, and a **hash-bound receipt** records exactly what the install owns. Any failure rolls
-  back the exact prior state; a leftover journal (a crash) is recovered on the next run.
-- **Ownership is never a substring.** Upgrade/uninstall touch only what the receipt records by exact
-  path+SHA-256 (files) and exact tuple (registrations); a file edited since install is preserved.
-- **Protection is earned, not assumed.** `status`/`doctor` never infer "protected" from file presence —
-  only a real host harmless-denial probe does, and absent a real runtime-dispatch witness they report
-  `needs-probe`. Only Claude Code is a supported runtime; other hosts are reported designed-not-built.
+- **Discover → validate → plan are read-only.** Invalid or invalidly encoded discovered TOML is distinct
+  from absence and stops install before planning or directory creation. The policy schema rejects unknown
+  fields, and malformed host settings also stop before mutation.
+- **Ownership is proved before replacement.** A fresh install refuses every occupied artifact path. An
+  upgrade replaces only receipt-recorded bytes whose current SHA-256 still matches; drift refuses the
+  whole operation. A shrinking artifact set removes only matching stale owned bytes and refuses drift.
+- **Journal deletion is commit.** The schema-tagged journal binds runtime, scope, settings, receipt, and
+  owned paths to the selected target, backs up every pre-state, and hashes every expected post-state.
+  Recovery validates the entire journal and proves every surface is still at one of those two states
+  before mutating any of them; malformed data, target mismatch, or post-crash third-party drift retains
+  the journal and fails closed. Receipt entries themselves are strictly typed and hash-shaped rather
+  than coerced from malformed JSON.
+- **Writes are contained and durable.** Existing symlinks in control, settings, hooks, artifacts, state,
+  journal, receipt, and probe chains are rejected. Unique exclusively created same-directory temporaries
+  replace fixed names; file data and supported parent-directory changes are fsynced.
+- **Built distributions carry the installer inputs.** Wheel, sdist, and zipapp embed exact-byte resources
+  generated from the canonical guard entry points, and registrations use the validated current Python
+  interpreter with host-appropriate quoting and an import path for the installed core.
+- **Protection is not yet earned.** Campaign 2 accepts no persisted record as proof of protection and
+  cannot write `protected`; fabricated records resolve to `needs-probe`. Claude Code has an available
+  adapter foundation, not verified supported enforcement. The real-host gate remains pending.
 
 Components are deliberately decoupled: the hooks are thin entry points that import only the model-blind
 `excubitor` package (never the skills); the skills' scripts import nothing from the hooks; the only

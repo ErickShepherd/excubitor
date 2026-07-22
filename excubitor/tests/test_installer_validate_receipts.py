@@ -91,7 +91,7 @@ def _sample_receipt() -> Receipt:
         settings_path="/home/u/.claude/settings.json",
         excubitor_version="0.1.0",
         installed_at="2026-07-21T00:00:00Z",
-        files=(OwnedFile("/home/u/.claude/hooks/guard-loop-vc.py", "abc123"),),
+        files=(OwnedFile("/home/u/.claude/hooks/guard-loop-vc.py", "a" * 64),),
         registrations=(OwnedRegistration(matcher="Bash", command="python3 /h/guard-loop-vc.py",
                                          timeout=10),),
     )
@@ -106,12 +106,12 @@ def test_receipt_roundtrips_through_json() -> None:
 def test_file_ownership_is_hash_bound() -> None:
     receipt = _sample_receipt()
     # Same path + same hash = ours.
-    assert receipt.owns_file_bytes("/home/u/.claude/hooks/guard-loop-vc.py", "abc123")
+    assert receipt.owns_file_bytes("/home/u/.claude/hooks/guard-loop-vc.py", "a" * 64)
     # Same path, DIFFERENT hash = drifted, not ours to remove.
     assert not receipt.owns_file_bytes("/home/u/.claude/hooks/guard-loop-vc.py", "deadbeef")
     assert receipt.records_path("/home/u/.claude/hooks/guard-loop-vc.py")  # but recorded → drift, not alien
     # A path we never recorded is never ours, whatever its hash.
-    assert not receipt.owns_file_bytes("/home/u/.claude/hooks/user-thing.py", "abc123")
+    assert not receipt.owns_file_bytes("/home/u/.claude/hooks/user-thing.py", "a" * 64)
     assert not receipt.records_path("/home/u/.claude/hooks/user-thing.py")
 
 
@@ -135,6 +135,34 @@ def test_unrecognized_receipt_schema_is_rejected() -> None:
     with pytest.raises(ValueError):
         Receipt.from_dict({"schema": "something.else", "runtime": "x", "scope": "y",
                            "settings_path": "s"})
+
+
+def test_malformed_receipt_entries_are_rejected_without_coercion() -> None:
+    import pytest
+
+    base = _sample_receipt().to_dict()
+    malformed = []
+    for bad_file in (
+        {"path": 7, "sha256": "a" * 64},
+        {"path": "/tmp/x", "sha256": "not-a-digest"},
+        {"path": "/tmp/x", "sha256": "a" * 64, "extra": True},
+    ):
+        malformed.append({**base, "files": [bad_file]})
+    for bad_registration in (
+        {**base["registrations"][0], "timeout": "10"},
+        {**base["registrations"][0], "timeout": True},
+        {**base["registrations"][0], "command": ["python"]},
+    ):
+        malformed.append({**base, "registrations": [bad_registration]})
+    malformed.append({**base, "files": [base["files"][0], base["files"][0]]})
+    malformed.append({
+        **base,
+        "registrations": [base["registrations"][0], base["registrations"][0]],
+    })
+
+    for value in malformed:
+        with pytest.raises(ValueError):
+            Receipt.from_dict(value)
 
 
 # --- state dir / receipt path resolution -----------------------------------------------------------

@@ -64,7 +64,8 @@ __all__ = [
 
 _FILE_MODE = 0o644
 _STATE_MODE = 0o600
-JOURNAL_SCHEMA = "excubitor.transaction.v2"
+JOURNAL_SCHEMA = "excubitor.transaction.v3"
+_SHA256_HEX_LENGTH = 64
 
 
 class TransactionError(RuntimeError):
@@ -139,6 +140,10 @@ def _read_bytes_or_none(path: Path, root: "Path | None" = None) -> "bytes | None
         return path.read_bytes()
     except FileNotFoundError:
         return None
+
+
+def _sha256_or_none(data: "bytes | None") -> "str | None":
+    return None if data is None else hashlib.sha256(data).hexdigest()
 
 
 # --- settings registration merge -------------------------------------------------------------------
@@ -245,6 +250,8 @@ def _validate_receipt_target(receipt: Receipt, target: RuntimeTarget) -> None:
 def _journal_bytes(*, operation: str, runtime: str, scope: str, settings_path: Path,
                    settings_backup: "bytes | None", receipt_file: Path,
                    receipt_backup: "bytes | None", file_backups: dict[str, "str | None"],
+                   post_settings_sha256: "str | None", post_receipt_sha256: "str | None",
+                   post_file_sha256: dict[str, "str | None"],
                    now: str) -> bytes:
     record = {
         "schema": JOURNAL_SCHEMA,
@@ -257,6 +264,11 @@ def _journal_bytes(*, operation: str, runtime: str, scope: str, settings_path: P
         "receipt_backup": _b64(receipt_backup),
         "owned_paths": sorted(file_backups),
         "file_backups": file_backups,
+        "post_state": {
+            "settings_sha256": post_settings_sha256,
+            "receipt_sha256": post_receipt_sha256,
+            "file_sha256": post_file_sha256,
+        },
         "created_at": now,
     }
     return (json.dumps(record, indent=2, sort_keys=True) + "\n").encode()
@@ -337,20 +349,55 @@ def apply_install(
         if current is not None and hashlib.sha256(current).hexdigest() != owned.sha256:
             raise ValueError(f"refusing upgrade: stale receipt-owned artifact drifted at {owned.path}")
 
-    # 3. Journal settings, artifacts, and the previous receipt BEFORE any mutation.
+    # 3. Compute the complete committed state, then journal both sides of every mutation. Recovery may
+    # restore a surface only when its current bytes still equal either the pre-state or this post-state.
     backup_paths = sorted(new_paths | {f.path for f in stale_owned})
     file_backups = {
         p: _b64(_read_bytes_or_none(Path(p), target.hooks_dir)) for p in backup_paths
     }
     rpath = absolute_path(receipt_path(runtime, scope, state_home, environ))
     receipt_backup = _read_bytes_or_none(rpath, state_root)
+    wanted = [
+        OwnedRegistration(matcher=r.matcher, command=r.command, timeout=r.timeout,
+                          handler_type=r.handler_type, event=r.event)
+        for r in profile.registrations(target)
+    ]
+    pre = data.setdefault("hooks", {}).setdefault("PreToolUse", [])
+    prior_regs = list(prior_receipt.registrations) if prior_receipt else []
+    merge_registrations(pre, wanted, prior_regs)
+    new_settings = (json.dumps(data, indent=2) + "\n").encode("utf-8")
+    settings_written = new_settings != (prior_settings_bytes or b"")
+    transaction_time = now or _now_iso()
+    receipt = Receipt(
+        runtime=runtime,
+        scope=scope,
+        settings_path=str(settings_path),
+        excubitor_version=receipts_mod.current_version(),
+        installed_at=transaction_time,
+        files=tuple(
+            OwnedFile(path=str(absolute_path(action.target_path)), sha256=artifacts[action.basename].sha256)
+            for action in plan.staged_files
+        ),
+        registrations=tuple(wanted),
+        settings_preexisted=(prior_receipt.settings_preexisted if prior_receipt is not None
+                             else prior_settings_bytes is not None),
+    )
+    receipt_bytes = receipt.to_json().encode()
+    post_file_sha256 = {
+        path: (artifacts[Path(path).name].sha256 if path in new_paths else None)
+        for path in backup_paths
+    }
     jpath = _journal_path(runtime, scope, state_home, environ)
     _atomic_write_bytes(
         jpath,
         _journal_bytes(
             operation="install", runtime=runtime, scope=scope, settings_path=settings_path,
             settings_backup=prior_settings_bytes, receipt_file=rpath, receipt_backup=receipt_backup,
-            file_backups=file_backups, now=now or _now_iso(),
+            file_backups=file_backups,
+            post_settings_sha256=_sha256_or_none(new_settings),
+            post_receipt_sha256=_sha256_or_none(receipt_bytes),
+            post_file_sha256=post_file_sha256,
+            now=transaction_time,
         ),
         _STATE_MODE,
         state_root,
@@ -358,7 +405,7 @@ def apply_install(
 
     try:
         # 4. Stage each artifact atomically and verify its hash.
-        owned_files: list[OwnedFile] = []
+        owned_files = list(receipt.files)
         files_changed = False
         for action in plan.staged_files:
             artifact = artifacts[action.basename]
@@ -370,7 +417,6 @@ def apply_install(
             actual = Receipt.hash_file(dest)
             if actual != artifact.sha256:
                 raise TransactionError(f"staged file hash mismatch at {dest}")
-            owned_files.append(OwnedFile(path=str(dest), sha256=artifact.sha256))
 
         for owned in stale_owned:
             if _read_bytes_or_none(Path(owned.path), target.hooks_dir) is not None:
@@ -378,32 +424,11 @@ def apply_install(
                 files_changed = True
 
         # 5. Register the exact-tuple hooks, preserving unrelated entries.
-        wanted = [
-            OwnedRegistration(matcher=r.matcher, command=r.command, timeout=r.timeout,
-                              handler_type=r.handler_type, event=r.event)
-            for r in profile.registrations(target)
-        ]
-        pre = data.setdefault("hooks", {}).setdefault("PreToolUse", [])
-        prior_regs = list(prior_receipt.registrations) if prior_receipt else []
-        merge_registrations(pre, wanted, prior_regs)  # mutates `pre`; byte-diff below decides `written`
-        new_settings = (json.dumps(data, indent=2) + "\n").encode("utf-8")
-        settings_written = new_settings != (prior_settings_bytes or b"")
         if settings_written:
             _atomic_write_bytes(settings_path, new_settings, _FILE_MODE, control_root)
 
         # 6. Commit the receipt. Deleting the journal is the transaction commit boundary.
-        receipt = Receipt(
-            runtime=runtime,
-            scope=scope,
-            settings_path=str(settings_path),
-            excubitor_version=receipts_mod.current_version(),
-            installed_at=now or _now_iso(),
-            files=tuple(owned_files),
-            registrations=tuple(wanted),
-            settings_preexisted=(prior_receipt.settings_preexisted if prior_receipt is not None
-                                 else prior_settings_bytes is not None),
-        )
-        _atomic_write_bytes(rpath, receipt.to_json().encode(), _STATE_MODE, state_root)
+        _atomic_write_bytes(rpath, receipt_bytes, _STATE_MODE, state_root)
     except Exception as exc:  # any post-journal failure → roll back the exact prior state, then surface
         rollback(runtime, scope, state_home, environ, profile=profile, target=target, plan=plan)
         if isinstance(exc, TransactionError):
@@ -434,7 +459,7 @@ def _load_valid_journal(runtime: str, scope: str, state_home, environ, *,
         raise RecoveryError(f"malformed or truncated recovery journal {jpath}: {exc}") from exc
     required = {
         "schema", "operation", "runtime", "scope", "settings_path", "settings_backup",
-        "receipt_path", "receipt_backup", "owned_paths", "file_backups", "created_at",
+        "receipt_path", "receipt_backup", "owned_paths", "file_backups", "post_state", "created_at",
     }
     if not isinstance(journal, dict) or set(journal) != required:
         raise RecoveryError(f"recovery journal {jpath} has an invalid field set")
@@ -455,6 +480,26 @@ def _load_valid_journal(runtime: str, scope: str, state_home, environ, *,
     if (not isinstance(backups, dict) or not isinstance(owned_paths, list)
             or owned_paths != sorted(backups) or not all(isinstance(p, str) for p in owned_paths)):
         raise RecoveryError(f"recovery journal {jpath} has invalid owned paths")
+    post_state = journal["post_state"]
+    if not isinstance(post_state, dict) or set(post_state) != {
+        "settings_sha256", "receipt_sha256", "file_sha256"
+    }:
+        raise RecoveryError(f"recovery journal {jpath} has invalid post-state")
+    post_files = post_state["file_sha256"]
+    if not isinstance(post_files, dict) or set(post_files) != set(owned_paths):
+        raise RecoveryError(f"recovery journal {jpath} post-state paths do not match owned paths")
+
+    def valid_digest(value: object) -> bool:
+        return value is None or (
+            isinstance(value, str)
+            and len(value) == _SHA256_HEX_LENGTH
+            and all(char in "0123456789abcdef" for char in value)
+        )
+
+    if not valid_digest(post_state["settings_sha256"]) or not valid_digest(
+        post_state["receipt_sha256"]
+    ) or not all(valid_digest(value) for value in post_files.values()):
+        raise RecoveryError(f"recovery journal {jpath} contains invalid post-state digests")
     expected_paths = set()
     if plan is not None and journal["operation"] == "install":
         expected_paths.update(str(absolute_path(a.target_path)) for a in plan.staged_files)
@@ -478,6 +523,34 @@ def _load_valid_journal(runtime: str, scope: str, state_home, environ, *,
     return journal, jpath, state_root, absolute_path(target.control_dir)
 
 
+def _verify_recovery_surfaces(journal: dict, *, hooks_root: Path, control_root: Path,
+                              state_root: Path) -> None:
+    """Refuse rollback unless every surface is still at the journalled pre- or post-state."""
+    surfaces: list[tuple[Path, bytes | None, str | None, Path, str]] = []
+    post = journal["post_state"]
+    for path_str, backup in journal["file_backups"].items():
+        surfaces.append((
+            Path(path_str), _unb64(backup), post["file_sha256"][path_str], hooks_root, "artifact"
+        ))
+    surfaces.extend((
+        (
+            Path(journal["settings_path"]), _unb64(journal["settings_backup"]),
+            post["settings_sha256"], control_root, "settings",
+        ),
+        (
+            Path(journal["receipt_path"]), _unb64(journal["receipt_backup"]),
+            post["receipt_sha256"], state_root, "receipt",
+        ),
+    ))
+    for path, prior, expected_post, root, label in surfaces:
+        current = _read_bytes_or_none(path, root)
+        if current == prior or _sha256_or_none(current) == expected_post:
+            continue
+        raise RecoveryError(
+            f"pending recovery {label} changed outside the journalled transaction: {path}"
+        )
+
+
 def rollback(runtime: str, scope: str, state_home: "str | None" = None,
              environ: "dict[str, str] | None" = None, *, profile: "RuntimeProfile | None" = None,
              target: "RuntimeTarget | None" = None, plan: "InstallPlan | None" = None) -> bool:
@@ -493,6 +566,9 @@ def rollback(runtime: str, scope: str, state_home: "str | None" = None,
         return False
     journal, jpath, state_root, control_root = loaded
     hooks_root = absolute_path(target.hooks_dir)  # type: ignore[union-attr]
+    _verify_recovery_surfaces(
+        journal, hooks_root=hooks_root, control_root=control_root, state_root=state_root
+    )
 
     for path_str, backup in journal["file_backups"].items():
         path = Path(path_str)
@@ -648,7 +724,16 @@ def apply_uninstall(
         _journal_bytes(
             operation="uninstall", runtime=runtime, scope=scope, settings_path=settings_path,
             settings_backup=prior_settings_bytes, receipt_file=rpath, receipt_backup=receipt_backup,
-            file_backups=file_backups, now=_now_iso(),
+            file_backups=file_backups,
+            post_settings_sha256=(None if delete_settings else _sha256_or_none(
+                new_settings if settings_changes else prior_settings_bytes
+            )),
+            post_receipt_sha256=None,
+            post_file_sha256={
+                path: (None if path in removable else _sha256_or_none(_unb64(backup)))
+                for path, backup in file_backups.items()
+            },
+            now=_now_iso(),
         ),
         _STATE_MODE,
         state_root,

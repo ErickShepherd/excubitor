@@ -153,6 +153,40 @@ def test_uninstall_crash_after_receipt_delete_recovers_full_install(env, monkeyp
     assert (state / "receipts" / "claude-code-user.json").read_bytes() == before_receipt
 
 
+@pytest.mark.parametrize("surface", ["artifact", "settings", "receipt"])
+def test_recovery_refuses_post_crash_third_state_before_any_mutation(
+    env, monkeypatch, surface: str
+) -> None:
+    home, state, target = env
+    install(target, now="2026-01-01T00:00:00Z")
+    real_unlink = tx.durable_unlink
+
+    def crash_at_commit(path, root, **kwargs):
+        if Path(path).parent.name == "journals":
+            raise KeyboardInterrupt("simulated crash after committed bytes")
+        return real_unlink(path, root, **kwargs)
+
+    monkeypatch.setattr(tx, "durable_unlink", crash_at_commit)
+    with pytest.raises(KeyboardInterrupt):
+        install(target, now="2026-01-02T00:00:00Z")
+    monkeypatch.setattr(tx, "durable_unlink", real_unlink)
+
+    if surface == "artifact":
+        (target.hooks_dir / "guard-loop-vc.py").write_bytes(b"post-crash third-party bytes\n")
+    elif surface == "settings":
+        target.settings_path.write_bytes(b'{"post_crash": "third-party bytes"}\n')
+    else:
+        (state / "receipts" / "claude-code-user.json").write_bytes(b'{"post_crash": true}\n')
+    before_home, before_state = tree_bytes(home), tree_bytes(state)
+    plan = build_install_plan(rt.CLAUDE_CODE, target)
+
+    with pytest.raises(tx.RecoveryError, match="changed outside"):
+        tx.recover("claude-code", "user", profile=rt.CLAUDE_CODE, target=target, plan=plan)
+
+    assert tree_bytes(home) == before_home
+    assert tree_bytes(state) == before_state
+
+
 @pytest.mark.parametrize("contents", [b"{", b"{}", b'{"schema":"wrong"}'])
 def test_invalid_journal_fails_closed_without_mutation(env, contents: bytes) -> None:
     home, state, target = env
@@ -178,7 +212,9 @@ def test_invalid_base64_journal_backup_is_retained_without_mutation(env, field: 
         operation="install", runtime="claude-code", scope="user",
         settings_path=settings, settings_backup=settings.read_bytes(),
         receipt_file=state / "receipts" / "claude-code-user.json", receipt_backup=None,
-        file_backups=file_backups, now="t",
+        file_backups=file_backups,
+        post_settings_sha256=tx._sha256_or_none(settings.read_bytes()),
+        post_receipt_sha256=None, post_file_sha256={path: None for path in file_backups}, now="t",
     ))
     if field == "file_backup":
         journal["file_backups"][next(iter(journal["file_backups"]))] = "@@@"
@@ -255,7 +291,9 @@ def test_mismatched_valid_journal_is_retained_and_fails_closed(env) -> None:
         operation="install", runtime="claude-code", scope="user",
         settings_path=target.settings_path, settings_backup=None,
         receipt_file=state / "receipts" / "claude-code-user.json", receipt_backup=None,
-        file_backups={a.target_path: None for a in plan.staged_files}, now="t",
+        file_backups={a.target_path: None for a in plan.staged_files},
+        post_settings_sha256=None, post_receipt_sha256=None,
+        post_file_sha256={a.target_path: None for a in plan.staged_files}, now="t",
     ))
     journal["settings_path"] = str(home.parent / "outside-settings.json")
     original = (json.dumps(journal, sort_keys=True) + "\n").encode()

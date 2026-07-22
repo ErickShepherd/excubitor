@@ -168,7 +168,14 @@ def test_recovery_rolls_back_an_interrupted_transaction(env) -> None:
     journal = tx._journal_bytes(
         operation="install", runtime="claude-code", scope="user", settings_path=settings_path,
         settings_backup=prior.encode(), receipt_file=receipt_path("claude-code", "user"),
-        receipt_backup=None, file_backups=backups, now="t",
+        receipt_backup=None, file_backups=backups,
+        post_settings_sha256=tx._sha256_or_none(settings_path.read_bytes()),
+        post_receipt_sha256=None,
+        post_file_sha256={
+            path: tx._sha256_or_none(Path(path).read_bytes()) if Path(path).exists() else None
+            for path in backups
+        },
+        now="t",
     )
     jpath = state / "journals" / "claude-code-user.json"
     jpath.parent.mkdir(parents=True)
@@ -190,7 +197,9 @@ def test_apply_recovers_before_installing(env) -> None:
     jpath.write_bytes(tx._journal_bytes(
         operation="install", runtime="claude-code", scope="user", settings_path=settings_path,
         settings_backup=None, receipt_file=receipt_path("claude-code", "user"),
-        receipt_backup=None, file_backups={a.target_path: None for a in plan.staged_files}, now="t",
+        receipt_backup=None, file_backups={a.target_path: None for a in plan.staged_files},
+        post_settings_sha256=None, post_receipt_sha256=None,
+        post_file_sha256={a.target_path: None for a in plan.staged_files}, now="t",
     ))
     _install(target)
     assert not jpath.exists()  # recovered, then a clean install committed

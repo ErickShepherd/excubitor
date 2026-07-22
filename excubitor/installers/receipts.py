@@ -40,6 +40,15 @@ __all__ = [
 
 #: The receipt file's schema/version marker.
 RECEIPT_SCHEMA = "excubitor.receipt.v1"
+_SHA256_HEX_LENGTH = 64
+
+
+def _sha256_hex(value: object, label: str) -> str:
+    if not isinstance(value, str) or len(value) != _SHA256_HEX_LENGTH or any(
+        char not in "0123456789abcdef" for char in value
+    ):
+        raise ValueError(f"{label} is not a lowercase SHA-256 digest")
+    return value
 
 
 def matcher_key(matcher: str) -> "tuple[str, ...]":
@@ -64,7 +73,11 @@ class OwnedFile:
 
     @classmethod
     def from_dict(cls, d: dict) -> "OwnedFile":
-        return cls(path=str(d["path"]), sha256=str(d["sha256"]))
+        if not isinstance(d, dict) or set(d) != {"path", "sha256"}:
+            raise ValueError("receipt owned-file entry has an invalid field set")
+        if not isinstance(d["path"], str) or not d["path"]:
+            raise ValueError("receipt owned-file path is not a non-empty string")
+        return cls(path=d["path"], sha256=_sha256_hex(d["sha256"], "receipt owned-file hash"))
 
 
 @dataclass(frozen=True)
@@ -88,12 +101,19 @@ class OwnedRegistration:
 
     @classmethod
     def from_dict(cls, d: dict) -> "OwnedRegistration":
+        if not isinstance(d, dict) or set(d) != {"event", "matcher", "type", "command", "timeout"}:
+            raise ValueError("receipt registration entry has an invalid field set")
+        for name in ("event", "matcher", "type", "command"):
+            if not isinstance(d[name], str) or not d[name]:
+                raise ValueError(f"receipt registration field {name} is not a non-empty string")
+        if isinstance(d["timeout"], bool) or not isinstance(d["timeout"], int) or d["timeout"] <= 0:
+            raise ValueError("receipt registration timeout is not a positive integer")
         return cls(
-            event=str(d.get("event", "PreToolUse")),
-            matcher=str(d["matcher"]),
-            handler_type=str(d.get("type", "command")),
-            command=str(d["command"]),
-            timeout=int(d["timeout"]),
+            event=d["event"],
+            matcher=d["matcher"],
+            handler_type=d["type"],
+            command=d["command"],
+            timeout=d["timeout"],
         )
 
     def matches(self, event: str, matcher: str, command: str, timeout: object, handler_type: str) -> bool:
@@ -159,14 +179,24 @@ class Receipt:
             raise ValueError("receipt field settings_preexisted is not a boolean")
         if not isinstance(d["files"], list) or not isinstance(d["registrations"], list):
             raise ValueError("receipt files and registrations must be lists")
+        files = tuple(OwnedFile.from_dict(f) for f in d["files"])
+        registrations = tuple(OwnedRegistration.from_dict(r) for r in d["registrations"])
+        if len({f.path for f in files}) != len(files):
+            raise ValueError("receipt contains duplicate owned-file paths")
+        registration_keys = {
+            (r.event, matcher_key(r.matcher), r.handler_type, r.command, r.timeout)
+            for r in registrations
+        }
+        if len(registration_keys) != len(registrations):
+            raise ValueError("receipt contains duplicate registrations")
         return cls(
             runtime=d["runtime"],
             scope=d["scope"],
             settings_path=d["settings_path"],
             excubitor_version=d["excubitor_version"],
             installed_at=d["installed_at"],
-            files=tuple(OwnedFile.from_dict(f) for f in d["files"]),
-            registrations=tuple(OwnedRegistration.from_dict(r) for r in d["registrations"]),
+            files=files,
+            registrations=registrations,
             settings_preexisted=d["settings_preexisted"],
             schema=d["schema"],
         )
