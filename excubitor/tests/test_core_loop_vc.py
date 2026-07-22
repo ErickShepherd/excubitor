@@ -105,6 +105,56 @@ class TestYoloBranchCheck(unittest.TestCase):
             self.assertIsNotNone(loop_vc._dangerous(cmd, True, "/some/other/cwd"))
 
 
+class TestOptionAbbreviationBypasses(unittest.TestCase):
+    """git accepts any unambiguous long-option prefix; the reset/delete/merge-ff fences must too.
+
+    Regression guard for the review finding: the ref-move fences used prefix-aware `_long_opt_matches`
+    while `reset --hard`, `branch/symbolic-ref --delete`, and the YOLO merge `--no-ff` test still
+    matched full spellings only, so `git reset --har` / `git branch --del` slipped through.
+    """
+
+    def _deny(self, cmd: str, yolo: bool = False) -> None:
+        self.assertIsNotNone(loop_vc._dangerous(cmd, yolo, "/tmp"), f"expected DENY: {cmd!r}")
+
+    def _allow(self, cmd: str) -> None:
+        self.assertIsNone(loop_vc._dangerous(cmd, False, "/tmp"), f"expected allow: {cmd!r}")
+
+    def test_reset_hard_abbreviations_deny(self):
+        for cmd in ("git reset --har HEAD~1", "git reset --ha HEAD~1", "git reset --h HEAD~1"):
+            self._deny(cmd)
+            self._deny(cmd, yolo=True)
+
+    def test_reset_safe_modes_allow(self):
+        for cmd in ("git reset --soft HEAD~1", "git reset --mixed HEAD~1", "git reset --keep HEAD~1"):
+            self._allow(cmd)
+
+    def test_branch_delete_abbreviations_deny(self):
+        for cmd in ("git branch --del feature", "git branch --dele feature",
+                    "git branch --delet feature", "git branch --d feature"):
+            self._deny(cmd)
+
+    def test_symbolic_ref_delete_abbreviation_denies(self):
+        self._deny("git symbolic-ref --del refs/remotes/origin/HEAD")
+
+    def test_branch_nondelete_long_opts_allow(self):
+        for cmd in ("git branch --list", "git branch --merged", "git branch --show-current"):
+            self._allow(cmd)
+
+    def test_yolo_merge_trailing_ff_overrides_no_ff_denied(self):
+        # --no-ff then --ff resolves last-wins to a fast-forward — the permit must not allow it.
+        with tempfile.TemporaryDirectory() as td:
+            _repo(td, on_branch="feat/x")
+            self.assertIsNotNone(loop_vc._dangerous("git merge --no-ff --ff topic", True, td))
+            self.assertIsNotNone(loop_vc._dangerous("git merge --no-ff --ff-only topic", True, td))
+
+    def test_yolo_merge_trailing_no_ff_wins_allowed(self):
+        # --ff then --no-ff resolves last-wins to a real merge commit (revertable) — allowed.
+        with tempfile.TemporaryDirectory() as td:
+            _repo(td, on_branch="feat/x")
+            self.assertIsNone(loop_vc._dangerous("git merge --ff --no-ff topic", True, td))
+            self.assertIsNone(loop_vc._dangerous("git merge --no-f topic", True, td))
+
+
 class TestPurity(unittest.TestCase):
     """The policy is model-blind and shells out to git ONLY via the git_state boundary."""
 

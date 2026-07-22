@@ -163,8 +163,11 @@ stop-and-surface / YOLO paths: `merge`, `push`, `branch -d/-D`, `reset --hard`, 
 `worktree remove`, `gh pr merge`, and — because they repoint/rename/overwrite a ref (the
 default-branch trust anchor that guard-default-branch.py and the ralph-loop frozen-oracle base pin
 read) **without** the porcelain verbs above — the direct ref moves `branch -f/-m/-M/-C`, `update-ref`,
-`switch -C`, `checkout -B`, `worktree add -B`, `remote set-head`, and `symbolic-ref` writes. It is
-**not** a complete deny-set over the git surface, and does not try to be — that is the
+`switch -C`, `checkout -B`, `worktree add -B`, `remote set-head`, and `symbolic-ref` writes. Every
+fenced long option in that set — `reset --hard`, `branch/symbolic-ref --delete`, `merge --no-ff`
+(YOLO), and the ref-move `--force`/`--move` family — is matched by **unambiguous prefix**, not exact
+spelling, so git's abbreviations (`--har`, `--del`, a trailing `--ff` overriding `--no-ff`) do not
+slip the fence. It is **not** a complete deny-set over the git surface, and does not try to be — that is the
 deny-set-completeness race the crux refuses. The following verbs are destructive-or-history-rewriting
 and **left open by design**, documented here and pinned ALLOW in
 `hooks/tests/test_guard_loop_vc.py::TestUnhandledGitVerbs`:
