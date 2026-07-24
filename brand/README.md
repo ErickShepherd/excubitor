@@ -12,6 +12,7 @@ watch's light held at the guarded threshold.
 | `excubitor-white.svg` | Single-ink off-white silhouette, transparent — for dark backgrounds. |
 | `excubitor-wordmark.svg` / `-white.svg` | The word alone (Sora SemiBold, outlined). |
 | `excubitor-lockup.svg` / `-dark.svg` | Mark + wordmark, horizontal. `-dark` recolours the wordmark off-white for dark backgrounds (the colour mark is kept — it reads on both themes). |
+| `excubitor-social-preview.png` | GitHub "Social preview" card (1280×640), built by `build_social_preview.py` from the dark lockup. |
 
 All SVGs are true vector — the wordmark is glyph **outlines**, so no font is needed to render them. The
 README header swaps `excubitor-lockup.svg` ⇄ `-dark.svg` by `prefers-color-scheme` via `<picture>`.
@@ -25,6 +26,26 @@ README header swaps `excubitor-lockup.svg` ⇄ `-dark.svg` by `prefers-color-sch
 | Muted amber | `#E0A94A` | Lantern glow + keystone accent |
 
 Wordmark type: **Sora SemiBold** (weight 600), SIL Open Font License 1.1.
+
+## Social preview
+
+`excubitor-social-preview.png` is built by [`build_social_preview.py`](build_social_preview.py): it
+rasterises the dark lockup and typesets a tagline + fact line over the slate-navy field, so the card is
+reproducible from what is committed here rather than existing only as an upload. Unlike the lockup SVGs,
+it typesets live text, so the Sora font (`sora-600.ttf`, OFL — see [`OFL.txt`](OFL.txt)) is vendored for
+it.
+
+```bash
+# deps: pillow, cairosvg (+ its libcairo runtime)
+python3 build_social_preview.py            # -> excubitor-social-preview.png
+```
+
+**It is a hosted repo setting, not a file GitHub reads from the tree** — committing it does not publish
+it. To apply or update it: *repo → Settings → General → Social preview → Edit → Upload an image*. There
+is no API to *set* it (though GraphQL's `usesCustomOpenGraphImage` can *check* one is set), it does not
+travel with a fork or clone, and consumers cache OpenGraph — after a change, verify with
+`curl -sL https://github.com/ErickShepherd/excubitor | grep og:image`. It renders where a URL is
+unfurled in a post or message body, **not** in a LinkedIn comment.
 
 ## Regenerating
 
