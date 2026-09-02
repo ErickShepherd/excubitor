@@ -59,6 +59,10 @@ def run(args: argparse.Namespace) -> int:
     print(f"  registrations: {regs['expected']} expected"
           + (f", {len(regs['missing'])} MISSING from settings" if regs["missing"] else ", all present"))
     print(f"  protection: {report['protection']}")
+    if report.get("trust", {}).get("handoff"):
+        print("  trust review required:")
+        for index, step in enumerate(report["trust"]["handoff"], 1):
+            print(f"    {index}. {step}")
     if "probe" in report and report["probe"].get("detail"):
         print(f"    probe: {report['probe']['detail']}")
     if "manual_verification" in report:

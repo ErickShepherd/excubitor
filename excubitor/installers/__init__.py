@@ -3,7 +3,7 @@
 Campaign 2 builds the *installer transaction*, not the native marketplace plugins (those are later
 campaigns). The pieces:
 
-* :mod:`excubitor.installers.runtime` — runtime profiles (Claude Code only, today), deterministic
+* :mod:`excubitor.installers.runtime` — Claude Code and Codex adapter profiles, deterministic
   discovery of a runtime's concrete config/hook targets per scope, and the artifact/registration set an
   install owns.
 * :mod:`excubitor.installers.plan` — a deterministic, side-effect-free install plan (the ``--dry-run``
@@ -15,6 +15,7 @@ Validate → Plan → Stage → Register → Trust → Probe → Receipt → Rol
 nothing; staging/registration/rollback (with a receipt of exact, hash-bound ownership) land in later
 plan items, and installation is not "protected" until a real harmless-denial host probe succeeds.
 
-Only Claude Code is a supported runtime. No claim is made here that any other host is supported.
+An installable profile is not a supported-enforcement claim. Neither runtime is promoted until its
+real host has honored a harmless denial probe.
 """
 from __future__ import annotations

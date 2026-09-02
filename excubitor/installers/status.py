@@ -18,6 +18,7 @@ from pathlib import Path
 import excubitor
 from excubitor.core.events import SCHEMA as CORE_PROTOCOL
 from excubitor.installers.receipts import Receipt, state_home_dir
+from excubitor.installers.runtime import profile_for
 
 __all__ = [
     "STATUS_SCHEMA",
@@ -33,13 +34,13 @@ __all__ = [
 STATUS_SCHEMA = "excubitor.status.v1"
 PROBE_SCHEMA = "excubitor.probe.v1"
 
-#: Campaign 2 has an installable Claude Code adapter foundation but no real-host witness, so no runtime
+#: Claude Code and Codex have installable adapter foundations but no real-host witness, so no runtime
 #: has earned the project's "supported enforcement" claim yet.
-AVAILABLE_ADAPTERS = ("claude-code",)
+AVAILABLE_ADAPTERS = ("claude-code", "codex")
 SUPPORTED_RUNTIMES: tuple[str, ...] = ()
-#: Runtimes designed in docs/design but NOT supported (no built adapter, no host probe). Reported
-#: honestly so `status` never implies coverage the code does not have.
-DESIGNED_NOT_SUPPORTED = ("codex", "gemini-cli", "github-copilot")
+#: Runtimes designed in docs/design but with no installable adapter profile. Codex moved to
+#: ``AVAILABLE_ADAPTERS`` but remains absent from ``SUPPORTED_RUNTIMES`` until a real-host witness.
+DESIGNED_NOT_SUPPORTED = ("gemini-cli", "github-copilot")
 
 
 def probe_path(runtime: str, scope: str, state_home: "str | None" = None,
@@ -68,7 +69,7 @@ def read_probe_state(runtime: str, scope: str, state_home: "str | None" = None,
             "state": "needs-probe", "at": data.get("at"),
             "detail": "invalid Campaign 2 evidence: protected requires a future versioned host witness",
         }
-    if state not in {"needs-probe", "failed"}:
+    if state not in {"needs-trust", "needs-probe", "failed"}:
         return {"state": "needs-probe", "at": data.get("at"), "detail": "invalid probe state"}
     return {"state": state, "at": data.get("at"), "detail": data.get("detail")}
 
@@ -88,11 +89,23 @@ def _file_dispositions(receipt: Receipt) -> dict:
 
 def _installation_status(receipt: Receipt, state_home, environ) -> dict:
     probe = read_probe_state(receipt.runtime, receipt.scope, state_home, environ)
+    try:
+        requires_trust = profile_for(receipt.runtime).requires_trust_review
+    except KeyError:
+        requires_trust = False
+    trust = {
+        "state": "needs-review" if requires_trust else "not-required-by-profile",
+        "detail": (
+            "Unmanaged Codex hook trust is bound to the exact definition and must be reviewed in /hooks."
+            if requires_trust else "This installer profile has no separate native trust-review gate."
+        ),
+    }
     # Protection verdict: ONLY a recorded successful probe yields "protected". Everything else — files
-    # present, registrations intact, but no probe — is "needs-probe". Presence is never protection.
-    protection = probe["state"]
-    if protection != "failed":
-        protection = "needs-probe"
+    # present, registrations intact, but no probe — is unprotected. Codex first reports the earlier
+    # ``needs-trust`` gate; file presence is never evidence that Codex loaded the hook.
+    protection = "failed" if probe["state"] == "failed" else (
+        "needs-trust" if requires_trust else "needs-probe"
+    )
     return {
         "runtime": receipt.runtime,
         "scope": receipt.scope,
@@ -101,6 +114,7 @@ def _installation_status(receipt: Receipt, state_home, environ) -> dict:
         "settings_path": receipt.settings_path,
         "files": _file_dispositions(receipt),
         "registrations": len(receipt.registrations),
+        "trust": trust,
         "probe": probe,
         "protection": protection,
     }

@@ -47,6 +47,7 @@ class InstallPlan:
     hooks_dir: str
     detected: bool
     actions: "tuple[PlannedAction, ...]" = field(default=())
+    trust_handoff: "tuple[str, ...]" = field(default=())
 
     @property
     def staged_files(self) -> "tuple[PlannedAction, ...]":
@@ -66,9 +67,10 @@ def build_install_plan(profile: RuntimeProfile, target: RuntimeTarget) -> Instal
     """
     actions: "list[PlannedAction]" = []
     actions.append(PlannedAction(kind="ensure_dir", target_path=str(target.control_dir)))
-    actions.append(PlannedAction(kind="ensure_dir", target_path=str(target.hooks_dir)))
 
     artifacts: "list[Artifact]" = profile.artifacts()
+    if artifacts:
+        actions.append(PlannedAction(kind="ensure_dir", target_path=str(target.hooks_dir)))
     hooks_dir = Path(target.hooks_dir)
     for artifact in artifacts:
         dest = hooks_dir / artifact.basename
@@ -102,6 +104,7 @@ def build_install_plan(profile: RuntimeProfile, target: RuntimeTarget) -> Instal
         hooks_dir=str(target.hooks_dir),
         detected=target.detected,
         actions=tuple(actions),
+        trust_handoff=profile.trust_handoff(target.scope, target.settings_path),
     )
 
 
@@ -127,4 +130,7 @@ def render_plan(plan: InstallPlan) -> str:
                 f"    register    matcher={action.matcher!r:<32} timeout={action.timeout}  "
                 f"command={action.command!r}"
             )
+    if plan.trust_handoff:
+        lines.append("  trust handoff (required; not performed by the installer):")
+        lines.extend(f"    {index}. {step}" for index, step in enumerate(plan.trust_handoff, 1))
     return "\n".join(lines) + "\n"

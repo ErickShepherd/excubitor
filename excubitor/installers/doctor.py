@@ -20,6 +20,7 @@ from pathlib import Path
 
 import excubitor
 from excubitor import probe as probe_mod
+from excubitor.installers import runtime as rt
 from excubitor.installers.filesystem import absolute_path, atomic_write_bytes, ensure_contained_no_symlinks
 from excubitor.installers.receipts import Receipt, matcher_key, receipt_path, state_home_dir
 from excubitor.installers.status import PROBE_SCHEMA, probe_path
@@ -67,10 +68,10 @@ def _registration_checks(receipt: Receipt) -> dict:
             continue
         for handler in entry.get("hooks", []) if isinstance(entry.get("hooks"), list) else []:
             if isinstance(handler, dict):
-                live.add((matcher_key(entry.get("matcher", "")), handler.get("command"),
-                          handler.get("timeout")))
+                live.add((matcher_key(entry.get("matcher", "")), handler.get("type"),
+                          handler.get("command"), handler.get("timeout")))
     missing = [r.command for r in receipt.registrations
-               if (matcher_key(r.matcher), r.command, r.timeout) not in live]
+               if (matcher_key(r.matcher), r.handler_type, r.command, r.timeout) not in live]
     return {"expected": len(receipt.registrations), "missing": missing}
 
 
@@ -84,7 +85,7 @@ def _staged_guard(receipt: Receipt, basename: str) -> "str | None":
 def record_probe_state(runtime: str, scope: str, state: str, detail: str,
                        state_home=None, environ=None, now: "str | None" = None) -> None:
     """Persist only Campaign-2-honest states; ``protected`` requires a future witness schema."""
-    if state not in {"needs-probe", "failed"}:
+    if state not in {"needs-trust", "needs-probe", "failed"}:
         raise ValueError(
             f"Campaign 2 cannot record probe state {state!r}; protected requires a versioned host witness"
         )
@@ -121,10 +122,35 @@ def run_doctor(runtime: str, scope: str, do_probe: bool = False, state_home: "st
     report["installed_version"] = receipt.excubitor_version
     report["files"] = _file_checks(receipt)
     report["registrations"] = _registration_checks(receipt)
+    try:
+        profile = rt.profile_for(runtime)
+        trust_handoff = profile.trust_handoff(rt.Scope(scope), Path(receipt.settings_path))
+    except (KeyError, ValueError):
+        trust_handoff = ()
+    report["trust"] = {
+        "state": "needs-review" if trust_handoff else "not-required-by-profile",
+        "handoff": list(trust_handoff),
+    }
 
     if not do_probe:
-        report["protection"] = "needs-probe"
-        report["probe"] = {"state": "needs-probe", "detail": "run with --probe to attempt a probe"}
+        state = "needs-trust" if trust_handoff else "needs-probe"
+        detail = (
+            "complete the native trust-review handoff before running a real-host probe"
+            if trust_handoff else "run with --probe to attempt a probe"
+        )
+        report["protection"] = state
+        report["probe"] = {"state": state, "detail": detail}
+        return report
+
+    if trust_handoff:
+        state = "needs-trust"
+        detail = (
+            "Codex has not supplied a trust or runtime-dispatch witness; review the exact definition "
+            "in /hooks before the harmless real-host probe"
+        )
+        record_probe_state(runtime, scope, state, detail, state_home, environ, now)
+        report["protection"] = state
+        report["probe"] = {"state": state, "detail": detail}
         return report
 
     # --- the probe -------------------------------------------------------------------------------

@@ -36,7 +36,7 @@ def test_discovery_is_deterministic_and_reads_only(tmp_path: Path) -> None:
     before = _snapshot(tmp_path)
     first = rt.discover(home=home, scope=rt.Scope.USER)
     second = rt.discover(home=home, scope=rt.Scope.USER)
-    assert [t.runtime for t in first] == [t.runtime for t in second] == ["claude-code"]
+    assert [t.runtime for t in first] == [t.runtime for t in second] == ["claude-code", "codex"]
     assert all(not t.detected for t in first)  # nothing there yet
     assert _snapshot(tmp_path) == before  # discovery created nothing
 
@@ -63,7 +63,7 @@ def test_detection_flips_when_control_dir_exists(tmp_path: Path) -> None:
 
 def test_unsupported_runtime_is_refused_not_faked() -> None:
     with pytest.raises(KeyError):
-        rt.profile_for("codex")
+        rt.profile_for("antigravity")
 
 
 # --- artifacts and registrations -------------------------------------------------------------------

@@ -92,7 +92,7 @@ def test_pyz_carries_the_full_cli(tmp_path: Path) -> None:
     data = json.loads(result.stdout)
     assert data["schema"] == "excubitor.status.v1"
     assert data["supported_runtimes"] == []
-    assert data["available_adapters"] == ["claude-code"]
+    assert data["available_adapters"] == ["claude-code", "codex"]
 
 
 @pytest.mark.slow

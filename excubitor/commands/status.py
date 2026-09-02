@@ -50,6 +50,8 @@ def run(args: argparse.Namespace) -> int:
               + (f", {len(files['drifted'])} drifted" if files["drifted"] else "")
               + (f", {len(files['missing'])} missing" if files["missing"] else ""))
         print(f"    registrations: {inst['registrations']}")
+        if inst["trust"]["state"] == "needs-review":
+            print(f"    trust: {inst['trust']['state']} — {inst['trust']['detail']}")
         print(f"    protection: {inst['protection']}"
               + (f" — {inst['probe']['detail']}" if inst["probe"].get("detail") else ""))
     return 0

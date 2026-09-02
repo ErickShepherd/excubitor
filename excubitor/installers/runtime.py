@@ -6,10 +6,11 @@ which pre-tool registrations it merges. Discovery resolves those templates into 
 :class:`RuntimeTarget` paths for a given scope + home/project root, **without writing anything** — it
 only reports what exists.
 
-Only Claude Code is modeled. The artifact set is the four shipped guard scripts plus their telemetry
-helper. Source checkouts read the single canonical copy under ``hooks/``; wheel, sdist, and zipapp
-builds carry exact-byte package resources generated from those same files, so installed artifacts do
-not depend on a repository sibling directory and do not fork policy implementation.
+Claude Code stages the four shipped guard scripts plus their telemetry helper. Codex registers the
+installed ``excubitor.adapters.codex`` module directly, so it does not create a second copy of the
+adapter outside the package root that self-integrity already protects. Source checkouts read the
+single canonical Claude artifacts under ``hooks/``; wheel, sdist, and zipapp builds carry exact-byte
+package resources generated from those same files.
 
 Nothing in this module mutates the filesystem. It resolves paths and reads artifact bytes so a plan can
 be computed; the actual staging/registration is the transaction layer's job.
@@ -36,6 +37,7 @@ __all__ = [
     "RuntimeTarget",
     "RuntimeProfile",
     "CLAUDE_CODE",
+    "CODEX",
     "profile_for",
     "discover",
 ]
@@ -69,11 +71,11 @@ class Artifact:
 
 @dataclass(frozen=True)
 class Registration:
-    """One pre-tool hook registration an install merges into settings.json, as an exact tuple.
+    """One pre-tool hook registration an install merges into host JSON, as an exact tuple.
 
-    The command invokes the staged guard script by absolute path under the target hooks dir. Ownership
-    and idempotence are decided on the full ``(event, matcher-set, type, command, timeout)`` tuple,
-    never a substring — mirroring the hardening in ``scripts/install_settings.py`` (R-07 / finding 3).
+    A command may invoke a staged guard path or an installed adapter module. Ownership and idempotence
+    are decided on the full ``(event, matcher-set, type, command, timeout)`` tuple, never a substring
+    — mirroring the hardening in ``scripts/install_settings.py`` (R-07 / finding 3).
     """
 
     script: str
@@ -153,7 +155,16 @@ def _installed_python_path() -> str:
 
 
 def _registration_command(script: Path) -> str:
-    args = [_validated_interpreter(), str(Path(os.path.abspath(script)))]
+    return _python_command([str(Path(os.path.abspath(script)))])
+
+
+def _module_registration_command(module: str) -> str:
+    """Build an exact command for an importable adapter without staging a duplicate launcher."""
+    return _python_command(["-m", module])
+
+
+def _python_command(arguments: "list[str]") -> str:
+    args = [_validated_interpreter(), *arguments]
     python_path = _installed_python_path()
     if os.name == "nt":
         return f'set "PYTHONPATH={python_path}" && {subprocess.list2cmdline(args)}'
@@ -169,6 +180,13 @@ class RuntimeProfile:
     user_settings_name: str  # e.g. "settings.json"
     project_settings_name: str  # e.g. "settings.local.json"
     hooks_subdir: str  # e.g. "hooks"
+    artifact_basenames: "tuple[str, ...]"
+    script_registrations: "tuple[tuple[str, str], ...]" = ()
+    module_registrations: "tuple[tuple[str, str], ...]" = ()
+    display_name: str = ""
+    trust_review_command: "str | None" = None
+    project_layer_trust_required: bool = False
+    additional_control_names: "tuple[str, ...]" = ()
 
     def target(
         self, scope: Scope, home: "str | os.PathLike[str]", project_root: "str | os.PathLike[str] | None"
@@ -205,7 +223,7 @@ class RuntimeProfile:
         precise message if any artifact is missing, so a plan is never silently incomplete.
         """
         source = _artifacts_source()
-        names = sorted({s for s, _ in _GUARD_REGISTRATIONS} | set(_UNREGISTERED_ARTIFACTS))
+        names = sorted(set(self.artifact_basenames))
         out: "list[Artifact]" = []
         for name in names:
             content = _packaged_artifact(name)
@@ -218,39 +236,95 @@ class RuntimeProfile:
         return out
 
     def registrations(self, target: RuntimeTarget) -> "list[Registration]":
-        """The exact-tuple pre-tool registrations for ``target`` (commands use the absolute hooks dir).
+        """The exact-tuple pre-tool registrations for ``target``.
 
-        The script path is double-quoted so a hooks directory containing spaces or non-ASCII characters
-        does not break the command when the host runs it through a shell — a real cross-platform hazard
-        (a bare ``python3 /a home/guard.py`` would split on the space). Double quotes are portable
-        across POSIX ``sh`` and Windows ``cmd`` for a path with spaces.
+        Script registrations use an absolute, shell-quoted path. Module registrations use the same
+        validated interpreter and pinned package import path without staging a second source copy.
         """
         out: "list[Registration]" = []
-        for script, matcher in _GUARD_REGISTRATIONS:
+        for script, matcher in self.script_registrations:
             command = _registration_command(target.hooks_dir / script)
             out.append(Registration(script=script, matcher=matcher, command=command))
+        for module, matcher in self.module_registrations:
+            command = _module_registration_command(module)
+            out.append(Registration(script=module, matcher=matcher, command=command))
         return out
+
+    @property
+    def requires_trust_review(self) -> bool:
+        """Whether this host keeps unmanaged hook definitions inert pending native review."""
+        return self.trust_review_command is not None
+
+    def trust_handoff(self, scope: Scope, settings_path: Path) -> "tuple[str, ...]":
+        """Native, non-bypassing review steps emitted after plan/apply.
+
+        The installer deliberately cannot mark its own hook trusted. Codex binds trust to the exact
+        definition hash, so the handoff names the concrete source and native review surface instead
+        of treating file presence as activation evidence.
+        """
+        if self.trust_review_command is None:
+            return ()
+        host = self.display_name or self.runtime_id
+        steps = [f"Review the exact unmanaged hook definition at {settings_path}."]
+        if scope is Scope.PROJECT and self.project_layer_trust_required:
+            steps.append(
+                f"Open this project in {host} and complete its project configuration trust review."
+            )
+        steps.extend(
+            (
+                f"In {host}, run {self.trust_review_command}; inspect the source, matcher, command, "
+                "and timeout, then trust only the current definition.",
+                "Do not bypass hook trust. A changed definition requires review again before it runs.",
+            )
+        )
+        return tuple(steps)
 
     def control_paths(self, target: RuntimeTarget) -> "list[Path]":
         """Host registration/config paths whose mutation could disarm enforcement (self-integrity)."""
-        return [target.settings_path, target.hooks_dir]
+        paths = [target.settings_path]
+        if self.artifact_basenames:
+            paths.append(target.hooks_dir)
+        paths.extend(target.control_dir / name for name in self.additional_control_names)
+        return paths
 
 
-#: The only supported runtime profile today.
+#: Installable profiles. Presence here is not a supported-enforcement verdict.
 CLAUDE_CODE = RuntimeProfile(
     runtime_id="claude-code",
     control_dirname=".claude",
     user_settings_name="settings.json",
     project_settings_name="settings.local.json",
     hooks_subdir="hooks",
+    artifact_basenames=tuple(
+        sorted({s for s, _ in _GUARD_REGISTRATIONS} | set(_UNREGISTERED_ARTIFACTS))
+    ),
+    script_registrations=_GUARD_REGISTRATIONS,
+    display_name="Claude Code",
 )
 
-_PROFILES = {CLAUDE_CODE.runtime_id: CLAUDE_CODE}
+CODEX = RuntimeProfile(
+    runtime_id="codex",
+    control_dirname=".codex",
+    user_settings_name="hooks.json",
+    project_settings_name="hooks.json",
+    hooks_subdir="hooks",
+    artifact_basenames=(),
+    module_registrations=(("excubitor.adapters.codex", "Bash|apply_patch"),),
+    display_name="Codex",
+    trust_review_command="/hooks",
+    project_layer_trust_required=True,
+    additional_control_names=("config.toml",),
+)
+
+_PROFILES = {profile.runtime_id: profile for profile in (CLAUDE_CODE, CODEX)}
 
 
 def profile_for(runtime_id: str) -> RuntimeProfile:
-    """Look up a runtime profile by id. Raises ``KeyError`` for an unsupported runtime — Excubitor never
-    pretends to support Codex/Gemini/Copilot here; those are later campaigns."""
+    """Look up an installable adapter profile by id.
+
+    A profile means registration is implemented; it is not a supported-enforcement claim. That still
+    requires a real host denial witness and remains a separate status gate.
+    """
     try:
         return _PROFILES[runtime_id]
     except KeyError:

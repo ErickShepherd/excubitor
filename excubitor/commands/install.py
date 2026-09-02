@@ -7,7 +7,8 @@ committed — any failure rolls back the exact prior state. Installation is repo
 yet*: only a real harmless-denial host probe (``excubitor doctor --probe``) earns that.
 
 ``--runtime auto`` acts only on *detected* runtimes; an explicit ``--runtime`` acts even when the
-runtime's control dir is absent (it would be created). Only Claude Code is supported.
+runtime's control dir is absent (it would be created). Claude Code and Codex have installable adapter
+profiles, but neither is reported as supported enforcement without a real-host denial witness.
 """
 from __future__ import annotations
 
@@ -22,7 +23,7 @@ from excubitor.installers import transaction, validate
 
 __all__ = ["register", "run"]
 
-_SUPPORTED = ["claude-code"]
+_SUPPORTED = ["claude-code", "codex"]
 
 
 def register(subparsers: "argparse._SubParsersAction") -> None:
@@ -115,6 +116,12 @@ def run(args: argparse.Namespace) -> int:
         status = "changed" if result.changed else "already current"
         print(f"installed {target.runtime}/{target.scope.value}: {status} "
               f"({', '.join(result.messages)})")
-        print("  NOT protected — `excubitor doctor --probe` can run a hook diagnostic, but Campaign 2 "
-              "has no real-host witness and remains needs-probe.")
+        if plan.trust_handoff:
+            print("  NEEDS TRUST — the installer did not and cannot approve its own unmanaged hook:")
+            for index, step in enumerate(plan.trust_handoff, 1):
+                print(f"    {index}. {step}")
+            print("  NOT protected — trust review and a real-host denial witness are still required.")
+        else:
+            print("  NOT protected — `excubitor doctor --probe` can run a hook diagnostic, but "
+                  "there is no real-host witness and the installation remains needs-probe.")
     return exit_code

@@ -64,8 +64,8 @@ def test_drift_and_missing_reported(installed) -> None:
 def test_compatibility_split_is_honest() -> None:
     data = status_mod.gather_status()
     assert data["supported_runtimes"] == []
-    assert data["available_adapters"] == ["claude-code"]
-    assert "codex" in data["designed_not_supported"]
+    assert data["available_adapters"] == ["claude-code", "codex"]
+    assert "codex" not in data["designed_not_supported"]
     assert "claude-code" not in data["designed_not_supported"]
     assert data["core_protocol"] == "excubitor.pre_tool.v1"
 

@@ -27,7 +27,7 @@ that the host invoked the hook and honored its veto.
 
 - [x] Add a Codex `PreToolUse` adapter for Bash and `apply_patch`, including complete patch-target
   extraction, all four shared policies, Codex-native veto rendering, and Windows-safe golden fixtures.
-- [ ] Add transactional Codex project and user registration, receipts, rollback, self-integrity
+- [x] Add transactional Codex project and user registration, receipts, rollback, self-integrity
   coverage for active registrations, and a trust-review handoff.
 - [ ] Run harmless Codex allow/deny probes under the installed registration and record the observed
   native fixtures and support status without overstating specialized-tool coverage.

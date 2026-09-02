@@ -28,3 +28,17 @@ Append-only observations from vendor-agnostic enforcement iterations.
 - The broker resets a pre-existing staged index after a post-staging refusal. Once that happened, the
   one-time recovery pin was no longer needed; the next admitted attempt could use normal broker-owned
   staging.
+
+## 2026-09-02 — Codex registration and trust
+
+- Codex user and project registrations both live in `hooks.json`; project hooks additionally depend
+  on the project configuration layer being trusted. Unmanaged hook trust is bound to the exact current
+  definition, so installation must hand off to `/hooks` and remain `needs-trust` rather than claiming
+  that a written file is active.
+- Registering `python -m excubitor.adapters.codex` through the validated interpreter and pinned package
+  import path avoids a second adapter copy. The active command therefore depends on the same package
+  root the adapter already supplies to self-integrity, while `.codex/hooks.json` and `config.toml`
+  remain the native registration kill switches.
+- A Codex install is a configuration-only transaction: it owns one exact hook tuple and no duplicate
+  artifact files. The shared journal/receipt rollback still restores prior bytes exactly, and the plan
+  must not create an unused `.codex/hooks` directory.
