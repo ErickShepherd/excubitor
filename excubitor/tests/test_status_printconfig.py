@@ -116,6 +116,10 @@ def test_print_config_json_shows_provenance(tmp_path: Path, monkeypatch, capsys)
     assert data["settings"]["loop_mode"]["value"] == "conservative"
     assert data["settings"]["loop_mode"]["source"] == "env:EXCUBITOR_LOOP_GUARD"
     assert data["settings"]["opt_out_marker"]["source"] == "default"
+    assert data["settings"]["codex_mcp_mutation_profiles"] == {
+        "source": "default",
+        "value": {},
+    }
 
 
 def test_print_config_surfaces_legacy_warning(tmp_path: Path, monkeypatch, capsys) -> None:

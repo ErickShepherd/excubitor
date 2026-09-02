@@ -104,6 +104,74 @@
     "expected_policy": "adapter-input"
   },
   {
+    "name": "configured MCP move supplies every target to default-branch policy",
+    "payload": {
+      "session_id": "thr_fixture",
+      "cwd": "{REPO}",
+      "hook_event_name": "PreToolUse",
+      "tool_name": "mcp__filesystem__move_file",
+      "tool_input": {"source": "before.py", "destination": "after.py"}
+    },
+    "policy": "[codex.mcp_mutation_profiles]\n\"mcp__filesystem__move_file\" = [\"/source\", \"/destination\"]\n",
+    "env": {},
+    "repo_branch": "main",
+    "expected_decision": "deny",
+    "expected_policy": "default-branch",
+    "expected_targets": ["before.py", "after.py"]
+  },
+  {
+    "name": "configured nested MCP mutation cannot rewrite Codex registration",
+    "payload": {
+      "session_id": "thr_fixture",
+      "cwd": "{REPO}",
+      "hook_event_name": "PreToolUse",
+      "tool_name": "mcp__batch__write_files",
+      "tool_input": {
+        "operations": [
+          {"path": "notes.txt", "content": "safe"},
+          {"path": ".codex/hooks.json", "content": "disarm"}
+        ]
+      }
+    },
+    "policy": "[codex.mcp_mutation_profiles]\n\"mcp__batch__write_files\" = [\"/operations/*/path\"]\n",
+    "env": {"EXCUBITOR_LOOP_GUARD": "conservative"},
+    "repo_branch": "feature",
+    "expected_decision": "deny",
+    "expected_policy": "self-integrity",
+    "expected_targets": ["notes.txt", ".codex/hooks.json"]
+  },
+  {
+    "name": "configured MCP mutation with a missing target denies conservatively",
+    "payload": {
+      "session_id": "thr_fixture",
+      "cwd": "{REPO}",
+      "hook_event_name": "PreToolUse",
+      "tool_name": "mcp__filesystem__move_file",
+      "tool_input": {"source": "before.py"}
+    },
+    "policy": "[codex.mcp_mutation_profiles]\n\"mcp__filesystem__move_file\" = [\"/source\", \"/destination\"]\n",
+    "env": {"EXCUBITOR_LOOP_GUARD": "conservative"},
+    "repo_branch": "feature",
+    "expected_decision": "deny",
+    "expected_policy": "adapter-input"
+  },
+  {
+    "name": "configured MCP mutation cannot rewrite its neutral profile",
+    "payload": {
+      "session_id": "thr_fixture",
+      "cwd": "{REPO}",
+      "hook_event_name": "PreToolUse",
+      "tool_name": "mcp__filesystem__write_file",
+      "tool_input": {"path": ".excubitor/policy.toml", "content": "disarm"}
+    },
+    "policy": "[codex.mcp_mutation_profiles]\n\"mcp__filesystem__write_file\" = [\"/path\"]\n",
+    "env": {"EXCUBITOR_LOOP_GUARD": "conservative"},
+    "repo_branch": "feature",
+    "expected_decision": "deny",
+    "expected_policy": "self-integrity",
+    "expected_targets": [".excubitor/policy.toml"]
+  },
+  {
     "name": "unknown MCP tool preserves host permission flow",
     "payload": {
       "session_id": "thr_fixture",

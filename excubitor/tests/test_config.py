@@ -96,6 +96,8 @@ def test_defaults_when_no_policy_file(tmp_path: Path) -> None:
     assert cfg.opt_out_marker.source == "default"
     assert cfg.one_unit_enabled.value is True
     assert cfg.protected_roots.value == ()
+    assert cfg.codex_mcp_mutation_profiles.value == {}
+    assert cfg.codex_mcp_mutation_profiles.source == "default"
 
 
 def test_one_unit_and_protected_roots_from_policy(tmp_path: Path) -> None:
@@ -107,6 +109,21 @@ def test_one_unit_and_protected_roots_from_policy(tmp_path: Path) -> None:
     assert cfg.one_unit_enabled.value is False
     assert cfg.one_unit_enabled.source == "policy.toml"
     assert cfg.protected_roots.value == ("scripts/ci", "x.py")
+
+
+def test_codex_mcp_mutation_profiles_from_policy(tmp_path: Path) -> None:
+    _write_policy(
+        tmp_path,
+        "[codex.mcp_mutation_profiles]\n"
+        "'mcp__filesystem__write_file' = ['/path']\n"
+        "'mcp__filesystem__move_file' = ['/source', '/destination']\n",
+    )
+    cfg = config.resolve_config(tmp_path, {})
+    assert cfg.codex_mcp_mutation_profiles.value == {
+        "mcp__filesystem__write_file": ["/path"],
+        "mcp__filesystem__move_file": ["/source", "/destination"],
+    }
+    assert cfg.codex_mcp_mutation_profiles.source == "policy.toml"
 
 
 def test_malformed_policy_file_degrades_to_defaults(tmp_path: Path) -> None:

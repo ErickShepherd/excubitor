@@ -88,6 +88,11 @@ class TestCodexGoldenFixtures(unittest.TestCase):
                 case = _replace_repo(copy.deepcopy(source_case), repo)
                 assert isinstance(case, dict)
                 _repo(repo, str(case["repo_branch"]))
+                policy = case.get("policy")
+                if isinstance(policy, str):
+                    policy_path = Path(repo, ".excubitor", "policy.toml")
+                    policy_path.parent.mkdir()
+                    policy_path.write_text(policy, encoding="utf-8")
                 payload = case["payload"]
                 environment = case["env"]
                 assert isinstance(payload, dict) and isinstance(environment, dict)
@@ -112,6 +117,8 @@ class TestCodexGoldenFixtures(unittest.TestCase):
                     self.assertIsNotNone(normalized)
                     assert normalized is not None
                     self.assertEqual(list(normalized[0].targets), case["expected_targets"])
+                    if isinstance(policy, str):
+                        self.assertIn(str(policy_path), normalized[0].control_paths)
 
     def test_one_unit_policy_is_reachable(self) -> None:
         with tempfile.TemporaryDirectory() as repo:

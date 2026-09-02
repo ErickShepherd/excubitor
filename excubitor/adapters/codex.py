@@ -1,19 +1,22 @@
 """Codex ``PreToolUse`` adapter over the model-blind Excubitor dispatcher.
 
 Codex sends one JSON object on stdin. Bash and ``apply_patch`` calls carry their native input in
-``tool_input.command``. This adapter maps those two surfaces to canonical capabilities, calls the
-shared dispatcher once, and renders only a deny. A pass writes nothing, preserving Codex's normal
-permission flow instead of accidentally granting permission.
+``tool_input.command``. Exact MCP mutation profiles in the neutral policy may additionally map a
+canonical ``mcp__server__tool`` name to every path-bearing input selector. This adapter maps those
+surfaces to canonical capabilities, calls the shared dispatcher once, and renders only a deny. A pass
+writes nothing, preserving Codex's normal permission flow instead of accidentally granting permission.
 
 The outer process contract is fail-open: malformed JSON, a non-object envelope, the wrong hook event,
 or an unexpected adapter failure produces no output and exits zero. A recognized ``apply_patch``
-command is different: once Codex has supplied patch text, failing to enumerate every mutation target
-is a safety ambiguity, so the adapter returns a structured deny. This is input validation, not a
-second policy implementation; valid calls are always decided by :mod:`excubitor.core.dispatch`.
+command or a configured MCP mutation is different: once the adapter recognizes the mutation surface,
+failing to enumerate every target is a safety ambiguity, so it returns a structured deny. This is
+input validation, not a second policy implementation; valid calls are always decided by
+:mod:`excubitor.core.dispatch`. Unconfigured MCP tools remain ``other`` and therefore preserve the
+host's normal permission flow.
 
 This module is the native adapter only. Registration, trust review, bounded denial telemetry, observed
-host fixtures, and MCP mutation profiles are separate checklist units, so the existence of this file
-alone is not a Codex support claim.
+host fixtures, and live MCP denial witnesses are separate gates, so the existence of this file alone
+is not a Codex support claim.
 """
 from __future__ import annotations
 
@@ -41,6 +44,10 @@ _CODEX_SETTINGS = frozenset({"config.toml", "hooks.json"})
 
 class _UnsafePatchEnvelope(ValueError):
     """A recognized patch call whose complete mutation target set cannot be proven."""
+
+
+class _UnsafeMcpEnvelope(ValueError):
+    """A configured MCP mutation whose complete target set cannot be proven."""
 
 
 def _string(value: object) -> "str | None":
@@ -94,6 +101,81 @@ def _patch_targets(command: str) -> tuple[str, ...]:
     return tuple(dict.fromkeys(targets))
 
 
+def _pointer_segment(raw: str) -> str:
+    """Decode one JSON Pointer segment, rejecting malformed ``~`` escapes."""
+    decoded: list[str] = []
+    index = 0
+    while index < len(raw):
+        if raw[index] != "~":
+            decoded.append(raw[index])
+            index += 1
+            continue
+        if index + 1 >= len(raw) or raw[index + 1] not in "01":
+            raise _UnsafeMcpEnvelope("invalid JSON pointer escape")
+        decoded.append("~" if raw[index + 1] == "0" else "/")
+        index += 2
+    return "".join(decoded)
+
+
+def _selector_values(tool_input: Mapping[str, object], selector: object) -> tuple[object, ...]:
+    """Resolve a profile selector through the MCP JSON arguments.
+
+    Selectors use JSON Pointer syntax plus a ``*`` segment for every member of an input array. A final
+    selector may resolve to one path string or a non-empty array of path strings.
+    """
+    if not isinstance(selector, str) or not selector.startswith("/"):
+        raise _UnsafeMcpEnvelope("target selector is not a JSON pointer")
+    nodes: list[object] = [tool_input]
+    for raw_segment in selector[1:].split("/"):
+        segment = _pointer_segment(raw_segment)
+        next_nodes: list[object] = []
+        for node in nodes:
+            if segment == "*":
+                if not isinstance(node, list) or not node:
+                    raise _UnsafeMcpEnvelope("target wildcard did not resolve a non-empty array")
+                next_nodes.extend(node)
+            elif isinstance(node, Mapping):
+                if segment not in node:
+                    raise _UnsafeMcpEnvelope("target selector field is missing")
+                next_nodes.append(node[segment])
+            elif isinstance(node, list) and segment.isascii() and segment.isdigit():
+                position = int(segment)
+                if position >= len(node):
+                    raise _UnsafeMcpEnvelope("target selector index is out of range")
+                next_nodes.append(node[position])
+            else:
+                raise _UnsafeMcpEnvelope("target selector crossed a non-container value")
+        if not next_nodes:
+            raise _UnsafeMcpEnvelope("target selector resolved no values")
+        nodes = next_nodes
+    return tuple(nodes)
+
+
+def _mcp_targets(
+    tool_name: str, tool_input: Mapping[str, object], configured: object
+) -> "tuple[str, ...] | None":
+    """Enumerate a configured MCP mutation, or return None for an unconfigured tool."""
+    if not isinstance(configured, Mapping) or tool_name not in configured:
+        return None
+    selectors = configured[tool_name]
+    if not isinstance(selectors, (list, tuple)) or not selectors:
+        raise _UnsafeMcpEnvelope("mutation profile has no target selectors")
+
+    targets: list[str] = []
+    for selector in selectors:
+        for selected in _selector_values(tool_input, selector):
+            values = selected if isinstance(selected, list) else [selected]
+            if not values:
+                raise _UnsafeMcpEnvelope("target selector resolved an empty array")
+            for value in values:
+                if not isinstance(value, str) or not value or "\x00" in value:
+                    raise _UnsafeMcpEnvelope("target is not a non-empty path string")
+                targets.append(value)
+    if not targets:
+        raise _UnsafeMcpEnvelope("mutation profile resolved no targets")
+    return tuple(dict.fromkeys(targets))
+
+
 def _unit_cap(
     environ: Mapping[str, str], cwd: "str | None", enabled: bool
 ) -> "dispatch.UnitCap | None":
@@ -110,8 +192,12 @@ def _unit_cap(
     )
 
 
-def _protected_roots(cwd: str, configured: object) -> tuple[str, ...]:
+def _protected_roots(
+    cwd: str, configured: object, policy_path: "str | None"
+) -> tuple[str, ...]:
     roots = [str(Path(__file__).resolve().parents[1])]
+    if policy_path:
+        roots.append(os.path.realpath(str(Path(policy_path).parent)))
     if isinstance(configured, tuple):
         for root in configured:
             if not isinstance(root, str) or not root:
@@ -133,7 +219,9 @@ def _dispatch_config(
         marker=marker,
         settings_names=_CODEX_SETTINGS,
         control_dir=_CODEX_CONTROL_DIR,
-        protected_roots=_protected_roots(start_dir, resolved.protected_roots.value),
+        protected_roots=_protected_roots(
+            start_dir, resolved.protected_roots.value, resolved.policy_path
+        ),
     )
     return resolved, dispatch.DispatchConfig(
         opt_out_relpath=opt_out,
@@ -166,15 +254,28 @@ def normalize(
         capability = Capability.FILE_MUTATE
         targets = _patch_targets(command)
         command = None
+    elif tool_name.startswith("mcp__"):
+        configured_targets = _mcp_targets(
+            tool_name, tool_input, resolved.codex_mcp_mutation_profiles.value
+        )
+        if configured_targets is None:
+            capability = Capability.OTHER
+        else:
+            capability = Capability.FILE_MUTATE
+            targets = configured_targets
+        command = None
     else:
         capability = Capability.OTHER
         command = None
 
-    control_paths = ()
+    control_paths: tuple[str, ...] = ()
     if cwd:
-        control_paths = tuple(
+        active_controls = [
             os.path.join(cwd, _CODEX_CONTROL_DIR, name) for name in sorted(_CODEX_SETTINGS)
-        )
+        ]
+        if resolved.policy_path:
+            active_controls.append(resolved.policy_path)
+        control_paths = tuple(active_controls)
     event = PreToolEvent(
         runtime="codex",
         native_tool=tool_name,
@@ -199,6 +300,12 @@ def decide(
         return Decision.deny(
             "Excubitor could not enumerate every file targeted by this apply_patch call, so the "
             "mutation was denied instead of running with incomplete policy coverage.",
+            policy="adapter-input",
+        )
+    except _UnsafeMcpEnvelope:
+        return Decision.deny(
+            "Excubitor could not enumerate every file targeted by this configured MCP mutation, so "
+            "the call was denied instead of running with incomplete policy coverage.",
             policy="adapter-input",
         )
     if normalized is None:

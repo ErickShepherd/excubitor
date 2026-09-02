@@ -17,7 +17,8 @@ Precedence, highest first:
 **Arming is runtime-only, never committed.** `loop_mode` (conservative / verifiable) is resolved from
 the environment alone — there is deliberately no `policy.toml` key for it, so a repo cannot arm
 verifiable autonomy by checking a file into version control. `policy.toml` carries only the static,
-reviewable knobs (the opt-out-marker relpath, the one-unit toggle, extra protected roots).
+reviewable knobs (the opt-out-marker relpath, the one-unit toggle, extra protected roots, and exact
+Codex MCP mutation profiles).
 
 Legacy compatibility is *recognition*, not *behavior change*: the shipped Claude Code guards still read
 `CLAUDE_LOOP_GUARD` / `CLAUDE_ALLOW_DEFAULT_BRANCH` and the `.claude/allow-default-branch` marker
@@ -95,6 +96,7 @@ class Config:
     opt_out_marker: Resolved  # value: str
     one_unit_enabled: Resolved  # value: bool
     protected_roots: Resolved  # value: tuple[str, ...]
+    codex_mcp_mutation_profiles: Resolved  # value: dict[str, object]
     policy_path: "str | None"
     warnings: "tuple[str, ...]" = field(default=())
 
@@ -209,6 +211,11 @@ def resolve_config(
     roots = tuple(r for r in roots_raw if isinstance(r, str)) if isinstance(roots_raw, list) else ()
     protected = Resolved(roots, "policy.toml" if roots else "default")
 
+    codex_table = policy.get("codex") if isinstance(policy.get("codex"), dict) else {}
+    profiles_raw = codex_table.get("mcp_mutation_profiles")
+    profiles = dict(profiles_raw) if isinstance(profiles_raw, dict) else {}
+    profile_source = "policy.toml" if isinstance(profiles_raw, dict) else "default"
+
     return Config(
         loop_mode=Resolved(loop_mode, loop_source),
         allow_default_branch=Resolved(allow, allow_source),
@@ -216,6 +223,7 @@ def resolve_config(
         opt_out_marker=opt_out,
         one_unit_enabled=one_unit,
         protected_roots=protected,
+        codex_mcp_mutation_profiles=Resolved(profiles, profile_source),
         policy_path=policy_path,
         warnings=tuple(warnings),
     )

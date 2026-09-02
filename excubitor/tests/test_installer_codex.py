@@ -44,7 +44,7 @@ def test_codex_profile_and_plan_are_native_and_write_nothing(tmp_path: Path) -> 
     assert plan.staged_files == ()
     assert len(plan.registrations) == 1
     registration = plan.registrations[0]
-    assert registration.matcher == "Bash|apply_patch"
+    assert registration.matcher == "Bash|apply_patch|mcp__.*"
     assert "-m excubitor.adapters.codex" in registration.command
     if os.name == "nt":
         assert registration.command_windows is not None
@@ -89,7 +89,7 @@ def test_codex_install_receipt_idempotence_and_uninstall_roundtrip(
     assert original["hooks"]["PostToolUse"] == live["hooks"]["PostToolUse"]
     codex_entries = [
         entry for entry in live["hooks"]["PreToolUse"]
-        if entry.get("matcher") == "Bash|apply_patch"
+        if entry.get("matcher") == "Bash|apply_patch|mcp__.*"
     ]
     assert len(codex_entries) == 1
     assert "-m excubitor.adapters.codex" in codex_entries[0]["hooks"][0]["command"]
@@ -100,7 +100,7 @@ def test_codex_install_receipt_idempotence_and_uninstall_roundtrip(
     assert receipt.settings_path == str(target.settings_path.resolve())
     assert receipt.files == ()
     assert len(receipt.registrations) == 1
-    assert receipt.registrations[0].matcher == "Bash|apply_patch"
+    assert receipt.registrations[0].matcher == "Bash|apply_patch|mcp__.*"
     if os.name == "nt":
         assert receipt.registrations[0].command_windows == (
             codex_entries[0]["hooks"][0]["commandWindows"]

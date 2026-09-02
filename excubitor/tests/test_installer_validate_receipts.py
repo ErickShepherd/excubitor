@@ -91,6 +91,40 @@ def test_unknown_policy_fields_are_rejected_as_likely_misspellings() -> None:
     assert "one_unit.enable" in " ".join(result.problems)
 
 
+def test_codex_mcp_mutation_profiles_validate_exact_tools_and_selectors() -> None:
+    assert validate.validate_policy(
+        {
+            "codex": {
+                "mcp_mutation_profiles": {
+                    "mcp__filesystem__write_file": ["/path"],
+                    "mcp__filesystem__move_file": ["/source", "/destination"],
+                    "mcp__batch__write_files": ["/operations/*/path"],
+                }
+            }
+        }
+    ).ok
+
+    result = validate.validate_policy(
+        {
+            "codex": {
+                "mcp_mutation_profiles": {
+                    "write_file": ["/path"],
+                    "mcp__filesystem__empty": [],
+                    "mcp__filesystem__bad": ["path"],
+                    "mcp__filesystem__escape": ["/bad~2escape"],
+                    "mcp__filesystem__duplicate": ["/path", "/path"],
+                }
+            }
+        }
+    )
+    assert not result.ok
+    joined = " ".join(result.problems)
+    assert "canonical" in joined
+    assert "non-empty" in joined
+    assert "JSON pointer" in joined
+    assert "duplicate" in joined
+
+
 # --- receipts: exact, hash-bound ownership ---------------------------------------------------------
 
 def _sample_receipt() -> Receipt:

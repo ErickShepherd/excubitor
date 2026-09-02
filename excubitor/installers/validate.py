@@ -15,6 +15,7 @@ does no I/O and mutates nothing — the caller decides not to write when a resul
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 
 __all__ = [
@@ -101,7 +102,7 @@ def validate_policy(policy: object) -> ValidationResult:
     if not isinstance(policy, dict):
         return ValidationResult((f"policy is not a table (got {type(policy).__name__})",))
 
-    allowed_root = {"version", "default_branch", "one_unit", "self_integrity"}
+    allowed_root = {"version", "default_branch", "one_unit", "self_integrity", "codex"}
     for field_name in sorted(set(policy) - allowed_root):
         problems.append(f"unknown policy field {field_name!r} (possible misspelling)")
 
@@ -147,4 +148,40 @@ def validate_policy(policy: object) -> ValidationResult:
                 not isinstance(roots, list) or not all(isinstance(r, str) for r in roots)
             ):
                 problems.append("self_integrity.protected_roots is not a list of strings")
+
+    codex = policy.get("codex")
+    if codex is not None:
+        if not isinstance(codex, dict):
+            problems.append(f"codex is not a table (got {type(codex).__name__})")
+        else:
+            for field_name in sorted(set(codex) - {"mcp_mutation_profiles"}):
+                problems.append(f"unknown policy field codex.{field_name}")
+            profiles = codex.get("mcp_mutation_profiles")
+            if profiles is not None:
+                if not isinstance(profiles, dict):
+                    problems.append(
+                        "codex.mcp_mutation_profiles is not a table "
+                        f"(got {type(profiles).__name__})"
+                    )
+                else:
+                    canonical = re.compile(r"^mcp__[A-Za-z0-9_.-]+__[A-Za-z0-9_.-]+$")
+                    for tool_name, selectors in profiles.items():
+                        loc = f"codex.mcp_mutation_profiles.{tool_name}"
+                        if not canonical.fullmatch(tool_name):
+                            problems.append(f"{loc} is not a canonical mcp__server__tool name")
+                        if not isinstance(selectors, list) or not selectors:
+                            problems.append(f"{loc} is not a non-empty list of target selectors")
+                            continue
+                        valid_selectors = all(
+                            isinstance(selector, str)
+                            and selector.startswith("/")
+                            and re.search(r"~(?:[^01]|$)", selector) is None
+                            for selector in selectors
+                        )
+                        if not valid_selectors:
+                            problems.append(
+                                f"{loc} contains a target selector that is not a JSON pointer"
+                            )
+                        if valid_selectors and len(set(selectors)) != len(selectors):
+                            problems.append(f"{loc} contains duplicate target selectors")
     return ValidationResult(tuple(problems))

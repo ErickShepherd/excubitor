@@ -50,6 +50,10 @@ def _to_json(cfg: config.Config) -> dict:
                                  "source": cfg.one_unit_enabled.source},
             "protected_roots": {"value": list(cfg.protected_roots.value),
                                 "source": cfg.protected_roots.source},
+            "codex_mcp_mutation_profiles": {
+                "value": cfg.codex_mcp_mutation_profiles.value,
+                "source": cfg.codex_mcp_mutation_profiles.source,
+            },
         },
         "warnings": list(cfg.warnings),
     }

@@ -31,7 +31,7 @@ that the host invoked the hook and honored its veto.
   coverage for active registrations, and a trust-review handoff.
 - [x] Run harmless Codex allow/deny probes under the installed registration and record the observed
   native fixtures and support status without overstating specialized-tool coverage.
-- [ ] Add explicit Codex MCP mutation profiles so configured write-capable MCP tools supply every
+- [x] Add explicit Codex MCP mutation profiles so configured write-capable MCP tools supply every
   target while unknown MCP tools continue to preserve the host's normal permission flow.
 - [ ] Add an Antigravity `PreToolUse` adapter from observed native fixtures, covering command execution
   and every documented file-mutation surface through the same dispatcher.

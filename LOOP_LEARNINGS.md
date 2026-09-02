@@ -59,3 +59,20 @@ Append-only observations from vendor-agnostic enforcement iterations.
   binds the exact receipt registration, the importable Excubitor implementation bytes, and the
   resolved Codex executable bytes; registration, policy, adapter, or host upgrades return the install
   to a review/probe state.
+
+## 2026-09-02 — Explicit Codex MCP mutation profiles
+
+- Codex identifies MCP calls with canonical `mcp__server__tool` names and supplies the complete JSON
+  arguments to `PreToolUse`. The hook matcher must therefore observe `mcp__.*`, while the adapter uses
+  exact configured names so an unlisted tool stays silent and Codex keeps its normal permission flow.
+- A profile is a completeness assertion by the policy owner: every path-bearing input is named with a
+  JSON Pointer, with `*` available for every member of an array. Selected strings and arrays of strings
+  are flattened and deduplicated before the shared dispatcher sees the mutation.
+- Once a tool is configured as a mutation, a missing selector, empty array, non-string path, invalid
+  pointer, or embedded NUL is an adapter-input denial. Silently dropping one malformed target would let
+  a multi-target mutation bypass the branch and self-integrity policies.
+- The discovered `.excubitor` policy directory is part of the armed adapter's protected roots. A
+  configured MCP writer cannot remove its own profile and then rely on the unknown-tool pass path.
+- Fixtures and installer tests establish adapter and registration behavior only. MCP remains outside the
+  live Codex support claim until a harmless real MCP denial witness is captured and bound to a current
+  reviewed registration.
