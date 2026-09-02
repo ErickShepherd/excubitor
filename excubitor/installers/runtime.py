@@ -74,13 +74,14 @@ class Registration:
     """One pre-tool hook registration an install merges into host JSON, as an exact tuple.
 
     A command may invoke a staged guard path or an installed adapter module. Ownership and idempotence
-    are decided on the full ``(event, matcher-set, type, command, timeout)`` tuple, never a substring
-    — mirroring the hardening in ``scripts/install_settings.py`` (R-07 / finding 3).
+    are decided on the full ``(event, matcher-set, type, command, commandWindows, timeout)`` tuple,
+    never a substring — mirroring the hardening in ``scripts/install_settings.py`` (R-07 / finding 3).
     """
 
     script: str
     matcher: str
     command: str
+    command_windows: "str | None" = None
     timeout: int = CANON_TIMEOUT
     event: str = "PreToolUse"
     handler_type: str = "command"
@@ -171,6 +172,23 @@ def _python_command(arguments: "list[str]") -> str:
     return f"PYTHONPATH={shlex.quote(python_path)} {shlex.join(args)}"
 
 
+def _powershell_quote(value: str) -> str:
+    """Return one PowerShell single-quoted literal without relying on the session profile."""
+    return "'" + value.replace("'", "''") + "'"
+
+
+def _powershell_python_command(arguments: "list[str]") -> "str | None":
+    """Build Codex's Windows-native override; other platforms do not write ``commandWindows``."""
+    if os.name != "nt":
+        return None
+    args = [_validated_interpreter(), *arguments]
+    rendered = " ".join(_powershell_quote(arg) for arg in args[1:])
+    return (
+        f"$env:PYTHONPATH = {_powershell_quote(_installed_python_path())}; "
+        f"& {_powershell_quote(args[0])} {rendered}"
+    )
+
+
 @dataclass(frozen=True)
 class RuntimeProfile:
     """Everything host-specific about installing Excubitor into one runtime."""
@@ -187,6 +205,7 @@ class RuntimeProfile:
     trust_review_command: "str | None" = None
     project_layer_trust_required: bool = False
     additional_control_names: "tuple[str, ...]" = ()
+    windows_command_override: bool = False
 
     def target(
         self, scope: Scope, home: "str | os.PathLike[str]", project_root: "str | os.PathLike[str] | None"
@@ -247,7 +266,18 @@ class RuntimeProfile:
             out.append(Registration(script=script, matcher=matcher, command=command))
         for module, matcher in self.module_registrations:
             command = _module_registration_command(module)
-            out.append(Registration(script=module, matcher=matcher, command=command))
+            command_windows = (
+                _powershell_python_command(["-m", module])
+                if self.windows_command_override else None
+            )
+            out.append(
+                Registration(
+                    script=module,
+                    matcher=matcher,
+                    command=command,
+                    command_windows=command_windows,
+                )
+            )
         return out
 
     @property
@@ -314,6 +344,7 @@ CODEX = RuntimeProfile(
     trust_review_command="/hooks",
     project_layer_trust_required=True,
     additional_control_names=("config.toml",),
+    windows_command_override=True,
 )
 
 _PROFILES = {profile.runtime_id: profile for profile in (CLAUDE_CODE, CODEX)}

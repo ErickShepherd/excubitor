@@ -63,11 +63,16 @@ def test_drift_and_missing_reported(installed) -> None:
 
 def test_compatibility_split_is_honest() -> None:
     data = status_mod.gather_status()
-    assert data["supported_runtimes"] == []
+    assert data["schema"] == "excubitor.status.v2"
+    assert data["supported_runtimes"] == ["codex"]
     assert data["available_adapters"] == ["claude-code", "codex"]
     assert "codex" not in data["designed_not_supported"]
     assert "claude-code" not in data["designed_not_supported"]
     assert data["core_protocol"] == "excubitor.pre_tool.v1"
+    coverage = data["enforcement_coverage"]["codex"]
+    assert coverage["verified_tools"] == ["Bash", "apply_patch"]
+    assert "MCP mutation tools" in coverage["unverified_tools"]
+    assert "codex exec" in coverage["unverified_host_surfaces"]
 
 
 def test_no_installations_is_clean(tmp_path: Path, monkeypatch) -> None:
@@ -85,7 +90,7 @@ def test_status_json_is_stable_and_schema_tagged(installed, capsys) -> None:
     second = capsys.readouterr().out
     assert first == second  # deterministic
     parsed = json.loads(first)
-    assert parsed["schema"] == "excubitor.status.v1"
+    assert parsed["schema"] == "excubitor.status.v2"
     assert parsed["installations"][0]["protection"] == "needs-probe"
 
 
@@ -95,6 +100,8 @@ def test_status_text_reports_needs_probe(installed, capsys) -> None:
     assert "claude-code/user" in out
     assert "needs-probe" in out
     assert "verified enforcement:" in out
+    assert "verified tools: Bash, apply_patch" in out
+    assert "MCP mutation tools" in out
     assert "adapter foundations:" in out
 
 

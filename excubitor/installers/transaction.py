@@ -149,9 +149,12 @@ def _sha256_or_none(data: "bytes | None") -> "str | None":
 # --- settings registration merge -------------------------------------------------------------------
 
 def _canonical_entry(reg: OwnedRegistration) -> dict:
+    handler = {"type": reg.handler_type, "command": reg.command, "timeout": reg.timeout}
+    if reg.command_windows is not None:
+        handler["commandWindows"] = reg.command_windows
     return {
         "matcher": reg.matcher,
-        "hooks": [{"type": reg.handler_type, "command": reg.command, "timeout": reg.timeout}],
+        "hooks": [handler],
     }
 
 
@@ -160,6 +163,7 @@ def _handler_tuple(entry_matcher: object, handler: dict) -> tuple:
         matcher_key(entry_matcher if isinstance(entry_matcher, str) else ""),
         handler.get("type"),
         handler.get("command"),
+        handler.get("commandWindows"),
         handler.get("timeout"),
     )
 
@@ -174,7 +178,10 @@ def merge_registrations(
     touches an unrelated user handler. Returns whether anything changed.
     """
     desired = [_canonical_entry(w) for w in wanted]
-    owned = {(matcher_key(w.matcher), w.handler_type, w.command, w.timeout) for w in (*wanted, *prior)}
+    owned = {
+        (matcher_key(w.matcher), w.handler_type, w.command, w.command_windows, w.timeout)
+        for w in (*wanted, *prior)
+    }
     changed = False
 
     result: list = []
@@ -358,8 +365,14 @@ def apply_install(
     rpath = absolute_path(receipt_path(runtime, scope, state_home, environ))
     receipt_backup = _read_bytes_or_none(rpath, state_root)
     wanted = [
-        OwnedRegistration(matcher=r.matcher, command=r.command, timeout=r.timeout,
-                          handler_type=r.handler_type, event=r.event)
+        OwnedRegistration(
+            matcher=r.matcher,
+            command=r.command,
+            command_windows=r.command_windows,
+            timeout=r.timeout,
+            handler_type=r.handler_type,
+            event=r.event,
+        )
         for r in profile.registrations(target)
     ]
     pre = data.setdefault("hooks", {}).setdefault("PreToolUse", [])
@@ -606,11 +619,14 @@ def recover(runtime: str, scope: str, state_home: "str | None" = None,
 def remove_registrations(pre: list, owned: "list[OwnedRegistration]") -> bool:
     """Remove receipt-owned handlers (exact tuple) from ``pre`` (mutated in place), preserving all else.
 
-    A handler is removed only when its ``(matcher-set, type, command, timeout)`` exactly matches a
-    receipt-owned registration — never a substring. User handlers sharing an entry are kept in place;
-    an entry left with no handlers is dropped. Returns whether anything changed.
+    A handler is removed only when its ``(matcher-set, type, command, commandWindows, timeout)``
+    exactly matches a receipt-owned registration — never a substring. User handlers sharing an entry
+    are kept in place; an entry left with no handlers is dropped. Returns whether anything changed.
     """
-    owned_tuples = {(matcher_key(r.matcher), r.handler_type, r.command, r.timeout) for r in owned}
+    owned_tuples = {
+        (matcher_key(r.matcher), r.handler_type, r.command, r.command_windows, r.timeout)
+        for r in owned
+    }
     result: list = []
     changed = False
     for entry in pre:

@@ -36,6 +36,11 @@ def run(args: argparse.Namespace) -> int:
 
     print(f"excubitor {data['excubitor_version']}  (core protocol {data['core_protocol']})")
     print(f"verified enforcement:  {', '.join(data['supported_runtimes']) or 'none'}")
+    for runtime, coverage in data["enforcement_coverage"].items():
+        print(f"  {runtime}: {coverage['verified_host']}")
+        print(f"    verified tools: {', '.join(coverage['verified_tools'])}")
+        unverified = [*coverage["unverified_tools"], *coverage["unverified_host_surfaces"]]
+        print(f"    not yet verified: {', '.join(unverified)}")
     print(f"adapter foundations:   {', '.join(data['available_adapters'])}")
     print(f"designed, not built:   {', '.join(data['designed_not_supported'])}")
     if not data["installations"]:

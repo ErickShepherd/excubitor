@@ -90,8 +90,9 @@ def test_pyz_carries_the_full_cli(tmp_path: Path) -> None:
                             capture_output=True, text=True, timeout=60, env=env)
     assert result.returncode == 0
     data = json.loads(result.stdout)
-    assert data["schema"] == "excubitor.status.v1"
-    assert data["supported_runtimes"] == []
+    assert data["schema"] == "excubitor.status.v2"
+    assert data["supported_runtimes"] == ["codex"]
+    assert data["enforcement_coverage"]["codex"]["verified_tools"] == ["Bash", "apply_patch"]
     assert data["available_adapters"] == ["claude-code", "codex"]
 
 

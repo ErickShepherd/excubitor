@@ -22,6 +22,9 @@ sys.path.insert(0, str(_REPO_ROOT))
 from excubitor.adapters import codex  # noqa: E402
 
 _FIXTURES = _REPO_ROOT / "runtime" / "tests" / "fixtures" / "codex_pretooluse.json"
+_OBSERVED_FIXTURE = (
+    _REPO_ROOT / "runtime" / "tests" / "fixtures" / "codex_pretooluse_observed.json"
+)
 
 
 def _git(cwd: str, *args: str) -> None:
@@ -51,6 +54,33 @@ def _replace_repo(value: object, repo: str) -> object:
 
 
 class TestCodexGoldenFixtures(unittest.TestCase):
+    def test_observed_host_fixture_is_sanitized_and_supports_only_claimed_surfaces(self) -> None:
+        witness_text = _OBSERVED_FIXTURE.read_text(encoding="utf-8")
+        witness = json.loads(witness_text)
+
+        self.assertEqual(witness["schema"], "excubitor.codex-host-witness.v1")
+        self.assertEqual(witness["verified_tools"], ["Bash", "apply_patch"])
+        self.assertNotIn("C:\\Users\\", witness_text)
+        self.assertIn("{SESSION_ID}", witness_text)
+
+        allow, deny = witness["probes"]
+        self.assertEqual(allow["payload"]["tool_name"], "Bash")
+        self.assertEqual(allow["payload"]["tool_input"]["command"], "git status --short")
+        self.assertEqual(
+            allow["observation"],
+            {
+                "hook_dispatched": True,
+                "hook_blocked": False,
+                "tool_executed": True,
+                "agent_result": "ALLOWED",
+            },
+        )
+        self.assertEqual(deny["payload"]["tool_name"], "apply_patch")
+        self.assertTrue(deny["observation"]["hook_blocked"])
+        self.assertFalse(deny["observation"]["tool_executed"])
+        self.assertFalse(deny["observation"]["marker_created"])
+        self.assertTrue(any("MCP" in limitation for limitation in witness["limitations"]))
+
     def test_golden_fixtures(self) -> None:
         cases = json.loads(_FIXTURES.read_text(encoding="utf-8"))
         for source_case in cases:

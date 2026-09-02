@@ -34,6 +34,7 @@ class PlannedAction:
     size: "int | None" = None
     matcher: "str | None" = None
     command: "str | None" = None
+    command_windows: "str | None" = None
     timeout: "int | None" = None
 
 
@@ -92,6 +93,7 @@ def build_install_plan(profile: RuntimeProfile, target: RuntimeTarget) -> Instal
                 basename=reg.script,
                 matcher=reg.matcher,
                 command=reg.command,
+                command_windows=reg.command_windows,
                 timeout=reg.timeout,
                 target_path=str(target.settings_path),
             )
@@ -130,6 +132,8 @@ def render_plan(plan: InstallPlan) -> str:
                 f"    register    matcher={action.matcher!r:<32} timeout={action.timeout}  "
                 f"command={action.command!r}"
             )
+            if action.command_windows is not None:
+                lines.append(f"                commandWindows={action.command_windows!r}")
     if plan.trust_handoff:
         lines.append("  trust handoff (required; not performed by the installer):")
         lines.extend(f"    {index}. {step}" for index, step in enumerate(plan.trust_handoff, 1))

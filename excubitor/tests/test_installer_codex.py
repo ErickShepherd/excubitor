@@ -1,9 +1,11 @@
 """Codex project/user registration, trust handoff, rollback, and self-integrity tests."""
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -44,6 +46,11 @@ def test_codex_profile_and_plan_are_native_and_write_nothing(tmp_path: Path) -> 
     registration = plan.registrations[0]
     assert registration.matcher == "Bash|apply_patch"
     assert "-m excubitor.adapters.codex" in registration.command
+    if os.name == "nt":
+        assert registration.command_windows is not None
+        assert "$env:PYTHONPATH" in registration.command_windows
+        assert "'-m' 'excubitor.adapters.codex'" in registration.command_windows
+        assert "commandWindows=" in rendered
     assert not any(action.target_path == str(project_target.hooks_dir) for action in plan.actions)
     assert str(project_target.settings_path) in rendered
     assert "/hooks" in rendered
@@ -86,12 +93,18 @@ def test_codex_install_receipt_idempotence_and_uninstall_roundtrip(
     ]
     assert len(codex_entries) == 1
     assert "-m excubitor.adapters.codex" in codex_entries[0]["hooks"][0]["command"]
+    if os.name == "nt":
+        assert codex_entries[0]["hooks"][0]["commandWindows"].startswith("$env:PYTHONPATH")
 
     receipt = Receipt.from_json(receipt_path("codex", scope.value).read_text(encoding="utf-8"))
     assert receipt.settings_path == str(target.settings_path.resolve())
     assert receipt.files == ()
     assert len(receipt.registrations) == 1
     assert receipt.registrations[0].matcher == "Bash|apply_patch"
+    if os.name == "nt":
+        assert receipt.registrations[0].command_windows == (
+            codex_entries[0]["hooks"][0]["commandWindows"]
+        )
 
     result = tx.apply_uninstall(
         "codex", scope.value, profile=rt.CODEX, target=target
@@ -149,11 +162,14 @@ def test_codex_registration_executes_from_non_ascii_and_spaced_targets(
     environment = dict(os.environ)
     environment["EXCUBITOR_LOOP_GUARD"] = "conservative"
     result = subprocess.run(
-        receipt.registrations[0].command,
+        (
+            ["pwsh", "-NoLogo", "-NoProfile", "-Command", receipt.registrations[0].command_windows]
+            if os.name == "nt" else receipt.registrations[0].command
+        ),
         input=json.dumps(payload),
         capture_output=True,
         text=True,
-        shell=True,
+        shell=os.name != "nt",
         env=environment,
     )
     assert result.returncode == 0
@@ -191,6 +207,117 @@ def test_cli_install_and_doctor_surface_codex_trust_gate(
     assert installation["registrations"] == 1
     assert installation["trust"]["state"] == "needs-review"
     assert installation["protection"] == "needs-trust"
+
+
+def test_observed_host_witness_is_receipt_bound_and_invalidated_by_registration_drift(
+    tmp_path: Path, monkeypatch
+) -> None:
+    _home, _project, target = _target(tmp_path, rt.Scope.USER)
+    monkeypatch.setenv("EXCUBITOR_STATE_HOME", str(tmp_path / "state"))
+    tx.apply_install(rt.CODEX, target)
+    limitations = (
+        "Codex TUI only; codex exec is not claimed protected.",
+        "MCP mutation tools and other specialized tools were not probed.",
+        "Windows user scope only; project scope and non-Windows hosts were not probed.",
+    )
+    executable = Path(sys.executable).resolve()
+    executable_fingerprint = (str(executable), hashlib.sha256(executable.read_bytes()).hexdigest())
+    monkeypatch.setattr(
+        doctor_mod, "host_executable_fingerprint", lambda _runtime: executable_fingerprint
+    )
+    monkeypatch.setattr(
+        status_mod, "host_executable_fingerprint", lambda _runtime: executable_fingerprint
+    )
+
+    doctor_mod.record_host_witness(
+        "codex",
+        "user",
+        host_version="0.152.0",
+        host_mode="TUI",
+        operating_system="Windows",
+        allow_executed=True,
+        deny_blocked=True,
+        marker_untouched=True,
+        limitations=limitations,
+        now="2026-09-02T13:40:00Z",
+    )
+
+    installation = status_mod.gather_status()["installations"][0]
+    assert installation["protection"] == "protected"
+    assert installation["trust"]["state"] == "witnessed-current-definition"
+    assert installation["probe"]["verified_tools"] == ["Bash", "apply_patch"]
+    assert installation["probe"]["limitations"] == list(limitations)
+    report = doctor_mod.run_doctor("codex", "user")
+    assert report["protection"] == "protected"
+    assert report["trust"]["state"] == "witnessed-current-definition"
+
+    witness_path = status_mod.probe_path("codex", "user")
+    witness = json.loads(witness_path.read_text(encoding="utf-8"))
+    witness["implementation_sha256"] = "0" * 64
+    witness_path.write_text(json.dumps(witness), encoding="utf-8")
+    stale_implementation = status_mod.gather_status()["installations"][0]
+    assert stale_implementation["protection"] == "needs-trust"
+    assert "implementation" in stale_implementation["probe"]["detail"]
+
+    doctor_mod.record_host_witness(
+        "codex",
+        "user",
+        host_version="0.152.0",
+        host_mode="TUI",
+        operating_system="Windows",
+        allow_executed=True,
+        deny_blocked=True,
+        marker_untouched=True,
+        limitations=limitations,
+        now="2026-09-02T13:41:00Z",
+    )
+    witness = json.loads(witness_path.read_text(encoding="utf-8"))
+    witness["host"]["executable_sha256"] = "0" * 64
+    witness_path.write_text(json.dumps(witness), encoding="utf-8")
+    stale_host = status_mod.gather_status()["installations"][0]
+    assert stale_host["protection"] == "needs-trust"
+    assert "host executable" in stale_host["probe"]["detail"]
+
+    doctor_mod.record_host_witness(
+        "codex",
+        "user",
+        host_version="0.152.0",
+        host_mode="TUI",
+        operating_system="Windows",
+        allow_executed=True,
+        deny_blocked=True,
+        marker_untouched=True,
+        limitations=limitations,
+        now="2026-09-02T13:42:00Z",
+    )
+
+    settings = json.loads(target.settings_path.read_text(encoding="utf-8"))
+    settings["hooks"]["PreToolUse"][0]["hooks"][0]["commandWindows"] += " # drift"
+    target.settings_path.write_text(json.dumps(settings, indent=2) + "\n", encoding="utf-8")
+
+    drifted = status_mod.gather_status()["installations"][0]
+    assert drifted["protection"] == "needs-trust"
+    assert drifted["trust"]["state"] == "needs-review"
+    assert "stale" in drifted["probe"]["detail"]
+
+
+def test_incomplete_host_witness_is_refused(tmp_path: Path, monkeypatch) -> None:
+    _home, _project, target = _target(tmp_path, rt.Scope.USER)
+    monkeypatch.setenv("EXCUBITOR_STATE_HOME", str(tmp_path / "state"))
+    tx.apply_install(rt.CODEX, target)
+
+    with pytest.raises(ValueError, match="executed allow"):
+        doctor_mod.record_host_witness(
+            "codex",
+            "user",
+            host_version="0.152.0",
+            host_mode="TUI",
+            operating_system="Windows",
+            allow_executed=False,
+            deny_blocked=True,
+            marker_untouched=True,
+            limitations=("specialized tools unverified",),
+        )
 
 
 def test_active_codex_registration_surfaces_are_self_protected(

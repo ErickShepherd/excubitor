@@ -32,8 +32,8 @@ def build_parser() -> argparse.ArgumentParser:
         prog=_PROG,
         description=(
             "Installable, model-blind safety policy for coding-agent runtimes. "
-            "Claude Code and Codex have adapter foundations; verified enforcement still requires "
-            "a real-host denial witness."
+            "Codex TUI enforcement is live-verified on Windows for Bash and apply_patch; status "
+            "reports the remaining host and tool surfaces separately."
         ),
     )
     parser.add_argument(

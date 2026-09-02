@@ -48,9 +48,9 @@ def validate_settings(data: object) -> ValidationResult:
     """Deep-validate a parsed settings.json for safe hook registration.
 
     Checks the whole ``hooks.PreToolUse`` structure: the top-level object shape, the hooks container,
-    every entry's ``matcher`` and ``hooks`` list, and every handler's ``type``/``command``/``timeout``
-    field types. Returns every problem found (each naming a precise location), so an install can refuse
-    the whole write on any one of them.
+    every entry's ``matcher`` and ``hooks`` list, and every handler's
+    ``type``/``command``/``commandWindows``/``timeout`` field types. Returns every problem found (each
+    naming a precise location), so an install can refuse the whole write on any one of them.
     """
     problems: list[str] = []
     if not isinstance(data, dict):
@@ -84,6 +84,8 @@ def validate_settings(data: object) -> ValidationResult:
                 problems.append(f"{hloc}.type is not a string")
             if "command" in handler and not isinstance(handler["command"], str):
                 problems.append(f"{hloc}.command is not a string")
+            if "commandWindows" in handler and not isinstance(handler["commandWindows"], str):
+                problems.append(f"{hloc}.commandWindows is not a string")
             if "timeout" in handler and not isinstance(handler["timeout"], (int, float)):
                 problems.append(f"{hloc}.timeout is not a number")
     return ValidationResult(tuple(problems))

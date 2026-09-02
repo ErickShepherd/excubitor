@@ -29,7 +29,7 @@ that the host invoked the hook and honored its veto.
   extraction, all four shared policies, Codex-native veto rendering, and Windows-safe golden fixtures.
 - [x] Add transactional Codex project and user registration, receipts, rollback, self-integrity
   coverage for active registrations, and a trust-review handoff.
-- [ ] Run harmless Codex allow/deny probes under the installed registration and record the observed
+- [x] Run harmless Codex allow/deny probes under the installed registration and record the observed
   native fixtures and support status without overstating specialized-tool coverage.
 - [ ] Add explicit Codex MCP mutation profiles so configured write-capable MCP tools supply every
   target while unknown MCP tools continue to preserve the host's normal permission flow.

@@ -15,7 +15,8 @@ Validate → Plan → Stage → Register → Trust → Probe → Receipt → Rol
 nothing; staging/registration/rollback (with a receipt of exact, hash-bound ownership) land in later
 plan items, and installation is not "protected" until a real harmless-denial host probe succeeds.
 
-An installable profile is not a supported-enforcement claim. Neither runtime is promoted until its
-real host has honored a harmless denial probe.
+An installable profile is not a supported-enforcement claim. Codex is promoted only for the exact
+Windows TUI surfaces covered by its checked-in harmless allow/deny witness; installation-specific
+trust and protection remain separate gates.
 """
 from __future__ import annotations

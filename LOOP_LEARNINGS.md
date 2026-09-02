@@ -42,3 +42,20 @@ Append-only observations from vendor-agnostic enforcement iterations.
 - A Codex install is a configuration-only transaction: it owns one exact hook tuple and no duplicate
   artifact files. The shared journal/receipt rollback still restores prior bytes exactly, and the plan
   must not create an unused `.codex/hooks` directory.
+
+## 2026-09-02 — Live Codex enforcement witness
+
+- Codex on Windows executes `commandWindows` through PowerShell. The portable `command` value used
+  the existing Windows `cmd.exe` dialect and failed before the adapter ran, so registrations now own
+  and validate the PowerShell override as part of their exact receipt tuple. Legacy receipts migrate
+  without gaining ownership of a Windows override they did not record.
+- In the Codex TUI, the trusted user hook allowed `git status --short` through `Bash` and executed it,
+  then blocked an `apply_patch` marker attempt on the default branch without creating the marker. The
+  checked-in observed fixture preserves the native fields with session paths and identifiers removed.
+- The live support claim is deliberately narrow: Windows Codex TUI, user scope, `Bash` and
+  `apply_patch`. `codex exec` did not dispatch the configured hook in this environment; MCP mutations,
+  other specialized tools, project scope, and non-Windows hosts remain unverified.
+- A local `protected` verdict must expire when behavior can change. The versioned witness therefore
+  binds the exact receipt registration, the importable Excubitor implementation bytes, and the
+  resolved Codex executable bytes; registration, policy, adapter, or host upgrades return the install
+  to a review/probe state.
