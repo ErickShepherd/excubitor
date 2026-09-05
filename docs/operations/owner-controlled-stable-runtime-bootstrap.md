@@ -53,6 +53,9 @@ Do not change a live registration until all of the following exist:
   target-to-artifact dependency.
 - The promotion operation locks one target, rechecks its exact preimage immediately before mutation, journals the
   change, replaces configuration safely, and can recover after interruption.
+- The owner has selected and provisioned the platform's enforceable native-configuration writer boundary. An
+  advisory lock plus before-and-after hashes is not an exclusive-write boundary against an unrelated process, and
+  a quiesced/cooperative-writer deployment must carry that narrower limitation explicitly.
 - Rollback is runnable through the known-good prior interpreter and runtime even when the candidate cannot start.
 - Both the candidate and prior interpreter have canonical closed inventories covering the exact executable, base
   executable, every file under isolated import paths, standard-library and extension-module bytes, shared Python

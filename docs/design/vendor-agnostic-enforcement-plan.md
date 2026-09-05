@@ -157,6 +157,15 @@ their own witnesses exist.
   system loader and system libraries are stated as the host trusted-computing-base boundary. This is candidate-only
   mechanism evidence; independent review, protected storage, authority provisioning, and live migration remain
   separate gates.
+- [ ] DECIDE: Choose the enforceable native-configuration writer boundary for each claimed operating system.
+  The existing kernel lock serializes cooperating promotion processes, and hash rechecks detect many races, but
+  neither makes pathname replacement a compare-and-swap against an unrelated writer. Windows no-share handles
+  exclude conflicting opens while held but also prevent the same atomic replacement operation; POSIX file locks
+  are advisory and remain attached to an inode that another process can replace by pathname. The robust option is
+  an independently protected writer principal with exclusive write authority over the native configuration and a
+  candidate-independent recovery path. The lower-assurance option is a cooperative/quiesced-writer contract with
+  an explicitly narrower claim. This choice changes platform provisioning and the security boundary, so the loop
+  must not select it on its own or describe the present advisory lock as enforcement.
 - [ ] Implement per-target staged promotion, platform redirection defenses, and candidate-independent interrupted
   recovery with an enforceable exclusive-write strategy for native configuration. Test Windows junctions,
   reparse points, path aliases, sharing violations, substitution after the final validation read, concurrent

@@ -277,3 +277,22 @@ Append-only observations from vendor-agnostic enforcement iterations.
   reported no violations.
 - All implementation and test bytes remain in the isolated candidate. No trusted program, signing key, protected
   store, native registration, host trust decision, or live target changed.
+
+## 2026-09-05 — Native configuration exclusivity is an unresolved platform boundary
+
+- The candidate's registry and per-target kernel locks serialize callers that use the promotion API. They do not
+  stop an unrelated process from replacing the native settings pathname, so they cannot close the final-read to
+  replacement race or justify an exclusive-writer claim.
+- Atomic replacement is not compare-and-swap. A writer can change the target after the approved preimage is read
+  and before replacement, causing an otherwise atomic `os.replace` to discard bytes that were never approved as
+  the preimage.
+- Windows sharing modes can deny later read, write, and delete opens while a no-share file handle is held. That
+  same denial also prevents replacing the pathname while the handle remains open; writing through the handle would
+  trade atomic replacement for crash recovery. On POSIX, rename leaves existing file descriptors attached to the
+  old inode and ordinary file locks are advisory, so neither primitive alone protects a writable pathname.
+- A strong cross-platform claim therefore needs an independently protected writer principal controlling the
+  configuration location and recovery path. Otherwise the honest contract is cooperative or quiesced writers plus
+  conflict detection, with no claim of exclusion against arbitrary same-user processes.
+- Selecting that boundary changes owner provisioning, privileges, recovery, and the supported-platform claim.
+  The plan did not choose those consequences, so this iteration records the fork instead of presenting the current
+  advisory lock and hash rechecks as a completed security mechanism.
