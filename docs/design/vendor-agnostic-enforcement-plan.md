@@ -140,11 +140,14 @@ their own witnesses exist.
   and enrolled verification-key identity outside packet control. Re-open owner choice only if the implementation
   requires owner hardware, credentials, purchasing, or organizational signing policy. This resolution does not
   enroll a key, accept a signature, provision authority, or authorize migration.
-- [ ] Define a strict, canonical signed approval envelope for one single-use transaction. Bind the complete review
-  packet, artifact and source/build inventories, interpreter dependency closure, machine and target, current and
-  proposed configuration, rollback material, expiry, revocation state, and transaction identity. Reject unknown
-  fields, alteration, wrong keys, replay including after rollback, stale preimages, and mismatched machines or
-  targets without mutation.
+- [x] Define strict, canonical, algorithm-neutral approval-payload and detached-signature codecs for one
+  transaction. The isolated candidate binds the complete review packet, promotion manifest, artifact and
+  source/build inventories, interpreter dependency closure, exact machine and target path semantics, current and
+  proposed configuration, rollback material, expiry, revocation snapshot, and canonical non-zero transaction
+  identity. It rejects duplicate, unknown, ill-typed, oversized, and noncanonical encodings and preserves the same
+  bytes across Python 3.11 and 3.14. Parsing is explicitly not authorization: the protected verifier/applier below
+  must still authenticate the exact bytes with its pinned key and algorithm, revalidate every attachment and live
+  binding, and consume replay state before any mutation.
 - [ ] Preserve and verify complete dependency closures for both the selected runtime and the prior known-good
   runtime. Rollback must never return to an editable import tree, and interpreter verification must cover the
   standard library, extension modules, path configuration, and other startup dependencies rather than hashing
@@ -159,9 +162,12 @@ their own witnesses exist.
   names as proof of native activation.
 - [ ] Package the minimal one-shot verifier/applier and candidate-independent recovery program for independent
   owner provisioning at fixed enrolled locations. They must not load candidate promotion code or accept
-  agent-selected keys or state directories. Add denial witnesses proving the agent cannot sign, invoke a
-  state-changing operation, alter the verifier, key, store, journal, or replay state, or bypass the public entry
-  by calling an underlying function directly.
+  agent-selected keys or state directories. The applier must authenticate the codec's exact payload bytes with its
+  pinned algorithm and enrolled key, rehash every bound attachment, reject expiry, revocation drift, stale
+  configuration, machine or target mismatch, and prior consumption including after rollback, then atomically
+  consume the transaction before mutation. Add denial witnesses proving the agent cannot sign, invoke a
+  state-changing operation, alter the verifier, key, store, journal, or replay state, or bypass the public entry by
+  calling an underlying function directly.
 - [ ] After the required isolated entry, registry, promotion path, recovery path, and independent authority have
   been implemented and reviewed, have the owner independently provision the applier and verification key, sign
   the closed packet outside agent reach, and run the first one-target bootstrap from the protected development

@@ -231,3 +231,23 @@ Append-only observations from vendor-agnostic enforcement iterations.
   prove deterministic bytes and strict rejection, but must not claim to prove one-shot authorization.
 - The next fresh unit is therefore the strict approval-payload codec with adversarial and cross-platform fixtures;
   key enrollment, protected installation, signing, bootstrap, and migration remain owner-controlled operations.
+
+## 2026-09-05 — Canonical approval codec candidate
+
+- Reusing the promotion manifest as a signature envelope would blur mechanism and authority. The candidate instead
+  keeps a separate canonical payload that binds the manifest and every external review, artifact, source, build,
+  interpreter-closure, configuration, rollback, and revocation attachment by exact digest and bounded size.
+- Target path meaning cannot depend on the verifier's operating system. The payload carries an explicit Windows or
+  POSIX flavor and validates with the corresponding standard-library path module, while preserving and hashing the
+  exact canonical path text used by the existing target identity.
+- Canonical UTF-8 JSON uses sorted keys, compact separators, one LF terminator, unescaped Unicode, strict duplicate
+  and unknown-field rejection, bounded integers and text, and canonical unpadded base64url framing. A fixed payload
+  digest passed unchanged under Python 3.11 and 3.14.
+- The envelope exposes only exact payload bytes plus opaque detached-signature bytes. It intentionally carries no
+  caller-selected algorithm or key and accepts a structurally valid altered payload with an old signature because
+  parsing is not signature verification; the protected applier must detect that mismatch later.
+- The final candidate checks passed 39 approval, registry, and promotion tests under Python 3.14 and all 17 codec
+  tests under Python 3.11. Seventeen wheel, source-archive, and zipapp builder checks also passed. Compilation and
+  the configured 110-character line limit were clean; Ruff was unavailable in the isolated test environment.
+- These source and test bytes remain only in the isolated candidate. No signature was created or accepted, no
+  replay state was provisioned or consumed, and no trusted program, hook registration, or live target changed.
