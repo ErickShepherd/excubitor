@@ -158,3 +158,16 @@ Append-only observations from vendor-agnostic enforcement iterations.
   Keep that character on the archive path while using other shell metacharacters in the venv path.
 - Only `hook codex` is available now. Unsupported hosts fail explicitly; Claude Code and Antigravity routes must
   be added by their later native-adapter units rather than guessed from the Codex contract.
+
+## 2026-09-05 — Authoritative promotion authority gate
+
+- The canonical registry and per-target promotion implementation exist only in the isolated candidate. Applying
+  them to this checkout would mutate the package imported by the active protected hook, so integration cannot
+  precede the documented stable-runtime bootstrap without defeating self-integrity.
+- The existing machine-local publication promotion broker is not the stable-runtime authority. It is an
+  agent-facing Git fast-forward tool, accepts an agent-written request, changes only Git refs, and explicitly does
+  not claim an operating-system boundary against an unrestricted same-user process.
+- The installed Ralph recipe still names a Claude-specific activation variable, but the newer repository contract
+  makes both provider-era variables ignored diagnostics. For this campaign, the native conservative baseline and
+  the one-checklist-unit-per-continuation cadence are authoritative; a later skill-update unit must remove the
+  stale vendor-specific launch instruction rather than asking users to change their environment.

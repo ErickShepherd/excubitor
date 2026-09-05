@@ -118,6 +118,13 @@ their own witnesses exist.
 - [x] Add a direct `.pyz` native-hook entry point and isolated absolute-interpreter invocation. Prove repository
   package shadowing, `sitecustomize`, inherited Python variables, virtual environments, ordinary working
   directories, spaces, and shell metacharacters cannot redirect execution.
+- [ ] DECIDE: Select, provision, and independently review the first-bootstrap promotion authority. It must be
+  unavailable for agent invocation or approval forgery, bind the exact closed review packet, revalidate the
+  candidate digest and native-configuration preimage itself, control digest-addressed storage and per-target
+  mutation, retain the prior rollback path, and have a denial test proving this agent identity cannot use it.
+  A separately authenticated broker or an owner-signed manifest with a private key unavailable to the agent are
+  candidate designs; the existing agent-facing Git promotion broker, ordinary files, hashes, receipts, command
+  flags, environment variables, and chat approval do not satisfy this boundary.
 - [ ] Introduce canonical target identities and a digest-addressed artifact dependency registry covering user
   and multiple project scopes, pending transactions, and rollback pins. Disable automatic garbage collection
   and preserve receipts whenever drift prevents complete uninstall.
