@@ -25,10 +25,18 @@ not something to hide behind an all-host success claim.
 - The owner completes each host's native trust or enablement interaction and observes the live checks.
 
 An ordinary file, digest, receipt, command-line flag, environment variable, or approval phrase in chat is not the
-independent authority. A viable implementation could use a separately authenticated broker or a signed manifest
-whose private signing capability is unavailable to the agent. On systems using privilege separation, the trusted
-side must verify the approved digest and exact configuration preimage itself; copying an agent-selected file into
-an administrator-owned directory is not sufficient.
+independent authority. The selected design uses an owner-signed closed review packet and a small one-shot
+verifier/applier that the owner installs independently at fixed enrolled locations. The signing key and signing
+operation remain unavailable to the agent. The signature authenticates the owner's approval; the separately
+protected applier verifies the packet, controls storage and journals, and performs one target mutation without
+loading candidate promotion logic, trust roots, or state paths. Selecting this design in chat does not approve a
+candidate, provision the applier, or authorize a migration.
+
+The applier's protection has an explicit boundary. Its program and recovery bytes, verification key, interpreter
+dependency closure, artifact store, journals, and revocation and replay state must be unavailable for agent
+mutation. On Windows, elevation alone does not establish that boundary against every process running as the same
+user. If the host configuration remains writable by an unrestricted same-user process, the support claim is
+limited to the covered agent tool surfaces instead of claiming protection from that entire user account.
 
 ## Hard stop before migration
 
@@ -46,8 +54,8 @@ Do not change a live registration until all of the following exist:
 - The promotion operation locks one target, rechecks its exact preimage immediately before mutation, journals the
   change, replaces configuration safely, and can recover after interruption.
 - Rollback is runnable through the known-good prior interpreter and runtime even when the candidate cannot start.
-- The independent promotion authority has been concretely selected, provisioned, and reviewed. Merely naming a
-  future authority does not satisfy this prerequisite.
+- The selected one-shot verifier/applier and recovery program have been independently reviewed and provisioned by
+  the owner at fixed enrolled locations, with their verification key and durable state protected from the agent.
 
 If any item is missing, stop after producing the review packet. Do not disable the current hook, edit its protected
 source in place, or make a temporary registration exception to get around bootstrap.
@@ -87,12 +95,17 @@ source in place, or make a temporary registration exception to get around bootst
    - expected trust handoff and harmless allow and deny probes;
    - an explicit statement that shortcuts, aliases, shims, `PATH`, and host executables do not change.
 
+   A strict signed envelope also binds the machine and single target, expiry, revocation state, and a single-use
+   transaction identity. Its interpreter inventory covers the executable, standard library, extension modules,
+   path configuration, and other startup dependencies for both the proposed and rollback runtimes. Unknown fields
+   or a changed input invalidate the envelope rather than being ignored.
+
    Changing any bound input invalidates the packet and requires a new review.
 
 6. **Review and approve outside the candidate's control.** The owner verifies the source diff, candidate digest,
-   interpreter, target list, exact registration diffs, regression evidence, and rollback path. The independent
-   authority then records approval over those exact values. Approval of one candidate or target does not authorize
-   a later build, a different configuration preimage, or another target.
+   interpreter dependency closure, target, exact registration diff, regression evidence, and rollback path. The
+   owner signs the canonical envelope using a key and signing operation unavailable to the agent. Approval of one
+   candidate or target does not authorize a later build, a different configuration preimage, or another target.
 
 7. **Import without overwriting.** The authority re-hashes the supplied archive, rejects a mismatch, rejects path
    redirection, and creates a new object at a path derived from the digest. It must fail if an existing object at
@@ -110,10 +123,11 @@ source in place, or make a temporary registration exception to get around bootst
    reviewable trust path, leave the target unverified and do not broaden the support claim.
 
 10. **Capture fresh live evidence.** On a disposable target, exercise one harmless operation that should pass and
-    one harmless covered mutation that should be denied. Confirm both the host result and the absence of the denied
-    side effect. Bind the evidence to the host version, operating system, scope, tool surface, exact registration,
-    interpreter, and artifact digest. A denial proves dispatch for that surface; it does not prove other tools,
-    scopes, hosts, or operating systems.
+    one harmless covered mutation that should be denied. Independently capture the native trust result, host
+    result, and absence of the denied side effect rather than accepting caller-supplied booleans or tool names.
+    Bind the evidence to the host version, operating system, scope, tool surface, exact registration, interpreter,
+    and artifact digest. A denial proves dispatch for that surface; it does not prove other tools, scopes, hosts,
+    or operating systems.
 
 11. **Close or roll back the target.** Mark the target `verified` only after trust review and both live checks pass.
     On startup, trust, dispatch, policy, or evidence failure, use the independent recovery path to restore the exact
@@ -133,7 +147,9 @@ source in place, or make a temporary registration exception to get around bootst
 
 ## Current repository state
 
-This procedure does not authorize a migration today. The direct isolated zipapp entry, canonical target registry,
-per-target promotion and recovery implementation, and independent promotion authority are still prerequisites.
-Until they exist and are reviewed, the current native hook and registration remain unchanged and protected-source
-work must happen only in an isolated candidate checkout.
+This procedure does not authorize a migration today. The direct isolated zipapp entry is implemented. Registry and
+promotion work exists only in an isolated candidate and is not integrated or trusted. The signed envelope, complete
+runtime and interpreter dependency closures, concurrent-writer defenses, independently captured activation
+evidence, and independently provisioned verifier/applier and recovery program remain prerequisites. Until they are
+implemented and reviewed, the current native hook and registration remain unchanged and protected-source work must
+happen only in an isolated candidate checkout.

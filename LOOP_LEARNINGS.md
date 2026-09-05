@@ -171,3 +171,18 @@ Append-only observations from vendor-agnostic enforcement iterations.
   makes both provider-era variables ignored diagnostics. For this campaign, the native conservative baseline and
   the one-checklist-unit-per-continuation cadence are authoritative; a later skill-update unit must remove the
   stale vendor-specific launch instruction rather than asking users to change their environment.
+
+## 2026-09-05 — Astra-reviewed bootstrap authority selected
+
+- First bootstrap will use an owner-signed closed review packet consumed by a small, independently provisioned,
+  owner-operated one-shot verifier/applier. The signature proves which exact transition the owner approved; the
+  protected applier separately verifies and performs that transition without trusting candidate code or paths.
+- The owner's chat approval resolves the architecture only. It does not approve candidate bytes, provision the
+  applier or signing key, select a live target, change a registration, or authorize the migration.
+- Astra found that the isolated candidate is not ready for provisioning: its manifest is not a complete signed
+  packet, its prior runtime can refer back to mutable imports, interpreter hashing omits dependency closure,
+  configuration replacement has concurrent-writer gaps, and activation evidence trusts caller assertions.
+- The denial boundary must cover signing, state-changing invocation, direct calls beneath the public entry,
+  verifier and recovery bytes, keys, artifact storage, journals, and replay state. An unrestricted same-user
+  process remains outside the stronger claim unless a genuinely separate security principal protects those
+  surfaces; native-agent tool coverage must be stated more narrowly otherwise.

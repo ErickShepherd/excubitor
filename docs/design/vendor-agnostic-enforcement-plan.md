@@ -60,6 +60,13 @@ real-host denial probe proves that the host loaded the reviewed hook and honored
   canonical target registrations, and prior configuration. Ordinary agent-writable files, hashes, receipts,
   command flags, or chat-authored tokens are not approval. If no stronger same-user boundary is available,
   the documented claim is limited to covered agent tool calls rather than arbitrary same-user processes.
+- The selected first-bootstrap authority is an owner-signed closed review packet consumed by a small,
+  independently provisioned, owner-operated one-shot verifier/applier. Its signing key and signing operation
+  remain unavailable to agents. The applier uses fixed enrolled locations and independently protects and
+  verifies its own program and recovery bytes, verification key, interpreter dependency closure, artifact
+  store, journals, revocation and replay state, exact machine and target, candidate and build evidence,
+  configuration preimage and proposal, rollback material, expiry, and single-use transaction identity. It
+  never imports promotion logic, trust roots, or state paths from the candidate.
 - Approved archives are imported into new digest-addressed paths under the promotion authority's storage;
   existing objects are never overwritten. Each native registration, pending transaction, and rollback record
   references a canonical target identity derived from the actual host configuration location, so user scope
@@ -118,23 +125,41 @@ their own witnesses exist.
 - [x] Add a direct `.pyz` native-hook entry point and isolated absolute-interpreter invocation. Prove repository
   package shadowing, `sitecustomize`, inherited Python variables, virtual environments, ordinary working
   directories, spaces, and shell metacharacters cannot redirect execution.
-- [ ] DECIDE: Select, provision, and independently review the first-bootstrap promotion authority. It must be
-  unavailable for agent invocation or approval forgery, bind the exact closed review packet, revalidate the
-  candidate digest and native-configuration preimage itself, control digest-addressed storage and per-target
-  mutation, retain the prior rollback path, and have a denial test proving this agent identity cannot use it.
-  A separately authenticated broker or an owner-signed manifest with a private key unavailable to the agent are
-  candidate designs; the existing agent-facing Git promotion broker, ordinary files, hashes, receipts, command
-  flags, environment variables, and chat approval do not satisfy this boundary.
+- [x] DECIDE: Use an owner-signed closed review packet plus an independently provisioned, owner-operated one-shot
+  verifier/applier for first bootstrap. The signature authenticates the owner's exact approval; the applier
+  independently verifies and applies it without importing candidate-controlled code or state. GPT-6 Astra
+  reviewed this design and the owner selected it. That selection does not authorize any candidate, target,
+  registration change, provisioning action, or migration.
 - [ ] Introduce canonical target identities and a digest-addressed artifact dependency registry covering user
   and multiple project scopes, pending transactions, and rollback pins. Disable automatic garbage collection
   and preserve receipts whenever drift prevents complete uninstall.
-- [ ] Implement per-target staged promotion, conflict checking, platform redirection defenses, trust handoff,
-  activation witnesses, rollback through the prior artifact, interrupted recovery, and honest mixed-version
+- [ ] Define a strict, canonical signed approval envelope for one single-use transaction. Bind the complete review
+  packet, artifact and source/build inventories, interpreter dependency closure, machine and target, current and
+  proposed configuration, rollback material, expiry, revocation state, and transaction identity. Reject unknown
+  fields, alteration, wrong keys, replay including after rollback, stale preimages, and mismatched machines or
+  targets without mutation.
+- [ ] Preserve and verify complete dependency closures for both the selected runtime and the prior known-good
+  runtime. Rollback must never return to an editable import tree, and interpreter verification must cover the
+  standard library, extension modules, path configuration, and other startup dependencies rather than hashing
+  only the interpreter executable.
+- [ ] Implement per-target staged promotion, platform redirection defenses, and candidate-independent interrupted
+  recovery with an enforceable exclusive-write strategy for native configuration. Test Windows junctions,
+  reparse points, path aliases, sharing violations, substitution after the final validation read, concurrent
+  writers during promotion and recovery, rollback through the retained prior runtime, and honest mixed-version
   status. Do not claim an atomic all-host rollout.
+- [ ] Derive activation evidence from independently captured native trust, harmless allow, harmless denial, and
+  denied-side-effect results for each claimed host tool surface. Do not accept caller-supplied booleans or tool
+  names as proof of native activation.
+- [ ] Package the minimal one-shot verifier/applier and candidate-independent recovery program for independent
+  owner provisioning at fixed enrolled locations. They must not load candidate promotion code or accept
+  agent-selected keys or state directories. Add denial witnesses proving the agent cannot sign, invoke a
+  state-changing operation, alter the verifier, key, store, journal, or replay state, or bypass the public entry
+  by calling an underlying function directly.
 - [ ] After the required isolated entry, registry, promotion path, recovery path, and independent authority have
-  been implemented and reviewed, complete the owner-controlled bootstrap from the protected development import
-  to an exact approved artifact and registration diff. Keep the prior runtime available, complete native trust
-  review, and capture fresh allow/deny dispatch evidence before protected-source work resumes in this checkout.
+  been implemented and reviewed, have the owner independently provision the applier and verification key, sign
+  the closed packet outside agent reach, and run the first one-target bootstrap from the protected development
+  import to the exact approved artifact and registration diff. Keep the prior runtime available, complete native
+  trust review, and capture fresh allow/deny dispatch evidence before protected-source work resumes here.
 - [ ] Make repository policy monotonic: repository content may add restrictions but cannot disable baseline
   controls, select a tracked opt-out escape, or arm elevated behavior. Add hostile and malformed repository
   policy tests.
