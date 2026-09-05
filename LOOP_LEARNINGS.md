@@ -144,3 +144,17 @@ Append-only observations from vendor-agnostic enforcement iterations.
   exception, edit the live package in place, or use an agent-writable receipt as authorization.
 - Trust and evidence close independently for every target. The prior runtime stays pinned through native review,
   harmless allow and deny checks, and rollback; partial migration remains an explicit mixed-version state.
+
+## 2026-09-05 — Direct isolated zipapp hook entry
+
+- Keeping the zipapp's top-level entry as a small reviewed source file is easier to audit than generating Python
+  text inside the builder, while preserving the deterministic archive and the ordinary CLI.
+- The hook route refuses to run unless both `-I` and `-S` are active and the visible interpreter and archive paths
+  are absolute. Isolation is therefore a runtime precondition, not merely a registration convention.
+- A hostile-state test uses a virtual-environment interpreter and an archive path containing spaces and shell
+  metacharacters, while planting shadow packages in the working directory, `PYTHONPATH`, and site-packages and
+  setting inherited Python variables. The embedded Codex adapter still produces its self-integrity denial.
+- Python's Windows venv builder rejects any environment path containing `;`, the platform path-list separator.
+  Keep that character on the archive path while using other shell metacharacters in the venv path.
+- Only `hook codex` is available now. Unsupported hosts fail explicitly; Claude Code and Antigravity routes must
+  be added by their later native-adapter units rather than guessed from the Codex contract.

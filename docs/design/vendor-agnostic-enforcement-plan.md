@@ -115,7 +115,7 @@ their own witnesses exist.
 - [x] Document the steps in the [owner-controlled stable-runtime bootstrap runbook](../operations/owner-controlled-stable-runtime-bootstrap.md),
   including its hard prerequisites, closed review packet, independent approval, per-target trust and witnesses,
   rollback, and conservative cleanup boundaries.
-- [ ] Add a direct `.pyz` native-hook entry point and isolated absolute-interpreter invocation. Prove repository
+- [x] Add a direct `.pyz` native-hook entry point and isolated absolute-interpreter invocation. Prove repository
   package shadowing, `sitecustomize`, inherited Python variables, virtual environments, ordinary working
   directories, spaces, and shell metacharacters cannot redirect execution.
 - [ ] Introduce canonical target identities and a digest-addressed artifact dependency registry covering user

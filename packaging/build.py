@@ -52,6 +52,8 @@ _DEFAULT_EPOCH = 315532800
 _ZIP_DATE_TIME = (1980, 1, 1, 0, 0, 0)
 #: Normalized permissions: 0644 for regular files (no executable bit inside a distribution).
 _FILE_MODE = 0o644
+#: Reviewable source copied byte-for-byte to the zipapp's top-level ``__main__.py``.
+PYZ_MAIN = PROJECT_ROOT / "packaging" / "pyz_main.py"
 
 
 def source_date_epoch() -> int:
@@ -278,19 +280,17 @@ def build_sdist(outdir: Path) -> Path:
 def build_pyz(outdir: Path) -> Path:
     """Write a deterministic stdlib-only zipapp (`<name>-<version>.pyz`) and return its path.
 
-    Built from the SAME package sources as the wheel and sdist. `zipapp` is used to lay out the
-    archive with a `__main__.py` that invokes the CLI, then the archive is rewritten deterministically
-    (pinned timestamps, sorted entries) so its bytes are reproducible.
+    Built from the SAME package sources as the wheel and sdist. The reviewable ``pyz_main.py`` source
+    becomes the archive's ``__main__.py``, then the archive is written with pinned timestamps and
+    sorted entries so its bytes are reproducible.
     """
     meta = load_metadata()
     outdir.mkdir(parents=True, exist_ok=True)
     pyz_path = outdir / f"{meta['name']}-{meta['version']}.pyz"
 
-    # Stage the package plus a __main__ shim into an in-memory source set, then write a deterministic
-    # zip directly (zipapp.create_archive does not pin timestamps, so we assemble the zip ourselves and
-    # only borrow zipapp's __main__ convention).
-    main_shim = "import excubitor.cli\nimport sys\nsys.exit(excubitor.cli.main())\n"
-    members: "list[tuple[str, bytes]]" = [("__main__.py", main_shim.encode("utf-8"))]
+    # Stage the package plus the reviewed __main__ source, then write a deterministic zip directly.
+    # zipapp.create_archive does not pin timestamps, so we only borrow its __main__ convention.
+    members: "list[tuple[str, bytes]]" = [("__main__.py", PYZ_MAIN.read_bytes())]
     members.extend(package_members())
     members.sort(key=lambda m: m[0])
 
