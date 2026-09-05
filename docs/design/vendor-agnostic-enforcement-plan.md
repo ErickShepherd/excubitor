@@ -49,6 +49,39 @@ real-host denial probe proves that the host loaded the reviewed hook and honored
 - Code, installation, trust, dispatch, and support are separate gates. Fixtures prove translation; only a
   version-bound live denial witness proves a named host surface is protected.
 
+## Stable runtime deployment and promotion contract
+
+- A deterministic `.pyz` is the selected candidate package format, not an authorization mechanism. Native
+  registrations invoke a direct hook entry point through a verified absolute interpreter in isolated startup
+  mode (`python -I -S <absolute-archive> hook <host>`). They do not use `PYTHONPATH`, `python -m`, the working
+  directory, user site packages, `sitecustomize`, or inherited Python activation variables to find policy code.
+- Deployment requires an independently controlled user promotion action that the agent cannot execute or
+  forge. Approval binds the exact archive digest, reviewed source inventory and build inputs, interpreter,
+  canonical target registrations, and prior configuration. Ordinary agent-writable files, hashes, receipts,
+  command flags, or chat-authored tokens are not approval. If no stronger same-user boundary is available,
+  the documented claim is limited to covered agent tool calls rather than arbitrary same-user processes.
+- Approved archives are imported into new digest-addressed paths under the promotion authority's storage;
+  existing objects are never overwritten. Each native registration, pending transaction, and rollback record
+  references a canonical target identity derived from the actual host configuration location, so user scope
+  and multiple project scopes do not collide. The registry records every target-to-artifact dependency.
+- Promotion is atomic only per native target. Every target moves independently through staged, registered,
+  needs-trust, verified, or rolled-back states, and a mixed-version fleet is reported honestly. Codex trust is
+  definition-bound, so a registration change stays `needs-trust` until native review and a fresh witness.
+- The prior known-good archive and registration remain recoverable throughout bootstrap, trust handoff, and
+  rollback. An archive is retained while any registration, pending transaction, or rollback pin references
+  it. Automatic garbage collection is initially disabled; cleanup is an explicit conservative operation.
+- First deployment is a separate owner-controlled migration bound to an exact reviewed candidate and exact
+  registration diff. It never edits or disables the active protected runtime to escape bootstrap, and recovery
+  remains runnable through the verified prior artifact and interpreter when a candidate cannot start.
+- Promotion revalidates approved preimages immediately before each configuration mutation, refuses concurrent
+  drift, rejects symlinks and platform redirections including Windows junctions/reparse points, and documents
+  durability limits. Verification covers hostile import shadowing, inherited Python state, path replacement,
+  concurrent installers, interrupted promotion, rollback, sharing violations, spaces, and shell metacharacters.
+- Reproducibility establishes byte identity, not trust. Promotion evidence includes policy regressions, safe
+  allow and denial checks, and a fresh native activation witness for every claimed target and tool surface.
+  A harmless denial proves dispatch only. Host launch shortcuts, aliases, shims, PATH targets, and executables
+  remain outside Excubitor ownership.
+
 ## Uninstall contract
 
 - Exact registration matching protects user configuration from accidental deletion, but artifact deletion
@@ -77,13 +110,20 @@ their own witnesses exist.
 - [x] Make the neutral core resolve the conservative baseline as active under an empty environment; remove
   provider variables as baseline or elevated activation authority; keep only explicit deprecated-input
   reporting where compatibility requires it; and add empty-environment policy tests.
-- [ ] DECIDE: Select and authorize the stable deployed enforcement artifact and trusted promotion boundary
-  before further protected-source work. The candidate default is a deterministic, content-addressed `.pyz`
-  under Excubitor's per-user state root, referenced only by native host registrations. Promotion must stage
-  new bytes beside the active version, verify their hash and a harmless denial, atomically replace each exact
-  registration, retain the prior known-good version for rollback, receipt every artifact and dependency, and
-  require an explicit trusted user action. It must not create a shortcut, alias, shim, PATH target, launcher,
-  provider-specific activation variable, or agent-writable authorization token.
+- [x] Adopt the independently reviewed stable-runtime deployment and per-target promotion contract above,
+  keeping `.pyz` packaging separate from user authorization and native-host activation.
+- [ ] Complete the separate owner-controlled bootstrap migration from the protected development import to an
+  exact reviewed stable artifact and registration diff. Keep the prior runtime available, complete native
+  trust review, and capture fresh allow/deny dispatch evidence before protected-source work resumes.
+- [ ] Add a direct `.pyz` native-hook entry point and isolated absolute-interpreter invocation. Prove repository
+  package shadowing, `sitecustomize`, inherited Python variables, virtual environments, ordinary working
+  directories, spaces, and shell metacharacters cannot redirect execution.
+- [ ] Introduce canonical target identities and a digest-addressed artifact dependency registry covering user
+  and multiple project scopes, pending transactions, and rollback pins. Disable automatic garbage collection
+  and preserve receipts whenever drift prevents complete uninstall.
+- [ ] Implement per-target staged promotion, conflict checking, platform redirection defenses, trust handoff,
+  activation witnesses, rollback through the prior artifact, interrupted recovery, and honest mixed-version
+  status. Do not claim an atomic all-host rollout.
 - [ ] Make repository policy monotonic: repository content may add restrictions but cannot disable baseline
   controls, select a tracked opt-out escape, or arm elevated behavior. Add hostile and malformed repository
   policy tests.

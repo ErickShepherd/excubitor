@@ -118,3 +118,18 @@ Append-only observations from vendor-agnostic enforcement iterations.
   enforcement trust boundary. It is therefore not a reversible, repository-internal implementation detail;
   record it as an open checklist decision rather than letting the loop silently choose or bypass the active
   self-integrity fence.
+
+## 2026-09-05 — Astra stable-runtime revision adopted
+
+- Packaging, authorization, and native activation are separate mechanisms. A content hash in a user-writable
+  directory identifies bytes but cannot authorize them when the same agent identity could replace the archive
+  and receipt together.
+- The current `PYTHONPATH` plus `python -m` registration is unsuitable for the stable runtime because working
+  directory imports and Python startup customization can redirect execution. The selected contract uses a
+  direct zipapp hook entry through a verified interpreter with isolated startup instead.
+- Host transitions are per target, not fleet-atomic. Canonical configuration-path identities, dependency and
+  rollback references, Codex's definition-bound trust handoff, and honest mixed-version status all have to be
+  modeled before shared artifacts can be promoted or removed safely.
+- Deterministic output and one denial are narrow evidence: promotion approval must bind reviewed inputs and
+  exact bytes, while regression checks plus fresh native allow/deny witnesses establish each support claim.
+  The first migration remains an owner-controlled external step and must retain the prior working runtime.
