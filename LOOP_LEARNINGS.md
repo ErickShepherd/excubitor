@@ -76,3 +76,19 @@ Append-only observations from vendor-agnostic enforcement iterations.
 - Fixtures and installer tests establish adapter and registration behavior only. MCP remains outside the
   live Codex support claim until a harmless real MCP denial witness is captured and bound to a current
   reviewed registration.
+
+## 2026-09-05 — Native integration contract correction
+
+- Host launch indirection is the wrong product boundary. Excubitor must live in each host's native lifecycle
+  and must never own shortcuts, aliases, shims, PATH launch targets, or host executables.
+- An always-on baseline and elevated autonomy are different authorities. Trusted hook dispatch can activate
+  restrictions, but an agent-writable file cannot safely authorize weaker behavior; elevated autonomy stays
+  unsupported until a separately controlled grant mechanism exists.
+- Exact-tuple registration removal is not enough for safe uninstall. A drifted registration can survive while
+  its hash-matching dependency is deleted, so uninstall must validate surviving dependency references before
+  changing either configuration or artifacts.
+- Repository configuration is attacker-controlled from the enforcement boundary's perspective. It may add
+  restrictions, but a tracked opt-out marker or `enabled = false` switch cannot be allowed to weaken the
+  trusted baseline.
+- The final support claim needs a matrix and real denial witnesses. A Windows TUI patch denial does not prove
+  shell denial, headless dispatch, MCP coverage, another scope, another operating system, or another host.
