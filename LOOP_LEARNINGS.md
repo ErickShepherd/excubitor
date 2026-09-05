@@ -380,3 +380,28 @@ Append-only observations from vendor-agnostic enforcement iterations.
 - This iteration changes only the reviewed plan. No witness code, protected collector, signing key, packet, live
   host, native registration, trust state, migration, or support claim changed. The next unit removes the legacy
   paths that can turn caller-supplied booleans and fixtures into verified or protected activation claims.
+
+## 2026-09-05 — Owner-agreed Ralph-only correction
+
+- The owner corrected the product scope: Excubitor should make explicitly started Ralph runs easy to
+  set up and complete unattended, while leaving ordinary development unaffected, including other tasks
+  in the same project. Installing or trusting a project hook is not sufficient authority to arm a run.
+- The owner agreed that default completion means reviewed, verified work committed on an isolated
+  branch, followed by a report and termination of the run's enforcement. Automatic merging is optional
+  and authorized once before the run; publishing and deployment have separate permissions. Work units
+  should advance automatically, and routine choices must not become repeated owner approval gates.
+- The earlier always-active baseline and mandatory-Ralph roadmap instruction conflict with that scope.
+  The plan and repository guidance now record the correction. Earlier candidate mechanisms and evidence
+  are preserved; runtime promotion machinery must not become a manual ritual for each ordinary run.
+- Read-only attempts to inspect the registration, adapter, and uninstall source were denied by the
+  active PreToolUse hook in an unrelated ordinary task. Do not hide paths, use an alternate source path,
+  or edit guard code to evade those denials. Supported CLI diagnostics remain available.
+- The CLI entry is the cli module, not the package itself: invoking the package failed because it has
+  no main module. The documented uninstall preview succeeds and reports one Codex user-scope
+  registration, zero installed files, and deletion of the settings file. A subsequent status call still
+  lists the installation, native trust needing review, and stale prior enforcement evidence. The
+  preview's wording does not establish that removing the settings file preserves unrelated content.
+- Exact rollback capture and inspection remain incomplete, and the active host has not been quiesced.
+  Do not perform live removal until the supported transaction's preconditions are satisfied. No native
+  registration, trust state, installed skills, shortcuts, candidate runtime, or other host changed in
+  this documentation correction. Runtime activation, isolation, and unattended completion remain open.

@@ -1,49 +1,50 @@
-# Claude Code project guidance
+# Excubitor development guidance
 
-## Excubitor roadmap work
+## Current product scope
 
-When asked to implement, continue, loop over, or assess the outstanding review, model-agnostic, or
-multi-runtime distribution work, read these files before changing code:
+Excubitor helps explicitly started Ralph runs finish agreed work safely and unattended. Ordinary
+development remains ordinary, including fixes and roadmap work in this repository. Do not require
+Ralph activation, a loop-specific environment variable, or a one-stage loop for ad hoc development.
 
-1. [`docs/design/model-agnostic-runtime.md`](docs/design/model-agnostic-runtime.md) — shared-core and
-   runtime adapter design, and the phase sequencing (Phase 1 shipped as Campaign 1; Phases 2–4 remain
-   proposed). These phase definitions are the sequencing authority for remaining work.
-2. [`docs/design/installable-multi-runtime-distribution.md`](docs/design/installable-multi-runtime-distribution.md)
-   — packaging, installation, host conformance, and layered enforcement plan.
-3. The Phase 0 guard-hardening review — reproduced defects (items R-01–R-08), their required fixes, and
-   exit criteria — recorded in [`KNOWN-BYPASSES.md`](KNOWN-BYPASSES.md), with the accepted residuals
-   pinned bidirectionally in the guard test suites (e.g. `TestR06RegistrationBoundary`).
-4. [`skills/ralph-loop/SKILL.md`](skills/ralph-loop/SKILL.md) — loop mechanics and stop/surface rules, and
-   [`docs/design/ralph-loop-checklist-anchor.md`](docs/design/ralph-loop-checklist-anchor.md) — the
-   checklist-anchor mechanism (drive a loop from an operator-supplied `- [ ]`/`- [x]` plan file).
+Before changing runtime or distribution behavior, read the current
+[Ralph-only remediation plan](docs/design/vendor-agnostic-enforcement-plan.md). It records the owner's
+current scope and completion decisions and supersedes earlier always-active enforcement instructions.
+Consult the [shared-core design](docs/design/model-agnostic-runtime.md),
+[distribution design](docs/design/installable-multi-runtime-distribution.md), and
+[known bypasses](KNOWN-BYPASSES.md) for architecture and existing evidence. Their older rollout order
+or activation examples cannot override the corrected product scope.
 
-Drive roadmap work as a `ralph-loop --anchor checklist` loop over a plan/checklist file you supply,
-sequenced from the design-doc phases above. Work from the first unchecked item, complete exactly one unit
-and one focused commit per iteration, then end the turn so the next invocation re-reads the plan. Do not
-batch-drain a phase.
+## Ordinary development
 
-Phase 0 must run conservatively with `CLAUDE_LOOP_GUARD=1`. Do not use `yolo` while R-01 through R-05 are
-open: the review found defects in the VC guard, default-branch path handling, oracle gate, and telos
-validation. A `verify:` command is evidence in conservative mode, not permission to merge, push, publish,
-or mark a human/external gate complete.
+Use focused, reviewable changes in an appropriate isolated worktree. Follow the configured commit
+broker and preserve unrelated changes. A checklist can organize this work without activating Ralph.
+Resolve routine implementation choices within the agreed scope; ask only when a consequential missing
+decision or additional authority is needed. Do not create a decision gate for every internal choice.
 
-Never resolve an open `DECIDE:` item by guessing. Never mark live-host trust, marketplace publication,
-remote repository policy, credentials, administrator configuration, cross-platform evidence, or final
-security sign-off complete without the named external evidence. Stop and surface those items.
+The current remediation authorizes correction of the design and implementation and removal of the
+exact unwanted Codex user-scope registration through the supported transaction with rollback evidence.
+It does not authorize replacement registration, native trust changes, runtime promotion, merge, push,
+publication, or changes to unrelated host configuration. An active protection denial is a blocker to
+resolve through an authorized maintenance path, never an invitation to bypass the guard.
 
-If Claude Opus 4.8 is required, launch Claude Code with the exact model ID rather than the moving `opus`
-alias:
+## Explicit Ralph runs
 
-```bash
-CLAUDE_LOOP_GUARD=1 claude --model claude-opus-4-8
-```
+Use the [Ralph recipe](skills/ralph-loop/SKILL.md) and the appropriate anchor when the owner starts a
+Ralph workflow. Verify the host can satisfy the current activation and continuation contract before
+claiming unattended protection. Legacy environment-variable instructions are not the target activation
+mechanism; never change launch shortcuts or silently broaden registration to make a run work.
 
-Then start the repo plan from the Claude Code session:
+Agree once on the work, acceptance checks, resource limits, and permitted completion actions. The
+default result is reviewed, verified work committed on an isolated branch, followed by a concise report
+and termination of that run's enforcement. Automatic merging requires advance authorization of its
+destination and checks; publishing and deployment need their own permissions. Existing permissions
+remain valid within their scope and do not require repeated approval between work units.
 
-```text
-/loop /ralph-loop --anchor checklist --repo /path/to/excubitor \
-  --plan /path/to/your-plan.md
-```
+Bounded workers and fresh reads of the durable plan are internal mechanics. The native workflow must
+advance through all agreed units without manual restarts. A worker completing one unit does not mean
+the whole run is done. The run cannot weaken acceptance checks, drop scope, or expand its authority to
+declare success. Preserve partial work and surface an unresolved blocker or resource limit honestly.
 
-The loop may commit on its dedicated implementation branch. It must not merge to the default branch,
-push, publish packages/plugins, change remote protection, or delete branches.
+Record useful findings in the append-only learnings log; do not treat that log or self-checked boxes as
+independent completion evidence. Never claim native trust, isolation, host support, required review,
+publication, or other external outcomes without the corresponding evidence.

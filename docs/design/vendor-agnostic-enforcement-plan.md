@@ -1,246 +1,146 @@
-# Vendor-agnostic native enforcement plan
+# Ralph-only native enforcement remediation
 
-Status: active; implementation is blocked on the unchecked corrective units below.
+Status: product behavior agreed on 2026-09-05; runtime correction and removal remain pending.
 
-This checklist moves Excubitor from a Claude-oriented distribution to native, testable enforcement inside
-Codex, Claude Code, and Antigravity. Users continue launching each host normally. Each checked item is one
-bounded implementation unit and one focused commit. A runtime is not called supported until a harmless
-real-host denial probe proves that the host loaded the reviewed hook and honored its veto.
+Excubitor helps the owner set up and run safe, unattended Ralph workflows with little repeated effort.
+The owner agrees on the job, what proves it is done, and how far it may proceed automatically. Excubitor
+handles iteration, verification, recovery within the agreed limits, and a concise completion report.
 
-## Owner-approved product boundary
+This plan replaces the earlier always-active baseline and its implementation checklist. Earlier work
+and decisions remain in repository history and the append-only learnings log. They are evidence and
+candidate mechanisms to assess, not instructions to continue broad enforcement or require Ralph for
+ordinary development. Recording this correction does not change the running implementation.
 
-- Excubitor integrates through each host's native plugin or lifecycle-hook mechanism. It is not a launcher,
-  wrapper, replacement shell, or supervisor for the host.
-- Installation and uninstallation never create, edit, redirect, or delete shortcuts, aliases, shims, PATH
-  launch targets, host executables, or unrelated host configuration. Receipts enumerate every Excubitor-owned
-  registration and artifact.
-- Removing Excubitor leaves Codex, Claude Code, and Antigravity independently launchable through their
-  original entry points. An uninstall conflict fails before mutation rather than leaving a dangling hook.
-- No environment variable is required to activate baseline enforcement. `EXCUBITOR_LOOP_GUARD`,
-  `CLAUDE_LOOP_GUARD`, and similar provider-era switches are deprecated inputs, not activation authority.
-- A trusted and loaded Excubitor hook is the activation signal for baseline enforcement. An untrusted,
-  unloaded, unsupported, or undispatched hook is reported as unprotected; installation alone is not proof.
+## Agreed user experience
 
-## Enforcement and authority contract
+- Ralph is explicitly started for a particular job. Installing Excubitor, opening a project, asking for
+  a fix, or continuing ordinary development does not start a Ralph run.
+- Normal development remains available, including in a repository that previously ran Ralph. A small
+  ad hoc task never has to be represented as a one-stage Ralph loop.
+- Setup establishes the scope, acceptance checks, resource limits, and permitted completion actions.
+  Reusable defaults avoid asking the same questions every run. Defaults cannot silently grant new
+  outward actions or change the selected project or destination.
+- Once started, the run advances through all agreed work units without requiring approval or a manual
+  restart between units. Small units, durable checkpoints, and fresh reads of the plan remain useful
+  internal mechanics. One worker finishing is not the whole run finishing.
+- The default completion result is reviewed, verified work committed on an isolated branch, ready for
+  owner review. The run reports what was completed and anything unresolved, then ends its enforcement.
+- Automatic merging is an option authorized once before the run starts, bound to a selected destination
+  and required checks and review. It is not the default. Publishing and deployment require separate
+  permissions, which may also be granted in advance. A completed run never invents those permissions.
+- The run preserves the agreed definition of success. It cannot weaken acceptance checks, drop scope,
+  alter trusted verification evidence, or expand its authority to declare itself complete. New tests
+  authored during implementation may supplement the agreed checks but cannot replace them as authority.
+- Interrupt the owner only for a decision outside the run's authority, an unresolved blocker, or an
+  agreed resource limit. Routine implementation choices and recoverable failures stay within the run.
+  Preserve progress when blocked; report partial work honestly instead of marking the job complete.
 
-- The model-blind core remains the only policy authority. Runtime adapters translate native events, call the
-  shared dispatcher once, and translate the result back; they do not copy deny sets.
-- The always-on baseline comprises self-integrity, the conservative version-control act fence, and
-  default-branch mutation protection. These policies run with an empty activation environment whenever a
-  trusted native hook dispatches a covered event.
-- One-unit enforcement only adds restrictions. It may be requested by a native workflow and may lazily bind a
-  session/repository baseline from trusted hook metadata; it must not depend on a provider-named environment
-  variable. Failure to establish an unambiguous baseline denies the restricted operation or reports the
-  control inactive without weakening the always-on baseline.
-- Elevated autonomy weakens the conservative act fence and therefore remains unsupported and fail-closed in
-  this campaign. An ordinary file writable by the agent is not authorization. Any future elevated grant must
-  have an independently reviewed issuer, canonical project and session binding, expiry, revocation, replay
-  resistance, and tests showing that an agent cannot create, alter, renew, or reuse the grant.
-- Repository policy may add protected roots and declare exact mutation surfaces, but it may not disable a
-  baseline policy, choose an ordinary tracked opt-out marker, authorize default-branch mutation, or arm
-  elevated autonomy. Exceptions that weaken baseline enforcement require a separate trusted user action and
-  are unsupported until that authority boundary exists.
-- A passing decision is silence: Excubitor has no objection and does not auto-approve past the host's normal
-  permission flow.
-- Irrelevant events and envelopes too malformed to identify a covered mutation may defer to the host. Once an
-  event is recognized as a covered mutation, incomplete targets, invalid native fields, configuration
-  failure, adapter exceptions, and timeouts must fail closed where the host contract permits. Degraded or
-  unsupported operation must be observable rather than indistinguishable from a policy pass.
-- Code, installation, trust, dispatch, and support are separate gates. Fixtures prove translation; only a
-  version-bound live denial witness proves a named host surface is protected.
+## Scope and activation
 
-## Stable runtime deployment and promotion contract
+- Use each host's native hook or lifecycle facilities. No user-wide or machine-wide Ralph enforcement
+  registration by default; no global Git hooks, launch wrappers, shortcut edits, or launch-time
+  environment-variable ritual. A dormant global dispatcher is not an approved substitute.
+- Distinguish installation, native trust, and an actively armed Ralph run. A project hook being present
+  or trusted is not authority to enforce Ralph rules in every task in that project.
+- Bind activation to the canonical project and the exact task/session where the host supports it.
+  Other tasks in the same project, sibling repositories, parent directories, and separate worktrees
+  must remain unaffected unless explicitly included in the authorized run.
+- An ordinary agent-writable marker may describe intent but cannot create, extend, disable, replay, or
+  redirect the protected activation or grant additional completion actions. Establish the native
+  source of owner intent and task identity before selecting a state format or building a lease system.
+- The model-blind core owns policy; thin host adapters normalize native events and return decisions.
+  Apply Ralph restrictions only to the verified active run. Outside it, ordinary host permission rules
+  apply without additional Ralph restrictions. Failure within a known active run must not silently
+  disarm it or convert an uncertain state into permission.
+- Completion, cancellation, interruptions, crashes, and resumption need explicit lifecycle behavior.
+  End or revoke the run's authority and account for its remaining workers before removing protections.
+  A stale or copied activation must never capture ordinary future work. An interrupted run may resume
+  only within its remaining authority, without silently extending limits or permissions.
+- Treat Codex, Claude Code, and Antigravity as separate integrations. If a host cannot provide the
+  required scope, trustworthy activation, or unattended continuation through native facilities, name
+  the unsupported mode and missing capability. Do not broaden registration to simulate support.
 
-- A deterministic `.pyz` is the selected candidate package format, not an authorization mechanism. Native
-  registrations invoke a direct hook entry point through a verified absolute interpreter in isolated startup
-  mode (`python -I -S -B <absolute-archive> hook <host>`). They do not use `PYTHONPATH`, `python -m`, the working
-  directory, user site packages, `sitecustomize`, or inherited Python activation variables to find policy code.
-- Deployment requires an independently controlled user promotion action that the agent cannot execute or
-  forge. Approval binds the exact archive digest, reviewed source inventory and build inputs, interpreter,
-  canonical target registrations, and prior configuration. Ordinary agent-writable files, hashes, receipts,
-  command flags, or chat-authored tokens are not approval. If no stronger same-user boundary is available,
-  the documented claim is limited to covered agent tool calls rather than arbitrary same-user processes.
-- The selected first-bootstrap authority is an owner-signed closed review packet consumed by a small,
-  independently provisioned, owner-operated one-shot verifier/applier. Its signing key and signing operation
-  remain unavailable to agents. The applier uses fixed enrolled locations and independently protects and
-  verifies its own program and recovery bytes, verification key, interpreter dependency closure, artifact
-  store, journals, revocation and replay state, exact machine and target, candidate and build evidence,
-  configuration preimage and proposal, rollback material, expiry, and single-use transaction identity. It
-  never imports promotion logic, trust roots, or state paths from the candidate.
-- Approved archives are imported into new digest-addressed paths under the promotion authority's storage;
-  existing objects are never overwritten. Each native registration, pending transaction, and rollback record
-  references a canonical target identity derived from the actual host configuration location, so user scope
-  and multiple project scopes do not collide. The registry records every target-to-artifact dependency.
-- Promotion is atomic only per native target. Every target moves independently through staged, registered,
-  needs-trust, verified, or rolled-back states, and a mixed-version fleet is reported honestly. Codex trust is
-  definition-bound, so a registration change stays `needs-trust` until native review and a fresh witness.
-- The prior known-good archive and registration remain recoverable throughout bootstrap, trust handoff, and
-  rollback. An archive is retained while any registration, pending transaction, or rollback pin references
-  it. Automatic garbage collection is initially disabled; cleanup is an explicit conservative operation.
-- First deployment is a separate owner-controlled migration bound to an exact reviewed candidate and exact
-  registration diff. It never edits or disables the active protected runtime to escape bootstrap, and recovery
-  remains runnable through the verified prior artifact and interpreter when a candidate cannot start.
-- Promotion runs only during an owner-operated maintenance window in which all known writers for the selected
-  native target remain stopped. It revalidates approved preimages immediately before each configuration mutation,
-  verifies written bytes before completion, rejects detected drift, symlinks, and platform redirections including
-  Windows junctions/reparse points, and documents durability limits. Locks coordinate cooperating appliers; they
-  do not exclude unrelated same-user processes. On drift or uncertain recovery state, it preserves the journal,
-  prior and proposed bytes, runtimes, and conflict evidence for owner reconciliation instead of blindly restoring.
-  Verification covers hostile import shadowing, inherited Python state, path replacement, concurrent installers,
-  interrupted promotion, rollback, sharing violations, spaces, and shell metacharacters.
-- Reproducibility establishes byte identity, not trust. Promotion evidence includes policy regressions, safe
-  allow and denial checks, and a fresh native activation witness for every claimed target and tool surface.
-  A harmless denial proves dispatch only. Host launch shortcuts, aliases, shims, PATH targets, and executables
-  remain outside Excubitor ownership.
+## Immediate removal of the broad Codex registration
 
-## Uninstall contract
+The owner authorized removal of the existing Excubitor-owned user-scope Codex registration. Replacement
+registration, native trust changes, candidate promotion, merge, push, and publication remain separate.
 
-- Exact registration matching protects user configuration from accidental deletion, but artifact deletion
-  is also dependency-aware. Before deleting a script, module, receipt, or other artifact, uninstall checks
-  every surviving host registration that could still reference it.
-- If an owned registration has drifted or a surviving registration references an artifact scheduled for
-  deletion, uninstall performs no mutation and reports the precise conflict. It preserves the dependency and
-  receipt so a later retry can clean up safely.
-- Interrupted install and uninstall operations remain journaled and recoverable. Repeated uninstall is
-  idempotent, shared dependencies are retained until unreferenced, and a normal host launch after uninstall is
-  part of lifecycle verification.
+- Use the existing transactional uninstall interface. Before mutation, capture exact registration,
+  receipt, and affected configuration bytes and their digests in a recoverable rollback packet.
+- Confirm the exact owned entry and prove unrelated entries will remain intact. An uninstall preview
+  is useful but does not replace that comparison or the rollback packet.
+- Stop relevant configuration writers for the mutation interval. Preserve and recheck the preimages;
+  if they drift, retain the evidence and stop instead of overwriting another writer's changes.
+- After removal, validate the resulting configuration, or verify that deletion of the settings file
+  was justified because no unrelated content remained. Confirm the owned entry and receipt are gone,
+  status no longer lists Codex user scope, and an ordinary disposable workspace is unaffected.
+- Preserve installed skills, unrelated native configuration, pre-existing Claude hook placeholders,
+  shortcuts, and other hosts. Install nothing into Antigravity as part of this removal.
+- If the transaction cannot safely perform removal, preserve its conflict evidence and obtain a
+  concrete owner decision. Never edit around an active guard or replace the runtime to escape it.
 
-## Evidence matrix
+Current diagnostic evidence: the supported CLI uninstall preview reports one registration and zero
+installed files for removal, including deletion of the settings file. A subsequent status read still
+reports the user-scope Codex installation, needs-trust/needs-review, and a stale enforcement witness.
+Read-only registration and implementation-source inspection was denied by the active PreToolUse hook.
+Rollback capture, writer quiescence, actual removal, and post-removal checks have not been completed.
 
-Support is recorded separately for each host interface, host version, operating system, registration scope,
-and tool surface. Each supported mutation surface needs both a harmless allow witness and a harmless denial
-witness from an ordinary host launch with all activation variables absent. Shell allow evidence is not shell
-denial evidence. Project-scope, non-Windows, headless, MCP, and specialized-tool claims remain unverified until
-their own witnesses exist.
+## Existing work and support evidence
 
-## Checklist
+Keep existing code, tests, isolated runtime candidates, and rollback evidence. Assess reusable policy,
+adapter, packaging, and transactional mechanisms against this corrected product scope before extending
+them. Existing signing, promotion, and independent evidence-collection proposals concern runtime
+installation and upgrades; they must not become manual prerequisites for starting each normal run.
+This correction does not provision authority, promote a candidate, or import candidate code into a
+live hook. Detailed prior deployment decisions remain in history and the bootstrap runbook pending
+review against the new scope.
 
-- [x] Replace the earlier environment-gated plan with the owner-approved native-hook, no-shortcut,
-  always-on-baseline, monotonic-policy, dependency-safe-uninstall, fail-closed-mutation, and evidence-matrix
-  contract described above.
-- [x] Make the neutral core resolve the conservative baseline as active under an empty environment; remove
-  provider variables as baseline or elevated activation authority; keep only explicit deprecated-input
-  reporting where compatibility requires it; and add empty-environment policy tests.
-- [x] Adopt the independently reviewed stable-runtime deployment and per-target promotion contract above,
-  keeping `.pyz` packaging separate from user authorization and native-host activation.
-- [x] Document the steps in the [owner-controlled stable-runtime bootstrap runbook](../operations/owner-controlled-stable-runtime-bootstrap.md),
-  including its hard prerequisites, closed review packet, independent approval, per-target trust and witnesses,
-  rollback, and conservative cleanup boundaries.
-- [x] Add a direct `.pyz` native-hook entry point and isolated absolute-interpreter invocation. Prove repository
-  package shadowing, `sitecustomize`, inherited Python variables, virtual environments, ordinary working
-  directories, spaces, and shell metacharacters cannot redirect execution.
-- [x] DECIDE: Use an owner-signed closed review packet plus an independently provisioned, owner-operated one-shot
-  verifier/applier for first bootstrap. The signature authenticates the owner's exact approval; the applier
-  independently verifies and applies it without importing candidate-controlled code or state. GPT-6 Astra
-  reviewed this design and the owner selected it. That selection does not authorize any candidate, target,
-  registration change, provisioning action, or migration.
-- [x] Introduce canonical target identities and a digest-addressed artifact dependency registry covering user
-  and multiple project scopes, pending transactions, and rollback pins. Disable automatic garbage collection
-  and preserve receipts whenever drift prevents complete uninstall. This is an isolated-candidate implementation
-  claim only; independent review, promotion, integration, trust, and live activation remain separate gates.
-- [x] DECIDE: Treat the signature suite and verifier implementation language as reviewable engineering choices
-  during isolated candidate development, not as owner-gated prerequisites. Keep the approval payload and detached
-  signature framing algorithm-neutral; a protected applier must later pin one independently reviewed algorithm
-  and enrolled verification-key identity outside packet control. Re-open owner choice only if the implementation
-  requires owner hardware, credentials, purchasing, or organizational signing policy. This resolution does not
-  enroll a key, accept a signature, provision authority, or authorize migration.
-- [x] Define strict, canonical, algorithm-neutral approval-payload and detached-signature codecs for one
-  transaction. The isolated candidate binds the complete review packet, promotion manifest, artifact and
-  source/build inventories, interpreter dependency closure, exact machine and target path semantics, current and
-  proposed configuration, rollback material, expiry, revocation snapshot, and canonical non-zero transaction
-  identity. It rejects duplicate, unknown, ill-typed, oversized, and noncanonical encodings and preserves the same
-  bytes across Python 3.11 and 3.14. Parsing is explicitly not authorization: the protected verifier/applier below
-  must still authenticate the exact bytes with its pinned key and algorithm, revalidate every attachment and live
-  binding, and consume replay state before any mutation.
-- [x] Preserve and verify complete dependency closures for both the selected runtime and the prior known-good
-  runtime. Rollback must never return to an editable import tree, and interpreter verification must cover the
-  standard library, extension modules, path configuration, and other startup dependencies rather than hashing
-  only the interpreter executable. The isolated candidate now records and re-verifies a canonical closed inventory
-  for both runtimes, requires the prior runtime to be a retained digest-addressed archive with its exact direct
-  native registration, and uses `-B` so verification cannot mutate its own closure with bytecode. The operating
-  system loader and system libraries are stated as the host trusted-computing-base boundary. This is candidate-only
-  mechanism evidence; independent review, protected storage, authority provisioning, and live migration remain
-  separate gates.
-- [x] DECIDE: Use owner-operated, quiesced maintenance for native-configuration promotion, rollback, and
-  interrupted recovery in this campaign. Every known writer for the selected target, including the native host,
-  must remain stopped for the complete transaction. Locks coordinate cooperating appliers, while immediate
-  rechecks, post-write verification, protected journals, and conflict-preserving recovery provide correctness
-  checks. They do not exclude unrelated same-user processes, and protection against such processes remains
-  unsupported. Enforced exclusion is deferred until a separately reviewed platform design proves control of both
-  content and pathname replacement, handles existing writers, and preserves native host operation. GPT-6 Astra
-  reviewed the fork and the owner selected its recommendation. This decision performs no provisioning or migration.
-- [x] Implement per-target staged promotion, platform redirection defenses, and candidate-independent interrupted
-  recovery under the quiesced-maintenance contract. Add native-settings readback before journal removal; recheck
-  each surface immediately before restoring it; and preserve an explicit attention-required journal, prior and
-  proposed bytes, retained runtimes, and conflict evidence on observed or uncertain recovery conflicts instead of
-  blindly restoring. Test Windows junctions, reparse points, path aliases, sharing violations, interference after
-  replacement, interference between recovery validation and restoration, rollback through the retained prior
-  runtime, and honest mixed-version status. Preserve a regression that demonstrates final-read-to-replacement
-  interference is outside the quiescence prerequisite rather than claiming the cooperating lock prevents it. Do
-  not claim arbitrary-writer exclusion or an atomic all-host rollout. The isolated candidate now stores exact
-  preimages and postimages in a strict journal, reads settings back after promotion and rollback writes and again
-  before journal removal, validates and reads back each recovery surface around restoration, and makes detected or
-  unreadable recovery state an owner-attention outcome whose journal cannot be automatically cleared. Existing
-  canonical-identity, redirection, sharing-violation, retained-prior-runtime, and mixed-version tests remain green;
-  new adversarial checks preserve both the detectable conflict behavior and the final-read-to-replacement gap as
-  an explicit quiescence violation. This is isolated-candidate mechanism evidence only. The recovery logic does
-  not read or execute a failed candidate artifact, but independently provisioned recovery packaging remains a
-  later prerequisite; no arbitrary-writer exclusion, integration, authority provisioning, or migration is claimed.
-- [x] DECIDE: Develop a separate, bounded activation-evidence collector under the already selected owner-controlled
-  authority. It may be provisioned alongside the verifier/applier, but it runs as a separate process without
-  registration, native-trust, rollback, promotion-signing, or promotion-state mutation authority and without access
-  to promotion keys. It accepts only independently authenticated native observations plus complete operating-system
-  observations of disposable probe effects, and emits a closed evidence packet for separate owner approval. Each
-  exact host version, operating system, scope, interface, and tool surface remains unsupported until its adapter
-  proves source provenance, event attribution, trust state, harmless allow and denial, absence of the denied effect,
-  freshness, and replay resistance. Both outcomes are required per claimed surface; one global allow/deny pair
-  cannot authorize an arbitrary tool list. Caller assertions, ordinary transcripts, sanitized fixtures, and
-  signatures over unauthenticated inputs cannot satisfy these requirements. An absent or ambiguous authoritative
-  native source produces an unsupported result. GPT-6 Astra independently reviewed this hybrid, and the owner
-  selected it by directing the work to proceed. Collector placement and isolated implementation are reviewable
-  engineering choices under the existing authority. Any concrete need for new privileges, credentials, privacy
-  exposure, provisioning, or a changed support claim requires a new owner decision. This selection authorizes no
-  live provisioning, signing, registration change, migration, or support claim.
-- [ ] Derive activation evidence from independently captured native trust, harmless allow, harmless denial, and
-  denied-side-effect results for each claimed host tool surface. Do not accept caller-supplied booleans or tool
-  names as proof of native activation.
-- [ ] Package the minimal one-shot verifier/applier and candidate-independent recovery program for independent
-  owner provisioning at fixed enrolled locations. They must not load candidate promotion code or accept
-  agent-selected keys or state directories. The applier must authenticate the codec's exact payload bytes with its
-  pinned algorithm and enrolled key, rehash every bound attachment, reject expiry, revocation drift, stale
-  configuration, machine or target mismatch, and prior consumption including after rollback, then atomically
-  consume the transaction before mutation. Add denial witnesses proving the agent cannot sign, invoke a
-  state-changing operation, alter the verifier, key, store, journal, or replay state, or bypass the public entry by
-  calling an underlying function directly.
-- [ ] After the required isolated entry, registry, promotion path, recovery path, and independent authority have
-  been implemented and reviewed, have the owner independently provision the applier and verification key, sign
-  the closed packet outside agent reach, and run the first one-target bootstrap from the protected development
-  import to the exact approved artifact and registration diff. Keep the prior runtime available, complete native
-  trust review, and capture fresh allow/deny dispatch evidence before protected-source work resumes here.
-- [ ] Make repository policy monotonic: repository content may add restrictions but cannot disable baseline
-  controls, select a tracked opt-out escape, or arm elevated behavior. Add hostile and malformed repository
-  policy tests.
-- [ ] Replace environment-derived one-unit state with a restriction-only, host-neutral session binding from
-  native hook metadata, including ambiguous-state, tamper-attempt, expiry, and cleanup tests. Keep elevated
-  autonomy unsupported.
-- [ ] Harden adapter failure contracts so recognized mutations deny on incomplete input, configuration
-  failure, unexpected exceptions, and host-supported timeout paths while irrelevant events remain no-op.
-  Require observable diagnostics without leaking sensitive payloads.
-- [ ] Make uninstall dependency-aware and conflict-atomic. Cover edited registrations, shared dependencies,
-  interrupted and repeated uninstall, receipt retention, and successful ordinary host launch afterward. Add
-  a regression test proving no shortcut, alias, shim, PATH target, or host executable is an install target.
-- [ ] Reconcile the existing Codex native registration with the corrected contract, package hooks and skills
-  through supported Codex integration surfaces where appropriate, retain explicit trust review, and verify
-  the baseline with an empty activation environment.
-- [ ] Reconcile the Claude Code native plugin/hooks with the same core contract and neutral public language;
-  preserve only compatibility that does not weaken the corrected baseline.
-- [ ] Add an Antigravity `PreToolUse` adapter from observed native fixtures, covering command execution and
-  every documented file-mutation surface through the shared dispatcher.
-- [ ] Add transactional Antigravity native registration, receipts, rollback, self-integrity coverage, trust
-  or enablement handoff, and harmless real-host allow/deny probes without changing how Antigravity launches.
-- [ ] Update installation documentation, support matrices, skills, examples, diagnostics, and known bypasses
-  so all three hosts use native integrations with no activation-variable or launcher instructions.
-- [ ] Capture version-bound real-host witnesses for every support claim from ordinary launches with activation
-  variables absent. Keep unsupported interfaces visibly unsupported rather than extrapolating from fixtures.
-- [ ] Obtain a final read-only GPT-6 Astra review of the implementation and this checklist. Resolve every
-  blocking finding before presenting the branch for integration; the implementation may not self-ratify.
+| Host | Evidence available for this review | Ralph-only unattended support |
+|---|---|---|
+| Codex | CLI reports one user-scope installation and stale prior native evidence; this unrelated task was intercepted. | Not established. Project/task isolation, start/end authority, continuation, and cleanup require native verification. |
+| Claude Code | Existing adapter and installer are recorded; this review has not refreshed live configuration or lifecycle evidence. | Not established for the corrected contract. |
+| Antigravity | The handoff records no registration; no fresh native capability or installation verification has been completed. | Not established; do not install or infer capabilities from another host. |
+
+Installation, native trust, active-run identity, policy behavior, and unattended continuation are separate
+claims. A fixture, old supported-runtime label, or successful CLI invocation cannot prove the corrected
+contract. Record evidence per host version, operating system, scope, interface, and tool surface.
+
+## Remediation checklist
+
+- [x] Record the owner-agreed Ralph-only product scope and default completion behavior; remove the
+  repository instruction that routes ordinary roadmap work through Ralph. This is a documentation change.
+- [ ] Capture a rollback packet and safely remove the exact Codex user-scope installation through the
+  existing transaction during a quiesced maintenance window; verify unrelated state and ordinary work.
+- [ ] Verify the native activation and continuation capabilities of each requested host. Establish the
+  trusted source of owner intent, project/task identity, worker lifetime, and end/resume behavior before
+  selecting implementation mechanisms. Record explicit unsupported modes and their missing capabilities.
+- [ ] Implement the smallest independently reviewable Ralph-only activation unit in an isolated candidate
+  for a host whose capabilities support the contract. Keep live registrations and trust unchanged until
+  the exact replacement is reviewed and separately authorized.
+- [ ] Verify unrelated projects, projects without opt-in, installed but inactive projects, ordinary tasks
+  in the same project, siblings, parents, and worktrees remain unaffected. Verify an explicitly armed run
+  receives the intended protections and cannot alter its authority or completion checks.
+- [ ] Reject stale, copied, malformed, cross-project, cross-task, replayed, redirected, and extended
+  activation. Verify cancellation, crashes, lingering workers, expiry, resumption, and ordinary work
+  after completion. Report incomplete enforcement honestly where a native host cannot fail closed.
+- [ ] Connect bounded workers through the host's native continuation facilities. Verify a multi-unit job
+  completes without human restarts, tolerates recoverable failures, respects resource limits, preserves
+  its acceptance criteria, and produces the default verified branch and report.
+- [ ] Implement optional preauthorized merge and separate outward-action permissions only with an
+  enforceable grant and required verification. Default runs retain their work without merging or
+  publishing; out-of-scope destinations and actions remain unavailable to the active loop.
+- [ ] Verify transactional project install/uninstall, shared dependencies, edited registrations, failed
+  and interrupted removal, and unchanged ordinary host launch. Preserve unrelated entries and skills.
+- [ ] Reconcile skill recipes, installation examples, diagnostics, support matrices, and older design
+  documents with the implemented lifecycle. Remove environment-activation rituals and broad-enforcement
+  claims from current instructions; retain historical evidence with explicit historical status.
+- [ ] Obtain an independent read-only review and fresh native allow/deny, isolation, and completion
+  evidence for each claimed mode before presenting the replacement for integration or registration.
+
+## Working on the correction
+
+Ordinary development can advance this checklist without being a Ralph run. Use focused, reviewable
+changes in the dedicated development worktree and the configured commit broker. An explicitly started
+Ralph workflow must honor the agreed run contract; unavailable native protection is a capability gap,
+not a reason to force unrelated work through a one-stage loop. Do not rewrite the append-only learnings
+log or treat its observations as completion authority.

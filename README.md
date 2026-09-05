@@ -26,6 +26,19 @@ runtime that can intercept tool calls is demonstrated, not just asserted. Claude
 available adapter and installer foundation today, but no runtime is yet claimed as verified supported
 enforcement: that label still requires a released-package, real-host denial witness.
 
+## Development branch: Ralph-only correction
+
+The agreed target is explicitly started, unattended Ralph runs. Ordinary development stays unaffected,
+including other tasks in the same repository. The default result is reviewed, verified work committed
+on an isolated branch; automatic merging is optional and authorized before the run starts. Publishing
+and deployment have separate permissions. Work units advance automatically without repeated approval.
+
+This lifecycle is not yet verified in the current development implementation. A broad Codex user-scope
+registration remains pending safe removal, and its guards have intercepted ordinary work. The older
+activation and installation examples below describe prior behavior, not proof of Ralph-only support.
+Use the [current remediation plan](docs/design/vendor-agnostic-enforcement-plan.md) for the agreed scope,
+current evidence, and remaining work. Do not use legacy examples to install broad enforcement as a fix.
+
 ## 60-second crash test
 
 ![excubitor crash-test demo: a guard denies an unattended `git clean`, then the same act deletes uncommitted work with the guard off](scripts/demo.svg)
