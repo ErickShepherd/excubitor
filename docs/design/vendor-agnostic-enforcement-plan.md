@@ -130,6 +130,13 @@ the experimental basis and limits of proposed workflow defaults, and the require
 The documented capabilities are leads for native probes, not proof of support. Preserve the final
 acceptance and permission boundaries while comparing context and intermediate review policies.
 
+A [disposable native lifecycle experiment](../../runtime/probes/README.md) is now prepared. It
+observes the three requested hosts' event shapes and supplies a bounded Codex continuation/veto
+exercise. Its offline tests check the apparatus, including task isolation and return to ordinary
+behavior after the exercise. No replacement is registered or trusted. Native results remain pending.
+The experiment deliberately does not treat synthetic prompt input or its writable state as owner
+authority; it is not the proposed production activation mechanism or a completed Ralph runner.
+
 ## Remediation checklist
 
 - [x] Record the owner-agreed Ralph-only product scope and default completion behavior; remove the

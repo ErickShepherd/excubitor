@@ -455,3 +455,21 @@ Append-only observations from vendor-agnostic enforcement iterations.
   native Ralph-only activation, unattended continuation, and replacement support remain unverified.
 - No replacement hook, native trust grant, other-host registration, merge, push, or publication was
   performed. The installed Codex skills and pre-existing Claude placeholders were preserved.
+
+## 2026-09-05 — Disposable native lifecycle apparatus prepared
+
+- Before choosing protected activation state, measure native event delivery and continuation in a
+  disposable project. The new standalone observer records field shapes and hashed identities without
+  retaining raw prompt, command, or transcript content. It is not imported by installed adapters.
+- A bounded Codex exercise distinguishes task/project identities, requests at most two continuations,
+  and vetoes only a disposable test marker. Its synthetic trigger and writable SQLite data are test
+  apparatus, not owner authority. Offline tests explicitly retain that limitation. A host response is
+  not evidence of a native veto or continuation until the corresponding native operation is observed.
+- Python's SQLite connection context manager commits or rolls back but does not close the connection.
+  The first Windows apparatus test exposed locked files during cleanup. Explicit connection closing
+  fixed it; all 19 apparatus tests then passed on Python 3.14.7 and Python 3.12.14.
+- Codex documentation describes Stop continuation as a synthesized user prompt, while prompt hook
+  input does not document an independent owner-origin field. Treat prompt text and session identity as
+  observations; do not promote them to protected activation evidence without an independent source.
+- Claude Code and Antigravity have observation normalization only in this experiment. No native host
+  run, registration, trust change, activation implementation, or unattended Ralph completion is claimed.
