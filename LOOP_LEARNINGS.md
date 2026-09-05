@@ -218,3 +218,16 @@ Append-only observations from vendor-agnostic enforcement iterations.
 - This choice fixes the owner's key-provisioning workflow, the verifier supply chain, cross-platform packet
   semantics, and long-lived trust-root compatibility. Those effects reach beyond reversible candidate internals,
   so implementation must wait for an explicit owner decision rather than letting the loop lock in one option.
+
+## 2026-09-05 — Astra correction: cryptographic implementation is not an owner gate
+
+- Astra found that the previous stop conflated isolated candidate implementation with later trust-root
+  provisioning. The signature algorithm and verifier language can remain reviewable engineering choices until a
+  design actually requires owner hardware, credentials, purchasing, or organizational signing policy.
+- The packet codec can stay algorithm-neutral. Parsing never grants authority, and the independently provisioned
+  applier must pin its accepted algorithm and enrolled verification-key identity rather than letting packet fields
+  select either one.
+- Replay denial belongs to protected transaction-consumption state, not to serialization alone. Codec tests may
+  prove deterministic bytes and strict rejection, but must not claim to prove one-shot authorization.
+- The next fresh unit is therefore the strict approval-payload codec with adversarial and cross-platform fixtures;
+  key enrollment, protected installation, signing, bootstrap, and migration remain owner-controlled operations.
