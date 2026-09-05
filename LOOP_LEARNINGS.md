@@ -186,3 +186,23 @@ Append-only observations from vendor-agnostic enforcement iterations.
   verifier and recovery bytes, keys, artifact storage, journals, and replay state. An unrestricted same-user
   process remains outside the stronger claim unless a genuinely separate security principal protects those
   surfaces; native-agent tool coverage must be stated more narrowly otherwise.
+
+## 2026-09-05 — Registry candidate reconciled
+
+- A strict schema must reject duplicate JSON member names. Python's default decoder silently keeps the last
+  duplicate, so the registry now uses duplicate-detecting object construction at every nesting depth rather than
+  allowing an ambiguous durable record to reach semantic validation.
+- The registry's identity and retention model already matched the current contract: identity binds runtime,
+  user-or-project scope, and normalized absolute native settings path; dependencies cover registrations, pending
+  transactions, and rollback pins; unknown objects fail closed; and no removal or automatic-collection API exists.
+- The focused registry checks passed under Python 3.11 and 3.14, and the promotion consumer checks stayed green.
+  The combined registry/uninstall run retained one known Windows-only baseline failure caused by a test expecting
+  LF bytes after a text-mode write produced CRLF; it is not evidence against the registry behavior.
+- The broader installer selection passed 135 checks and reproduced only the six already documented Windows test
+  defects: four CRLF-versus-LF assertions and two hard-coded POSIX receipt-path lookups. No new registry or
+  promotion-consumer regression appeared.
+- The Windows Store Python 3.11 launcher reports an inaccessible app-alias path as `sys.executable`, which breaks
+  installer tests that correctly require a resolvable interpreter. A local Python 3.14 environment populated from
+  the hash-locked test requirements avoids that runner defect without weakening production validation.
+- The implementation remains only in the isolated candidate. Checking the unit records a reviewable candidate
+  claim; it does not integrate those bytes, approve a review packet, provision authority, or change any live hook.

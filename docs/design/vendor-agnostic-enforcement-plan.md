@@ -130,9 +130,10 @@ their own witnesses exist.
   independently verifies and applies it without importing candidate-controlled code or state. GPT-6 Astra
   reviewed this design and the owner selected it. That selection does not authorize any candidate, target,
   registration change, provisioning action, or migration.
-- [ ] Introduce canonical target identities and a digest-addressed artifact dependency registry covering user
+- [x] Introduce canonical target identities and a digest-addressed artifact dependency registry covering user
   and multiple project scopes, pending transactions, and rollback pins. Disable automatic garbage collection
-  and preserve receipts whenever drift prevents complete uninstall.
+  and preserve receipts whenever drift prevents complete uninstall. This is an isolated-candidate implementation
+  claim only; independent review, promotion, integration, trust, and live activation remain separate gates.
 - [ ] Define a strict, canonical signed approval envelope for one single-use transaction. Bind the complete review
   packet, artifact and source/build inventories, interpreter dependency closure, machine and target, current and
   proposed configuration, rollback material, expiry, revocation state, and transaction identity. Reject unknown
