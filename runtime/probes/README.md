@@ -53,3 +53,37 @@ Current protocol references:
   The observer does not enable an Antigravity continuation exercise.
 
 Cursor remains a prospective integration with no apparatus implementation here.
+
+## Native interactive CLI result, September 5, 2026
+
+The owner separately authorized the exact temporary Codex project hooks and native trust review.
+Codex CLI 0.153.4 on Windows 11, using workspace-write sandboxing and on-request approvals, loaded
+the nine project hooks. The configured model was gpt-6-astra xhigh. The native experiment observed:
+
+- An ordinary apply_patch edit succeeded with hooks loaded but before the exercise started.
+- The exact synthetic start triggered two automatic continuations, with no manual restart.
+- The first continuation's apply_patch call received a native veto and left its marker absent.
+- The second continuation created its allowed marker. The exercise then ended.
+- A concurrent task in the same project created a matching test filename in a separate directory
+  while the first task's exercise was active. Its event was observed without a veto.
+- A later ordinary edit in the original task created the formerly denied marker successfully.
+- Both CLI processes exited normally and produced SessionEnd observations. The exact unchanged
+  temporary registration was removed. A fresh CLI showed zero installed/active hooks and performed
+  another ordinary edit successfully.
+
+The exercise lasted approximately 49 seconds. Its initial prompt, both continuations, and three
+Stop events shared one native turn. Only the initial prompt produced UserPromptSubmit; later Stop
+events set stop_hook_active to true. Do not assume Stop creates a fresh task, fresh context, or a
+second owner authorization event. The observed prompt envelope supplied no independent owner-origin
+field; this experiment does not establish that native task identity alone is protected authority.
+
+Codex retained project trust and nine fixture-specific hook trust records. The native hook menu
+offered enable/disable controls, with no forget-trust action observed. No trust file was manually
+rewritten. The leftover trust records had no loaded hook source in the fresh CLI. An empty fixture
+configuration directory remains. The initially combined cleanup command was rejected by command
+policy; a narrower removal of the reverified exact file succeeded.
+
+These are native apparatus results for interactive CLI and apply_patch. They do not certify
+production Ralph activation, protected completion checks, cancellation/crash recovery, lingering
+workers, fail-closed faults, GUI/headless behavior, or another vendor. The original adapter's
+always-active baseline is still unsuitable for reinstallation.

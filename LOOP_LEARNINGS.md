@@ -473,3 +473,26 @@ Append-only observations from vendor-agnostic enforcement iterations.
   observations; do not promote them to protected activation evidence without an independent source.
 - Claude Code and Antigravity have observation normalization only in this experiment. No native host
   run, registration, trust change, activation implementation, or unattended Ralph completion is claimed.
+
+## 2026-09-05 — Native Codex CLI continuation and ordinary-work isolation observed
+
+- With separately authorized temporary project hooks, Codex CLI 0.153.4 on Windows performed two
+  native Stop continuations, enforced a harmless apply_patch veto, and then allowed the requested
+  second edit. The blocked marker was absent before any later ordinary edit was attempted.
+- Ordinary edits succeeded before the exercise, in another task while it was active, afterward in
+  the original task, and after registration removal in a fresh CLI. The parallel task deliberately
+  used the vetoed filename in a separate directory, so a mistakenly shared active state would have
+  rejected it. Its native event fell between exercise start and end and received no veto.
+- Stop continuation retained the same native turn identity and did not refire UserPromptSubmit.
+  The three Stop events carried stop_hook_active values false, true, true. Native CLI exits produced
+  SessionEnd observations. Do not infer GUI, headless, worker, crash, or cancellation semantics.
+- The exact hook file was removed after both test CLIs exited. Fresh native hook inspection showed
+  zero installed/active hooks. Codex retained nine fixture hook trust records and project trust;
+  the inspected native menu provided toggles but no forget-trust action. Preserve this distinction
+  instead of claiming every trace of the temporary setup was erased.
+- A combined cleanup command was rejected by command policy. Read-only reinspection confirmed the
+  exact file and unchanged bytes; a single literal-file removal succeeded. No alternate tool or
+  settings rewrite was used to bypass the rejection.
+- These observations validate the bounded native apparatus. Its writable state and synthetic start
+  remain unsuitable as production authority. Protected activation and completion verification still
+  need implementation and native evidence; the always-active production adapter was not changed.

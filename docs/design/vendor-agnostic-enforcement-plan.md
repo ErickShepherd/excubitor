@@ -116,7 +116,7 @@ review against the new scope.
 
 | Host | Evidence available for this review | Ralph-only unattended support |
 |---|---|---|
-| Codex | The broad installation is removed; fresh status lists no installations. Ordinary shell/apply_patch writes and previously blocked source reads succeed after reopening the app. | Replacement support is not established. Project/task isolation, start/end authority, continuation, and cleanup require native verification. |
+| Codex | The broad installation is removed. A separately authorized disposable interactive CLI experiment passed native apply_patch veto, two automatic continuations, concurrent-task isolation, and ordinary edits before/after the exercise. Its temporary registration was removed; a fresh CLI showed zero hooks and allowed an ordinary edit. | Production replacement support is not established. Protected activation, completion verification, faults, worker containment, and other interfaces remain unverified. |
 | Claude Code | Existing adapter and installer are recorded; this review has not refreshed live configuration or lifecycle evidence. | Not established for the corrected contract. |
 | Antigravity | The handoff records no registration; no fresh native capability or installation verification has been completed. | Not established; do not install or infer capabilities from another host. |
 | Cursor | Prospective integration requested by the owner; official hook and CLI documentation reviewed. | Not established; no native runtime verification or installation performed. |
@@ -130,12 +130,14 @@ the experimental basis and limits of proposed workflow defaults, and the require
 The documented capabilities are leads for native probes, not proof of support. Preserve the final
 acceptance and permission boundaries while comparing context and intermediate review policies.
 
-A [disposable native lifecycle experiment](../../runtime/probes/README.md) is now prepared. It
-observes the three requested hosts' event shapes and supplies a bounded Codex continuation/veto
-exercise. Its offline tests check the apparatus, including task isolation and return to ordinary
-behavior after the exercise. No replacement is registered or trusted. Native results remain pending.
-The experiment deliberately does not treat synthetic prompt input or its writable state as owner
-authority; it is not the proposed production activation mechanism or a completed Ralph runner.
+The [disposable native lifecycle experiment](../../runtime/probes/README.md) passed its bounded Codex
+interactive CLI checks on Windows after separate owner authorization of the exact temporary
+registration and native trust review. Both continuations stayed in one native turn and did not fire
+additional UserPromptSubmit hooks. Native CLI session exit produced SessionEnd observations. The
+registration is removed; Codex retains nine fixture-specific hook trust records and project trust.
+The test apparatus does not treat its synthetic prompt or writable state as protected owner authority.
+It is not production activation or a completed Ralph runner. Other hosts have observation code only;
+the GUI and headless CLI were not tested. The broader capability checklist below remains open.
 
 ## Remediation checklist
 
