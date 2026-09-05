@@ -145,9 +145,12 @@ drainage, and candidate-bound completion prerequisites. A native Codex subproces
 ordinary file but could not change the separate authority store or acceptance file. This is component
 and storage-boundary evidence. The start handshake has since connected actual CLI confirmation to an
 exact scoped record, and protected output comparison has passed native positive and negative cases.
-MCP shutdown skipped cleanup, so native SessionEnd reconciliation is implemented but still awaits its
-separately authorized live test. Complete native admission, candidate collection, review, worker
-supervision, and the full runner remain unfinished. Production adapters do not import these components.
+MCP shutdown skipped cleanup. A separately authorized native SessionEnd test has now recorded interruption
+for the exact confirmed record on normal CLI exit, without declaring completion or worker drainage.
+Ordinary work in another task in the same project stayed inactive. The temporary hook was removed and
+a fresh CLI showed zero hooks; its updated fixture trust entry remains. Forced termination, crash recovery,
+complete native admission, candidate collection, review, worker supervision, and the full runner remain
+unfinished. Production adapters do not import these components.
 
 ## Remediation checklist
 

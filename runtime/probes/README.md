@@ -133,6 +133,19 @@ CLI exit terminated the record observer before its cleanup handler ran. Its reco
 active; explicit host cleanup of that worker-free fixture followed process-exit checks. The new
 `native_session_end.py` accepts only a SessionEnd envelope for its configured exact project and stores
 interruption, retaining protection and making no worker-drain or completion claim. Repeated events are
-idempotent and other tasks remain inactive. This binding has offline tests, not a live delivery witness.
-Its one-hook candidate is prepared outside the native configuration and requires separate registration
-and native-trust approval before testing.
+idempotent and other tasks remain inactive in the offline tests.
+
+After separate owner approval of an exact frozen one-hook candidate, Codex CLI 0.153.4 on Windows 11
+delivered SessionEnd into this binding. Cancelling the native form created no record; confirming it
+created the exact scoped dummy record. Normal CLI exit changed that record to interrupted and retained
+its protection state, without claiming completion or worker drainage. A different ordinary task edited
+a file and exited with an inactive observation. Codex clamped the requested ten-second timeout to three
+seconds; both hook observations completed. Keep shutdown work short and never treat hook delivery as
+proof that child workers have stopped.
+
+All test CLIs exited. The exact unchanged registration was removed, a fresh CLI showed zero installed
+or active hooks, and the trusted parent closed the worker-free dummy record after preserving its native
+state. Native trust updated the existing fixture SessionEnd entry, which remains; the rest of the parsed
+configuration was unchanged. No trust file was manually rewritten. This is a normal interactive CLI
+exit witness only. Forced termination, crashes, resumption, worker supervision, GUI, and other hosts
+remain unverified. New registration and trust changes still require their own exact authorization.

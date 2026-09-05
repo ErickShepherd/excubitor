@@ -90,9 +90,18 @@ Native CLI shutdown killed the test MCP process without executing its Python cle
 accepted record remained active. The trusted test parent closed that dummy record only after both
 processes exited and after checking that no worker had started. `record_session_end` now records a native
 session ending as an interruption, preserving progress and protection rather than inventing completion
-or worker drainage. Its exact-scope and repeated-event tests pass; native delivery into this implementation
-still needs the separately prepared, unregistered one-hook experiment. Never rely on MCP EOF/finally for
-production run termination.
+or worker drainage. A separately approved one-hook experiment now demonstrated native delivery into
+this implementation: normal Codex CLI exit changed the exact confirmed record from running to interrupted,
+retained its protection state, and made no completion or worker-drain claim. An ordinary task in the same
+project edited a file successfully and its SessionEnd remained inactive. Codex clamped the hook timeout
+to three seconds; both observations completed within that native limit.
+
+All test processes exited, the exact unchanged temporary registration was removed, and a fresh CLI
+showed zero installed or active hooks. Codex retained the updated fixture-specific SessionEnd trust entry;
+the rest of its parsed configuration was unchanged. The trusted parent closed only the dummy record
+after preserving the native interruption and confirming the test never launched workers. This verifies
+normal interactive CLI exit, not forced termination, crashes, resumption, or worker containment. Never
+rely on MCP EOF/finally for production run termination.
 
 The host must obtain one owner approval of the exact job outside the worker's ability to forge it.
 The earlier native hook experiment established task identity and continuation, but its prompt envelope

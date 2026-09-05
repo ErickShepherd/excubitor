@@ -543,3 +543,20 @@ Append-only observations from vendor-agnostic enforcement iterations.
 - Process-only CLI MCP overrides needed no hook registration or new native trust. The top-level CLI
   rejected the sandbox helper's -P flag; interactive CLI used its verified -s workspace-write option.
   Both test CLIs exited. No production hook, trust rewrite, merge, push, or publication occurred.
+
+## 2026-09-05 — Native SessionEnd delivery and ordinary-task isolation
+
+- The owner approved the exact frozen one-hook test, native trust, and removal. Codex CLI 0.153.4
+  clamped the requested ten-second SessionEnd timeout to three seconds. The native event still recorded
+  interruption for the exact confirmed dummy run, retaining its protection state without claiming
+  completion or worker drainage. MCP cleanup again did not run.
+- An ordinary task in the same project edited its file successfully and produced an inactive
+  SessionEnd observation. The test never launched workers. Normal exit is now evidenced; forced
+  termination, crash reconciliation, resume behavior, and worker supervision are separate open claims.
+- All test processes exited. The exact unchanged temporary hook was removed and a fresh CLI showed
+  zero installed or active hooks. Native UI updated the existing fixture SessionEnd trust entry; it
+  remains, while the rest of the parsed configuration is unchanged. No manual trust rewrite occurred.
+  The trusted parent closed only the dummy record after preserving the native interruption evidence.
+- The final local report initially failed while reading UTF-8 terminal evidence with Windows' default
+  legacy encoding. Explicit UTF-8 fixed the report; the existing configuration capture was preserved
+  and checked byte-for-byte. This did not affect the native test or mutate its run before the retry.
