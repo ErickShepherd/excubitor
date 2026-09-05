@@ -1,0 +1,139 @@
+# Owner-controlled stable-runtime bootstrap
+
+Status: written procedure only. Do not run the migration until every prerequisite below has been implemented,
+tested, and independently reviewed.
+
+## Plain-language outcome
+
+The bootstrap moves each native host registration away from an editable development import and onto one exact,
+reviewed Excubitor zipapp. Codex, Claude Code, and Antigravity still launch normally. Their native hook mechanisms
+call the promoted artifact directly; Excubitor does not replace a shortcut, shell, executable, alias, shim, or
+`PATH` entry.
+
+The move is deliberately one host target at a time. The old runtime remains available until the new target has
+passed native trust review and fresh allow and deny checks. A partially migrated machine is a valid, visible state,
+not something to hide behind an all-host success claim.
+
+## Who may do what
+
+- A builder, including an agent, may prepare source, build a candidate, run tests, and assemble a review packet.
+  That work identifies proposed bytes; it does not approve or install them.
+- The owner reviews the candidate and the exact configuration change on a trusted surface outside the candidate's
+  control.
+- An independent promotion authority imports approved bytes and changes native registrations. The agent must not
+  be able to invoke, modify, impersonate, or mint approval for that authority.
+- The owner completes each host's native trust or enablement interaction and observes the live checks.
+
+An ordinary file, digest, receipt, command-line flag, environment variable, or approval phrase in chat is not the
+independent authority. A viable implementation could use a separately authenticated broker or a signed manifest
+whose private signing capability is unavailable to the agent. On systems using privilege separation, the trusted
+side must verify the approved digest and exact configuration preimage itself; copying an agent-selected file into
+an administrator-owned directory is not sufficient.
+
+## Hard stop before migration
+
+Do not change a live registration until all of the following exist:
+
+- A candidate is built in an isolated checkout that is not the code loaded by the active protected hook.
+- The zipapp provides the direct native entry `hook <host>` and works through a verified absolute interpreter as
+  `<absolute-interpreter> -I -S <absolute-archive> hook <host>`.
+- Tests show that the working directory, repository packages, user site packages, `sitecustomize`, virtual
+  environments, inherited Python activation variables, spaces, and shell metacharacters cannot redirect it.
+- A canonical target identifier distinguishes every host, user or project scope, and real native configuration
+  path. Resolved paths have been checked for symlinks, junctions, and other reparse or redirection behavior.
+- A digest-addressed artifact registry records registrations, pending transactions, rollback pins, and every
+  target-to-artifact dependency.
+- The promotion operation locks one target, rechecks its exact preimage immediately before mutation, journals the
+  change, replaces configuration safely, and can recover after interruption.
+- Rollback is runnable through the known-good prior interpreter and runtime even when the candidate cannot start.
+- The independent promotion authority has been concretely selected, provisioned, and reviewed. Merely naming a
+  future authority does not satisfy this prerequisite.
+
+If any item is missing, stop after producing the review packet. Do not disable the current hook, edit its protected
+source in place, or make a temporary registration exception to get around bootstrap.
+
+## Owner-operated steps
+
+1. **Freeze and inventory the current target.** Record the host and version, scope, canonical configuration path,
+   exact configuration bytes and digest, current registration tuple, interpreter identity, runtime or import root,
+   trust state, and latest live-witness state. Confirm that the host's ordinary launch path is outside Excubitor's
+   ownership.
+
+2. **Prepare the candidate away from the active runtime.** Use an isolated checkout that the live hook does not
+   import. Implement the direct zipapp hook entry and run its policy, adapter, packaging, hostile-import, path,
+   concurrency, interruption, and rollback tests. Never patch or disable the active protected runtime as a build
+   convenience.
+
+3. **Prove byte reproducibility.** Build the zipapp twice from clean, identical inputs in separate output
+   directories. Require byte-for-byte equality. Record the SHA-256 digest, complete reviewed source inventory,
+   build-tool versions, build command, and interpreter identity. Reproducibility identifies the candidate; it does
+   not approve it.
+
+4. **Render the exact proposed registration.** It must name the verified absolute interpreter and the future
+   digest-addressed archive path, followed by `hook <host>`. It must not depend on `PYTHONPATH`, `python -m`, the
+   working directory, a virtual-environment activation, or inherited Python startup variables. Include every
+   platform-specific native field, such as the Windows command field, in the proposed tuple.
+
+5. **Assemble a closed review packet.** The packet contains:
+
+   - candidate archive and SHA-256 digest;
+   - reviewed source and build-input inventory;
+   - build and regression evidence;
+   - verified interpreter path, identity, and digest where available;
+   - canonical identities for every target requested in this approval;
+   - exact current configuration bytes and digest for each target;
+   - exact proposed configuration bytes and a readable diff;
+   - prior known-good runtime, interpreter, registration, and rollback pin;
+   - expected trust handoff and harmless allow and deny probes;
+   - an explicit statement that shortcuts, aliases, shims, `PATH`, and host executables do not change.
+
+   Changing any bound input invalidates the packet and requires a new review.
+
+6. **Review and approve outside the candidate's control.** The owner verifies the source diff, candidate digest,
+   interpreter, target list, exact registration diffs, regression evidence, and rollback path. The independent
+   authority then records approval over those exact values. Approval of one candidate or target does not authorize
+   a later build, a different configuration preimage, or another target.
+
+7. **Import without overwriting.** The authority re-hashes the supplied archive, rejects a mismatch, rejects path
+   redirection, and creates a new object at a path derived from the digest. It must fail if an existing object at
+   that identity has different bytes. After writing, it reopens and re-hashes the stored object before recording
+   it as staged. Existing known-good objects are never replaced.
+
+8. **Activate exactly one target.** Acquire the target lock, resolve and revalidate its canonical path, and compare
+   the current configuration with the approved preimage. On drift or sharing conflict, make no configuration
+   change. Otherwise, journal the prior bytes and rollback dependencies, safely replace the registration, verify
+   the written bytes, and mark only that target `needs-trust`. Do not report the fleet as atomically migrated.
+
+9. **Complete the native trust handoff.** Launch the host through its ordinary entry point with activation variables
+   absent. Use the host's own review or enablement surface to inspect and trust the new definition. For Codex, this
+   includes reviewing the exact hook definition through its native hooks interface. If the host does not expose a
+   reviewable trust path, leave the target unverified and do not broaden the support claim.
+
+10. **Capture fresh live evidence.** On a disposable target, exercise one harmless operation that should pass and
+    one harmless covered mutation that should be denied. Confirm both the host result and the absence of the denied
+    side effect. Bind the evidence to the host version, operating system, scope, tool surface, exact registration,
+    interpreter, and artifact digest. A denial proves dispatch for that surface; it does not prove other tools,
+    scopes, hosts, or operating systems.
+
+11. **Close or roll back the target.** Mark the target `verified` only after trust review and both live checks pass.
+    On startup, trust, dispatch, policy, or evidence failure, use the independent recovery path to restore the exact
+    prior configuration. Re-run a normal launch and the prior runtime's checks, then mark the failed candidate and
+    reason without deleting evidence.
+
+12. **Repeat per target.** Start another host or scope only after the previous target has a durable `verified` or
+    `rolled-back` outcome. Status must show each target's artifact and state so mixed versions remain visible.
+
+13. **Retain rollback dependencies.** Keep every artifact and interpreter referenced by a registration, pending
+    transaction, or rollback pin. Automatic garbage collection remains disabled. Cleanup is a separate owner
+    operation that recomputes dependencies and refuses deletion on drift, ambiguity, or an incomplete journal.
+
+14. **Record completion honestly.** The bootstrap is complete only for targets marked `verified`. The completion
+    record lists unsupported targets and surfaces, retained rollback objects, unresolved trust steps, and the exact
+    evidence behind each support statement.
+
+## Current repository state
+
+This procedure does not authorize a migration today. The direct isolated zipapp entry, canonical target registry,
+per-target promotion and recovery implementation, and independent promotion authority are still prerequisites.
+Until they exist and are reviewed, the current native hook and registration remain unchanged and protected-source
+work must happen only in an isolated candidate checkout.

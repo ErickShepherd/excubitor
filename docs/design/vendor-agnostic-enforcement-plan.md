@@ -112,9 +112,9 @@ their own witnesses exist.
   reporting where compatibility requires it; and add empty-environment policy tests.
 - [x] Adopt the independently reviewed stable-runtime deployment and per-target promotion contract above,
   keeping `.pyz` packaging separate from user authorization and native-host activation.
-- [ ] Complete the separate owner-controlled bootstrap migration from the protected development import to an
-  exact reviewed stable artifact and registration diff. Keep the prior runtime available, complete native
-  trust review, and capture fresh allow/deny dispatch evidence before protected-source work resumes.
+- [x] Document the steps in the [owner-controlled stable-runtime bootstrap runbook](../operations/owner-controlled-stable-runtime-bootstrap.md),
+  including its hard prerequisites, closed review packet, independent approval, per-target trust and witnesses,
+  rollback, and conservative cleanup boundaries.
 - [ ] Add a direct `.pyz` native-hook entry point and isolated absolute-interpreter invocation. Prove repository
   package shadowing, `sitecustomize`, inherited Python variables, virtual environments, ordinary working
   directories, spaces, and shell metacharacters cannot redirect execution.
@@ -124,6 +124,10 @@ their own witnesses exist.
 - [ ] Implement per-target staged promotion, conflict checking, platform redirection defenses, trust handoff,
   activation witnesses, rollback through the prior artifact, interrupted recovery, and honest mixed-version
   status. Do not claim an atomic all-host rollout.
+- [ ] After the required isolated entry, registry, promotion path, recovery path, and independent authority have
+  been implemented and reviewed, complete the owner-controlled bootstrap from the protected development import
+  to an exact approved artifact and registration diff. Keep the prior runtime available, complete native trust
+  review, and capture fresh allow/deny dispatch evidence before protected-source work resumes in this checkout.
 - [ ] Make repository policy monotonic: repository content may add restrictions but cannot disable baseline
   controls, select a tracked opt-out escape, or arm elevated behavior. Add hostile and malformed repository
   policy tests.

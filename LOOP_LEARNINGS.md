@@ -133,3 +133,14 @@ Append-only observations from vendor-agnostic enforcement iterations.
 - Deterministic output and one denial are narrow evidence: promotion approval must bind reviewed inputs and
   exact bytes, while regression checks plus fresh native allow/deny witnesses establish each support claim.
   The first migration remains an owner-controlled external step and must retain the prior working runtime.
+
+## 2026-09-05 — Owner-controlled bootstrap runbook
+
+- The bootstrap cannot safely precede its direct isolated entry, canonical target registry, per-target transaction,
+  recovery, and independent promotion authority. The checklist now puts those prerequisites before activation.
+- Candidate preparation and approval are distinct. An agent may build reproducible bytes and assemble a closed
+  review packet, but only an authority unavailable to that agent may approve, import, or register those bytes.
+- The first migration must be prepared away from the active protected runtime. It may not create a temporary
+  exception, edit the live package in place, or use an agent-writable receipt as authorization.
+- Trust and evidence close independently for every target. The prior runtime stays pinned through native review,
+  harmless allow and deny checks, and rollback; partial migration remains an explicit mixed-version state.
