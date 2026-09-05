@@ -120,8 +120,8 @@ process still exits successfully. Exit status therefore cannot be the completion
 
 ## The smallest useful verification program
 
-First remove the existing broad Codex registration using its supported transaction and verified
-rollback capture. Then inspect reusable implementation mechanisms against the corrected scope.
+The broad Codex registration has now been removed using its supported transaction and verified
+rollback capture. Next inspect reusable implementation mechanisms against the corrected scope.
 Do not let preparation for every future run inherit the complexity of repairing this installation.
 
 Before promising a host/interface, use a disposable project to demonstrate:
@@ -161,5 +161,7 @@ was treated as leads, not evidence. Unsupported universal context-reset claims, 
 shape contradicted by its native documentation, and suggestions to use global hooks and a launch
 environment variable were excluded. The latter also conflict with the owner's agreed scope.
 
-The research and documentation update changed no live hook, native trust, launcher, skill
-installation, or runtime support claim. Removal and runtime correction remain pending.
+The initial research changed no live hook, native trust, launcher, skill installation, or runtime
+support claim. A subsequent owner-operated transaction removed the broad Codex registration on
+2026-09-05; ordinary-work checks passed after the app reopened. Ralph-only runtime correction remains
+pending. These removal results do not establish replacement support.

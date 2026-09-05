@@ -1,6 +1,7 @@
 # Ralph-only native enforcement remediation
 
-Status: product behavior agreed on 2026-09-05; runtime correction and removal remain pending.
+Status: product behavior agreed on 2026-09-05; broad Codex registration removed and ordinary-work
+checks passed on 2026-09-05. Ralph-only runtime correction remains pending.
 
 Excubitor helps the owner set up and run safe, unattended Ralph workflows with little repeated effort.
 The owner agrees on the job, what proves it is done, and how far it may proceed automatically. Excubitor
@@ -66,7 +67,7 @@ ordinary development. Recording this correction does not change the running impl
   provide the required scope, trustworthy activation, or unattended continuation through native facilities, name
   the unsupported mode and missing capability. Do not broaden registration to simulate support.
 
-## Immediate removal of the broad Codex registration
+## Completed removal of the broad Codex registration
 
 The owner authorized removal of the existing Excubitor-owned user-scope Codex registration. Replacement
 registration, native trust changes, candidate promotion, merge, push, and publication remain separate.
@@ -85,11 +86,23 @@ registration, native trust changes, candidate promotion, merge, push, and public
 - If the transaction cannot safely perform removal, preserve its conflict evidence and obtain a
   concrete owner decision. Never edit around an active guard or replace the runtime to escape it.
 
-Current diagnostic evidence: the supported CLI uninstall preview reports one registration and zero
-installed files for removal, including deletion of the settings file. A subsequent status read still
-reports the user-scope Codex installation, needs-trust/needs-review, and a stale enforcement witness.
-Read-only registration and implementation-source inspection was denied by the active PreToolUse hook.
-Rollback capture, writer quiescence, actual removal, and post-removal checks have not been completed.
+The owner-operated supported uninstall removed the one receipt-owned registration after Codex exited.
+The hook file contained only that entry and had not pre-existed the installation, so deleting it
+preserved unrelated configuration. Its receipt is gone and fresh status reports no installations.
+All 175 inventoried settings, skill, and Claude hook filesystem entries matched across removal. Exact
+registration, receipt, and prior-probe backups remain available with verified digests.
+
+After reopening Codex, previously denied implementation-source reads succeeded. Ordinary shell and
+apply_patch writes succeeded in a disposable repository on main, without Ralph opt-in. An offline call
+to the old adapter against that repository still denied a default-branch edit with an empty environment:
+the installed interference is removed, but the old implementation still violates the target scope.
+These native ordinary-work checks establish removal for the tested surfaces, not replacement support.
+
+The Windows packaged app redirected its apparent AppData state directory to package-local storage.
+An external PowerShell process initially could not see the receipt at the apparent path. Open-file
+handle resolution established the physical receipt and probe paths; capture and the uninstall's
+child-process-only state-directory override used those paths. No state was moved and no persistent
+environment setting changed. Include packaged-app versus standalone-CLI state discovery in future tests.
 
 ## Existing work and support evidence
 
@@ -103,7 +116,7 @@ review against the new scope.
 
 | Host | Evidence available for this review | Ralph-only unattended support |
 |---|---|---|
-| Codex | CLI reports one user-scope installation and stale prior native evidence; this unrelated task was intercepted. | Not established. Project/task isolation, start/end authority, continuation, and cleanup require native verification. |
+| Codex | The broad installation is removed; fresh status lists no installations. Ordinary shell/apply_patch writes and previously blocked source reads succeed after reopening the app. | Replacement support is not established. Project/task isolation, start/end authority, continuation, and cleanup require native verification. |
 | Claude Code | Existing adapter and installer are recorded; this review has not refreshed live configuration or lifecycle evidence. | Not established for the corrected contract. |
 | Antigravity | The handoff records no registration; no fresh native capability or installation verification has been completed. | Not established; do not install or infer capabilities from another host. |
 | Cursor | Prospective integration requested by the owner; official hook and CLI documentation reviewed. | Not established; no native runtime verification or installation performed. |
@@ -123,7 +136,7 @@ acceptance and permission boundaries while comparing context and intermediate re
   repository instruction that routes ordinary roadmap work through Ralph. This is a documentation change.
 - [x] Record native in-app and CLI launching requirements and a primary-source workflow/capability
   inventory. This is research and documentation; it does not complete the native verification below.
-- [ ] Capture a rollback packet and safely remove the exact Codex user-scope installation through the
+- [x] Capture a rollback packet and safely remove the exact Codex user-scope installation through the
   existing transaction during a quiesced maintenance window; verify unrelated state and ordinary work.
 - [ ] Verify the native activation and continuation capabilities of each requested host. Establish the
   trusted source of owner intent, project/task identity, worker lifetime, and end/resume behavior before
@@ -147,7 +160,8 @@ acceptance and permission boundaries while comparing context and intermediate re
   enforceable grant and required verification. Default runs retain their work without merging or
   publishing; out-of-scope destinations and actions remain unavailable to the active loop.
 - [ ] Verify transactional project install/uninstall, shared dependencies, edited registrations, failed
-  and interrupted removal, and unchanged ordinary host launch. Preserve unrelated entries and skills.
+  and interrupted removal, packaged versus standalone state discovery, and unchanged ordinary host
+  launch. Preserve unrelated entries and skills.
 - [ ] Reconcile skill recipes, installation examples, diagnostics, support matrices, and older design
   documents with the implemented lifecycle. Remove environment-activation rituals and broad-enforcement
   claims from current instructions; retain historical evidence with explicit historical status.

@@ -427,3 +427,31 @@ Append-only observations from vendor-agnostic enforcement iterations.
 - This update changes only research and planning documentation. Live removal still requires rollback
   capture and writer quiescence. No hook, trust, runtime, launcher, skill installation, or support
   claim changed; no replacement registration or publication occurred.
+
+## 2026-09-05 — Broad Codex hook removed; ordinary development verified
+
+- The owner-operated transaction removed the exact Codex user-scope hook and its receipt after the
+  app and its Codex processes exited. The captured configuration contained only the owned entry and
+  had not pre-existed the installation, so settings-file deletion preserved unrelated content.
+- All three rollback backups still match their captured byte counts and digests. The 175 recorded
+  settings, installed-skill, and Claude-hook filesystem entries matched before and after removal.
+  Fresh CLI status after reopening the app reports an empty installation list.
+- Previously blocked adapter/configuration-source reads now succeed. Native shell and apply_patch
+  writes succeeded in a disposable repository on main without Ralph opt-in. The main-branch probe
+  needs initialized branch history: the initial unborn branch did not reproduce the old adapter's
+  default-branch denial. After initialization, an offline adapter call denied the same class of edit,
+  while the actual ordinary native edit succeeded. Keep offline and native evidence distinct.
+- Windows app packaging redirected the apparent AppData state path into package-local storage. The
+  owner shell and the app used the same account and 64-bit PowerShell but saw different contents at
+  the apparent path. GetFinalPathNameByHandleW on open receipt/probe files identified the physical
+  locations. Explicit physical-path capture and the documented child-process-only state-home override
+  addressed discovery without moving state or changing persistent environment settings.
+- The app runs as ChatGPT.exe in this Windows build. Closing a window did not establish process
+  quiescence; the owner used the native tray Quit action. A bounded wait in the one-time maintenance
+  helper removed the timing problem while preserving process and preimage checks. It killed no process.
+- The neutral configuration resolver still selects the conservative baseline whenever reached, and
+  the adapter still configures ordinary branch restrictions without verified Ralph-run activation.
+  The implementation therefore needs correction before reinstalling any hook. Removal is complete;
+  native Ralph-only activation, unattended continuation, and replacement support remain unverified.
+- No replacement hook, native trust grant, other-host registration, merge, push, or publication was
+  performed. The installed Codex skills and pre-existing Claude placeholders were preserved.

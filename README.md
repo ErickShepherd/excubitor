@@ -33,8 +33,9 @@ including other tasks in the same repository. The default result is reviewed, ve
 on an isolated branch; automatic merging is optional and authorized before the run starts. Publishing
 and deployment have separate permissions. Work units advance automatically without repeated approval.
 
-This lifecycle is not yet verified in the current development implementation. A broad Codex user-scope
-registration remains pending safe removal, and its guards have intercepted ordinary work. The older
+This lifecycle is not yet verified in the current development implementation. The unwanted Codex
+user-scope registration was removed on 2026-09-05, and ordinary-work checks passed after reopening
+the app. The current adapter still requires correction before any replacement is installed. The older
 activation and installation examples below describe prior behavior, not proof of Ralph-only support.
 Use the [current remediation plan](docs/design/vendor-agnostic-enforcement-plan.md) for the agreed scope,
 current evidence, and remaining work. Do not use legacy examples to install broad enforcement as a fix.
