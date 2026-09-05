@@ -206,3 +206,15 @@ Append-only observations from vendor-agnostic enforcement iterations.
   the hash-locked test requirements avoids that runner defect without weakening production validation.
 - The implementation remains only in the isolated candidate. Checking the unit records a reviewable candidate
   claim; it does not integrate those bytes, approve a review packet, provision authority, or change any live hook.
+
+## 2026-09-05 — Signed-envelope cryptographic fork
+
+- The packet fields do not determine the cryptographic verification mechanism. The candidate is intentionally
+  standard-library-only and contains no signature primitive, while several materially different mechanisms can
+  authenticate the same canonical packet.
+- A compiled Ed25519 verifier/applier keeps the signature format small and portable; operating-system certificate
+  verification can reuse a platform trust store but changes portability and provisioning; a pinned cryptographic
+  runtime adds a dependency closure that must itself be protected and reviewed.
+- This choice fixes the owner's key-provisioning workflow, the verifier supply chain, cross-platform packet
+  semantics, and long-lived trust-root compatibility. Those effects reach beyond reversible candidate internals,
+  so implementation must wait for an explicit owner decision rather than letting the loop lock in one option.

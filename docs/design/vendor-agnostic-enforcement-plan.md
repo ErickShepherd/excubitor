@@ -134,6 +134,13 @@ their own witnesses exist.
   and multiple project scopes, pending transactions, and rollback pins. Disable automatic garbage collection
   and preserve receipts whenever drift prevents complete uninstall. This is an isolated-candidate implementation
   claim only; independent review, promotion, integration, trust, and live activation remain separate gates.
+- [ ] DECIDE: Select the signature suite and independently provisioned verifier implementation for owner-approved
+  packets. It must support offline or hardware-held signing, verify without candidate-controlled dependencies,
+  pin the algorithm and verification-key identity, reject ambiguous or malleable encodings, keep the verifier's
+  dependency closure auditable, and preserve one packet meaning across supported operating systems. Candidate
+  designs include Ed25519 in a small compiled verifier/applier, operating-system certificate verification, or a
+  separately pinned cryptographic runtime. This decision provisions a long-lived trust root and external runtime
+  dependencies, so the loop must not select it implicitly.
 - [ ] Define a strict, canonical signed approval envelope for one single-use transaction. Bind the complete review
   packet, artifact and source/build inventories, interpreter dependency closure, machine and target, current and
   proposed configuration, rollback material, expiry, revocation state, and transaction identity. Reject unknown
