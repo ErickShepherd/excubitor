@@ -251,3 +251,29 @@ Append-only observations from vendor-agnostic enforcement iterations.
   the configured 110-character line limit were clean; Ruff was unavailable in the isolated test environment.
 - These source and test bytes remain only in the isolated candidate. No signature was created or accepted, no
   replay state was provisioned or consumed, and no trusted program, hook registration, or live target changed.
+
+## 2026-09-05 — Closed candidate and rollback runtime inventories
+
+- Hashing only `python.exe` does not identify the code Python can execute. The isolated candidate now inventories
+  the exact interpreter and base executable, shared Python library and path configuration, every regular file under
+  the isolated import paths, standard-library files, extension modules, and relevant absent startup-config paths.
+- Verification checks path presence and the entire file set before launching the interpreter, then repeats an
+  isolated identity/path probe. This order prevents a newly added shadow module or path-config file from controlling
+  the probe that is supposed to detect it. Symlinks, Windows reparse points, special files, unstable reads, oversized
+  inventories, omitted files, added files, and changed bytes fail closed.
+- Native archive registrations now add `-B` to `-I -S`; otherwise an ordinary hook invocation could write `.pyc`
+  files and make the retained dependency inventory mutate itself.
+- Promotion now requires complete inventories for both the selected and prior runtimes. The prior runtime must also
+  be a retained digest-addressed archive whose exact direct native registration is present in the approved preimage;
+  an empty target or editable `python -m excubitor` rollback is refused before importing candidate bytes.
+- Promotion state, rollback records, activation witnesses, and health checks retain or bind the selected closure.
+  Rollback re-verifies the prior closure and stable registration both before journaling and immediately before
+  restoring settings, without reading or executing the failed candidate.
+- The boundary is deliberately Python-owned dependencies. The operating-system loader and system libraries remain
+  host trusted-computing-base inputs and must not be described as captured by this manifest.
+- Fifty combined closure, approval, registry, and promotion checks passed under Python 3.14; nineteen focused
+  promotion checks and ten deterministic zipapp checks also passed. The approval codec's seventeen tests and both
+  changed modules compiled under Python 3.11. Ruff was unavailable, while a direct 110-character line-length scan
+  reported no violations.
+- All implementation and test bytes remain in the isolated candidate. No trusted program, signing key, protected
+  store, native registration, host trust decision, or live target changed.

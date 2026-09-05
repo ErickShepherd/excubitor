@@ -44,7 +44,7 @@ Do not change a live registration until all of the following exist:
 
 - A candidate is built in an isolated checkout that is not the code loaded by the active protected hook.
 - The zipapp provides the direct native entry `hook <host>` and works through a verified absolute interpreter as
-  `<absolute-interpreter> -I -S <absolute-archive> hook <host>`.
+  `<absolute-interpreter> -I -S -B <absolute-archive> hook <host>`.
 - Tests show that the working directory, repository packages, user site packages, `sitecustomize`, virtual
   environments, inherited Python activation variables, spaces, and shell metacharacters cannot redirect it.
 - A canonical target identifier distinguishes every host, user or project scope, and real native configuration
@@ -54,6 +54,12 @@ Do not change a live registration until all of the following exist:
 - The promotion operation locks one target, rechecks its exact preimage immediately before mutation, journals the
   change, replaces configuration safely, and can recover after interruption.
 - Rollback is runnable through the known-good prior interpreter and runtime even when the candidate cannot start.
+- Both the candidate and prior interpreter have canonical closed inventories covering the exact executable, base
+  executable, every file under isolated import paths, standard-library and extension-module bytes, shared Python
+  libraries, and present or absent startup path-configuration files. A fresh complete recapture matches before
+  promotion or rollback. Operating-system loader and system-library bytes are an explicit host trust boundary.
+- The prior registration invokes a retained digest-addressed archive directly. It does not return to an editable
+  source/import tree, and `-B` prevents the registered interpreter from writing bytecode into its verified closure.
 - The selected one-shot verifier/applier and recovery program have been independently reviewed and provisioned by
   the owner at fixed enrolled locations, with their verification key and durable state protected from the agent.
 
@@ -147,9 +153,10 @@ source in place, or make a temporary registration exception to get around bootst
 
 ## Current repository state
 
-This procedure does not authorize a migration today. The direct isolated zipapp entry is implemented. Registry and
-promotion work exists only in an isolated candidate and is not integrated or trusted. The signed envelope, complete
-runtime and interpreter dependency closures, concurrent-writer defenses, independently captured activation
-evidence, and independently provisioned verifier/applier and recovery program remain prerequisites. Until they are
-implemented and reviewed, the current native hook and registration remain unchanged and protected-source work must
-happen only in an isolated candidate checkout.
+This procedure does not authorize a migration today. The direct isolated zipapp entry is implemented. Registry,
+promotion, and complete Python-owned runtime-closure verification exist only in an isolated candidate and are not
+integrated or trusted. The operating-system loader and system libraries remain an explicit host trust boundary. The
+protected signature verifier, concurrent-writer defenses, independently captured activation evidence, and
+independently provisioned verifier/applier and recovery program remain prerequisites. Until they are implemented
+and reviewed, the current native hook and registration remain unchanged and protected-source work must happen only
+in an isolated candidate checkout.

@@ -53,7 +53,7 @@ real-host denial probe proves that the host loaded the reviewed hook and honored
 
 - A deterministic `.pyz` is the selected candidate package format, not an authorization mechanism. Native
   registrations invoke a direct hook entry point through a verified absolute interpreter in isolated startup
-  mode (`python -I -S <absolute-archive> hook <host>`). They do not use `PYTHONPATH`, `python -m`, the working
+  mode (`python -I -S -B <absolute-archive> hook <host>`). They do not use `PYTHONPATH`, `python -m`, the working
   directory, user site packages, `sitecustomize`, or inherited Python activation variables to find policy code.
 - Deployment requires an independently controlled user promotion action that the agent cannot execute or
   forge. Approval binds the exact archive digest, reviewed source inventory and build inputs, interpreter,
@@ -148,10 +148,15 @@ their own witnesses exist.
   bytes across Python 3.11 and 3.14. Parsing is explicitly not authorization: the protected verifier/applier below
   must still authenticate the exact bytes with its pinned key and algorithm, revalidate every attachment and live
   binding, and consume replay state before any mutation.
-- [ ] Preserve and verify complete dependency closures for both the selected runtime and the prior known-good
+- [x] Preserve and verify complete dependency closures for both the selected runtime and the prior known-good
   runtime. Rollback must never return to an editable import tree, and interpreter verification must cover the
   standard library, extension modules, path configuration, and other startup dependencies rather than hashing
-  only the interpreter executable.
+  only the interpreter executable. The isolated candidate now records and re-verifies a canonical closed inventory
+  for both runtimes, requires the prior runtime to be a retained digest-addressed archive with its exact direct
+  native registration, and uses `-B` so verification cannot mutate its own closure with bytecode. The operating
+  system loader and system libraries are stated as the host trusted-computing-base boundary. This is candidate-only
+  mechanism evidence; independent review, protected storage, authority provisioning, and live migration remain
+  separate gates.
 - [ ] Implement per-target staged promotion, platform redirection defenses, and candidate-independent interrupted
   recovery with an enforceable exclusive-write strategy for native configuration. Test Windows junctions,
   reparse points, path aliases, sharing violations, substitution after the final validation read, concurrent
