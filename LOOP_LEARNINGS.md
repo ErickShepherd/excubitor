@@ -405,3 +405,25 @@ Append-only observations from vendor-agnostic enforcement iterations.
   Do not perform live removal until the supported transaction's preconditions are satisfied. No native
   registration, trust state, installed skills, shortcuts, candidate runtime, or other host changed in
   this documentation correction. Runtime activation, isolation, and unattended completion remain open.
+
+## 2026-09-05 — Native launching and evidence-based workflow defaults
+
+- The owner wants a consistent Ralph command or action inside each app's existing window, plus CLI
+  launching. Codex, Claude Code, and Antigravity are requested; Cursor is prospective. A separate
+  control panel and an environment-variable launch ritual do not satisfy that requirement.
+- Official host documentation provides candidate native entry points and continuation mechanisms.
+  It does not establish protected opt-in, task isolation, cleanup, or unattended completion on the
+  installed builds. CLI, headless execution, and each GUI surface require separate evidence.
+- The research document distinguishes original practitioner experience, first-party demonstrations,
+  documented host capabilities, owner requirements, and proposed Excubitor experiments. Later
+  harness experiments changed reset and review policies as model capability changed; do not turn
+  fresh context or intermediate review after every change into a universal requirement.
+- Verify ordinary work immediately after completion in the same task, not only in another project.
+  Skill lifetime and task lifetime need not equal Ralph-run lifetime. Test native handler failures as
+  well as successful denials; fixtures alone cannot prove host behavior on timeout or malformed output.
+- Gemini 3.1 Pro was consulted for research. Its unsupported claims and recommendations that conflict
+  with the agreed scope were excluded after checking primary sources. A model response is not a
+  verification witness. The evidence document contains the source links and proposed comparisons.
+- This update changes only research and planning documentation. Live removal still requires rollback
+  capture and writer quiescence. No hook, trust, runtime, launcher, skill installation, or support
+  claim changed; no replacement registration or publication occurred.

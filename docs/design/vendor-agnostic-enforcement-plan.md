@@ -13,6 +13,10 @@ ordinary development. Recording this correction does not change the running impl
 
 ## Agreed user experience
 
+- Start Ralph from the existing coding app window using a consistent Ralph command or action, or
+  from the host CLI. Codex, Claude Code, and Antigravity are requested integrations; Cursor is a
+  prospective extension. Use native entry points with shared behavior, not a separate control panel.
+  Adapt command syntax to the host without claiming an unimplemented universal slash command.
 - Ralph is explicitly started for a particular job. Installing Excubitor, opening a project, asking for
   a fix, or continuing ordinary development does not start a Ralph run.
 - Normal development remains available, including in a repository that previously ran Ralph. A small
@@ -22,7 +26,8 @@ ordinary development. Recording this correction does not change the running impl
   outward actions or change the selected project or destination.
 - Once started, the run advances through all agreed work units without requiring approval or a manual
   restart between units. Small units, durable checkpoints, and fresh reads of the plan remain useful
-  internal mechanics. One worker finishing is not the whole run finishing.
+  internal mechanics. One worker finishing is not the whole run finishing. Select unit size, context
+  reset timing, and additional intermediate review from observed results; they are not fixed rituals.
 - The default completion result is reviewed, verified work committed on an isolated branch, ready for
   owner review. The run reports what was completed and anything unresolved, then ends its enforcement.
 - Automatic merging is an option authorized once before the run starts, bound to a selected destination
@@ -56,8 +61,9 @@ ordinary development. Recording this correction does not change the running impl
   End or revoke the run's authority and account for its remaining workers before removing protections.
   A stale or copied activation must never capture ordinary future work. An interrupted run may resume
   only within its remaining authority, without silently extending limits or permissions.
-- Treat Codex, Claude Code, and Antigravity as separate integrations. If a host cannot provide the
-  required scope, trustworthy activation, or unattended continuation through native facilities, name
+- Treat Codex, Claude Code, Antigravity, and prospective Cursor support as separate integrations.
+  Verify interactive CLI, headless CLI when claimed, and each GUI surface separately. If a host cannot
+  provide the required scope, trustworthy activation, or unattended continuation through native facilities, name
   the unsupported mode and missing capability. Do not broaden registration to simulate support.
 
 ## Immediate removal of the broad Codex registration
@@ -100,15 +106,23 @@ review against the new scope.
 | Codex | CLI reports one user-scope installation and stale prior native evidence; this unrelated task was intercepted. | Not established. Project/task isolation, start/end authority, continuation, and cleanup require native verification. |
 | Claude Code | Existing adapter and installer are recorded; this review has not refreshed live configuration or lifecycle evidence. | Not established for the corrected contract. |
 | Antigravity | The handoff records no registration; no fresh native capability or installation verification has been completed. | Not established; do not install or infer capabilities from another host. |
+| Cursor | Prospective integration requested by the owner; official hook and CLI documentation reviewed. | Not established; no native runtime verification or installation performed. |
 
 Installation, native trust, active-run identity, policy behavior, and unattended continuation are separate
 claims. A fixture, old supported-runtime label, or successful CLI invocation cannot prove the corrected
 contract. Record evidence per host version, operating system, scope, interface, and tool surface.
 
+The [native workflow research](ralph-native-workflow-evidence.md) records current official facilities,
+the experimental basis and limits of proposed workflow defaults, and the required local comparisons.
+The documented capabilities are leads for native probes, not proof of support. Preserve the final
+acceptance and permission boundaries while comparing context and intermediate review policies.
+
 ## Remediation checklist
 
 - [x] Record the owner-agreed Ralph-only product scope and default completion behavior; remove the
   repository instruction that routes ordinary roadmap work through Ralph. This is a documentation change.
+- [x] Record native in-app and CLI launching requirements and a primary-source workflow/capability
+  inventory. This is research and documentation; it does not complete the native verification below.
 - [ ] Capture a rollback packet and safely remove the exact Codex user-scope installation through the
   existing transaction during a quiesced maintenance window; verify unrelated state and ordinary work.
 - [ ] Verify the native activation and continuation capabilities of each requested host. Establish the
@@ -126,6 +140,9 @@ contract. Record evidence per host version, operating system, scope, interface, 
 - [ ] Connect bounded workers through the host's native continuation facilities. Verify a multi-unit job
   completes without human restarts, tolerates recoverable failures, respects resource limits, preserves
   its acceptance criteria, and produces the default verified branch and report.
+- [ ] Compare workflow variants on representative tasks with fixed acceptance checks, permissions,
+  model versions, and budgets. Record all attempts, failures, interventions, setup effort, quality, and
+  resource use. Keep safety protections fixed and select the simplest adequately performing defaults.
 - [ ] Implement optional preauthorized merge and separate outward-action permissions only with an
   enforceable grant and required verification. Default runs retain their work without merging or
   publishing; out-of-scope destinations and actions remain unavailable to the active loop.
