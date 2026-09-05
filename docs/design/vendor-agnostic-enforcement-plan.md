@@ -186,16 +186,21 @@ their own witnesses exist.
   an explicit quiescence violation. This is isolated-candidate mechanism evidence only. The recovery logic does
   not read or execute a failed candidate artifact, but independently provisioned recovery packaging remains a
   later prerequisite; no arbitrary-writer exclusion, integration, authority provisioning, or migration is claimed.
-- [ ] DECIDE: Select the authority and capture protocol that can produce non-self-asserted activation evidence.
-  The viable designs are: extend the independently provisioned verifier/applier with a host-specific one-shot
-  collector; provision a separate protected collector that emits an owner-signed closed evidence packet; or accept
-  only independently verifiable host-native audit records and leave interfaces without adequate records
-  unsupported. The selected design must pin who controls and may invoke the collector, the raw trust and tool-event
-  sources accepted for each host, how tool identity and allow/deny outcomes are derived, an operating-system
-  observation of the denied marker, sanitization without changing evidentiary meaning, and target, registration,
-  artifact, host-version, time, freshness, and replay bindings. Caller-authored booleans, tool labels, prose,
-  fixtures, and agent-writable capture state never qualify. This choice changes protected provisioning and the
-  achievable support matrix, so implementation waits for owner selection after independent review.
+- [x] DECIDE: Develop a separate, bounded activation-evidence collector under the already selected owner-controlled
+  authority. It may be provisioned alongside the verifier/applier, but it runs as a separate process without
+  registration, native-trust, rollback, promotion-signing, or promotion-state mutation authority and without access
+  to promotion keys. It accepts only independently authenticated native observations plus complete operating-system
+  observations of disposable probe effects, and emits a closed evidence packet for separate owner approval. Each
+  exact host version, operating system, scope, interface, and tool surface remains unsupported until its adapter
+  proves source provenance, event attribution, trust state, harmless allow and denial, absence of the denied effect,
+  freshness, and replay resistance. Both outcomes are required per claimed surface; one global allow/deny pair
+  cannot authorize an arbitrary tool list. Caller assertions, ordinary transcripts, sanitized fixtures, and
+  signatures over unauthenticated inputs cannot satisfy these requirements. An absent or ambiguous authoritative
+  native source produces an unsupported result. GPT-6 Astra independently reviewed this hybrid, and the owner
+  selected it by directing the work to proceed. Collector placement and isolated implementation are reviewable
+  engineering choices under the existing authority. Any concrete need for new privileges, credentials, privacy
+  exposure, provisioning, or a changed support claim requires a new owner decision. This selection authorizes no
+  live provisioning, signing, registration change, migration, or support claim.
 - [ ] Derive activation evidence from independently captured native trust, harmless allow, harmless denial, and
   denied-side-effect results for each claimed host tool surface. Do not accept caller-supplied booleans or tool
   names as proof of native activation.

@@ -358,3 +358,25 @@ Append-only observations from vendor-agnostic enforcement iterations.
 - This fork reaches owner-controlled provisioning and external host support, so it is not a reversible internal
   implementation choice. No witness API, fixture, test, protected state, live host, registration, or trust record
   changed in this iteration.
+
+## 2026-09-05 — Astra-reviewed bounded activation collector selected
+
+- The owner selected Astra's hybrid recommendation: activation evidence comes from a separate, bounded collector
+  that may share an owner-controlled provisioning package with the verifier/applier but remains a separate process
+  with no registration, trust, rollback, promotion-signing, promotion-state mutation, or promotion-key authority.
+- Process placement does not make an input trustworthy. The collector may accept only independently authenticated
+  host-native observations and complete operating-system observations covering the disposable probe interval;
+  ordinary transcripts, caller assertions, sanitized fixtures, and signatures over unauthenticated inputs remain
+  unverified observations rather than activation proof.
+- Evidence is specific to an exact host version, operating system, scope, interface, and tool surface. Every claimed
+  surface needs attributable harmless allow and denial outcomes plus proof that the denied effect did not occur; a
+  single global allow/deny pair cannot bless an arbitrary list of tools.
+- Source provenance, event attribution, native trust, freshness, and replay resistance are mandatory. If a host or
+  interface lacks an authoritative source, or attribution is ambiguous, that surface stays unsupported. The target
+  threat model trusts the host and operating system; arbitrary same-user host compromise remains outside the claim.
+- Keeping capture parsing outside the mutation-capable applier reduces the consequence of a malformed host record,
+  while closed evidence packets preserve a separate owner approval boundary. New privileges, credentials, privacy
+  exposure, provisioning, or broader support claims still require a concrete owner decision.
+- This iteration changes only the reviewed plan. No witness code, protected collector, signing key, packet, live
+  host, native registration, trust state, migration, or support claim changed. The next unit removes the legacy
+  paths that can turn caller-supplied booleans and fixtures into verified or protected activation claims.
