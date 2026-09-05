@@ -139,6 +139,13 @@ The test apparatus does not treat its synthetic prompt or writable state as prot
 It is not production activation or a completed Ralph runner. Other hosts have observation code only;
 the GUI and headless CLI were not tested. The broader capability checklist below remains open.
 
+The [protected lifecycle candidate](protected-ralph-lifecycle.md) now implements an internal host-owned
+store with fixed scope and limits, progress across units, repairs, same-task resumption, cancellation
+drainage, and candidate-bound completion prerequisites. A native Codex subprocess could edit an
+ordinary file but could not change the separate authority store or acceptance file. This is component
+and storage-boundary evidence. The owner-approval channel, independent evidence collection, native
+routing, and full runner remain unfinished. Production adapters do not import the new library.
+
 ## Remediation checklist
 
 - [x] Record the owner-agreed Ralph-only product scope and default completion behavior; remove the

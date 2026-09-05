@@ -496,3 +496,27 @@ Append-only observations from vendor-agnostic enforcement iterations.
 - These observations validate the bounded native apparatus. Its writable state and synthetic start
   remain unsuitable as production authority. Protected activation and completion verification still
   need implementation and native evidence; the always-active production adapter was not changed.
+
+## 2026-09-05 — Protected lifecycle candidate and native storage denial
+
+- The shared host-owned lifecycle preserves task/project scope, units, acceptance identities, attempt
+  budget, deadline, and default retain-branch completion. Multi-unit progress, repairs, same-task
+  resumption, cancellation drainage, and completion prerequisites are library operations, without
+  owner reauthorization between units.
+- Review found that putting directory identity in the lookup key could make a replaced active project
+  appear inactive. Lookup now retains textual scope and separately validates live identity. Ended-run
+  history skips live-directory validation so it cannot capture a recreated project. Terminal status
+  requires recorded worker drainage. Observed expiry persists before a failed completion returns, so
+  later clock correction cannot reopen it.
+- Codex CLI 0.153.4's native Windows :workspace subprocess could edit an ordinary file but could not
+  forge activation, advance or cancel the run, claim verification/review/completion, erase SQLite rows,
+  or rewrite the external acceptance file. The parent confirmed unchanged authority and acceptance
+  bytes, then closed the dummy run after subprocess exit. No hook or trust setting was added.
+- The first expanded probe failed an assertion because changed limits correctly produced a contract
+  conflict before a write instead of the expected storage error. That report is preserved. The fixed
+  probe distinguishes this invariant rejection from native filesystem denial.
+- This is a protected storage candidate, not an authentication service or independent verifier.
+  Host APIs take trusted approval and candidate/check/review/liveness facts; there is deliberately no
+  worker-callable mutation endpoint. Native owner authentication, writable-surface admission, crash
+  routing, independent evidence collection, and the actual launcher remain unfinished. The always-active
+  adapter is unchanged and still unsuitable for reinstallation.

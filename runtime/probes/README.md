@@ -87,3 +87,24 @@ These are native apparatus results for interactive CLI and apply_patch. They do 
 production Ralph activation, protected completion checks, cancellation/crash recovery, lingering
 workers, fail-closed faults, GUI/headless behavior, or another vendor. The original adapter's
 always-active baseline is still unsuitable for reinstallation.
+
+## Protected lifecycle storage experiment
+
+`protected_runs.py` provisions a dummy run through the real shared library, then attempts unauthorized
+lifecycle and acceptance mutations through Codex's native sandbox. It creates only the selected
+evidence directory, installs no hooks, and grants no native trust.
+
+Supply absolute paths to the installed executables and a new evidence folder:
+
+```text
+python -B runtime/probes/protected_runs.py --codex ABSOLUTE_CODEX --python ABSOLUTE_PYTHON --output NEW_FOLDER
+```
+
+The tested Windows CLI accepts `codex sandbox -P :workspace -C PROJECT -- COMMAND`. Do not insert a
+`windows` subcommand: this CLI would try to execute a program by that name. The report binds source
+bytes, records runtime and observations, and preserves failed results. A passing test closes its dummy
+run after subprocess exit. Preserve incomplete fixtures for review; no hook is attached to the run.
+
+The [implementation notes](../../docs/design/protected-ralph-lifecycle.md) explain the result and gaps.
+Dummy candidate facts are not an independently verified branch, and the subprocess boundary does not
+cover every tool in a coding app.
