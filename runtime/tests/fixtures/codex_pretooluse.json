@@ -1,6 +1,6 @@
 [
   {
-    "name": "armed safe shell command defers",
+    "name": "empty environment safe shell command defers",
     "payload": {
       "session_id": "thr_fixture",
       "cwd": "{REPO}",
@@ -8,12 +8,12 @@
       "tool_name": "Bash",
       "tool_input": {"command": "git status"}
     },
-    "env": {"EXCUBITOR_LOOP_GUARD": "conservative"},
+    "env": {},
     "repo_branch": "feature",
     "expected_decision": "pass"
   },
   {
-    "name": "neutral arming denies push",
+    "name": "empty environment denies push",
     "payload": {
       "session_id": "thr_fixture",
       "cwd": "{REPO}",
@@ -21,21 +21,21 @@
       "tool_name": "Bash",
       "tool_input": {"command": "git push origin main"}
     },
-    "env": {"EXCUBITOR_LOOP_GUARD": "conservative"},
+    "env": {},
     "repo_branch": "feature",
     "expected_decision": "deny",
     "expected_policy": "loop-vc"
   },
   {
-    "name": "legacy Claude arming remains compatible",
+    "name": "deprecated yolo input cannot weaken the conservative baseline",
     "payload": {
       "session_id": "thr_fixture",
       "cwd": "{REPO}",
       "hook_event_name": "PreToolUse",
       "tool_name": "Bash",
-      "tool_input": {"command": "git push origin main"}
+      "tool_input": {"command": "git merge --no-ff topic"}
     },
-    "env": {"CLAUDE_LOOP_GUARD": "1"},
+    "env": {"CLAUDE_LOOP_GUARD": "yolo"},
     "repo_branch": "feature",
     "expected_decision": "deny",
     "expected_policy": "loop-vc"
@@ -74,7 +74,7 @@
     "expected_decision": "pass"
   },
   {
-    "name": "armed patch cannot rewrite Codex registration",
+    "name": "empty environment patch cannot rewrite Codex registration",
     "payload": {
       "session_id": "thr_fixture",
       "cwd": "{REPO}",
@@ -84,7 +84,7 @@
         "command": "*** Begin Patch\n*** Update File: .codex/hooks.json\n@@\n-old\n+new\n*** End Patch"
       }
     },
-    "env": {"EXCUBITOR_LOOP_GUARD": "conservative"},
+    "env": {},
     "repo_branch": "feature",
     "expected_decision": "deny",
     "expected_policy": "self-integrity"
@@ -120,7 +120,7 @@
     "expected_targets": ["before.py", "after.py"]
   },
   {
-    "name": "configured nested MCP mutation cannot rewrite Codex registration",
+    "name": "empty environment configured MCP mutation cannot rewrite Codex registration",
     "payload": {
       "session_id": "thr_fixture",
       "cwd": "{REPO}",
@@ -134,7 +134,7 @@
       }
     },
     "policy": "[codex.mcp_mutation_profiles]\n\"mcp__batch__write_files\" = [\"/operations/*/path\"]\n",
-    "env": {"EXCUBITOR_LOOP_GUARD": "conservative"},
+    "env": {},
     "repo_branch": "feature",
     "expected_decision": "deny",
     "expected_policy": "self-integrity",
@@ -150,7 +150,7 @@
       "tool_input": {"source": "before.py"}
     },
     "policy": "[codex.mcp_mutation_profiles]\n\"mcp__filesystem__move_file\" = [\"/source\", \"/destination\"]\n",
-    "env": {"EXCUBITOR_LOOP_GUARD": "conservative"},
+    "env": {},
     "repo_branch": "feature",
     "expected_decision": "deny",
     "expected_policy": "adapter-input"
@@ -165,7 +165,7 @@
       "tool_input": {"path": ".excubitor/policy.toml", "content": "disarm"}
     },
     "policy": "[codex.mcp_mutation_profiles]\n\"mcp__filesystem__write_file\" = [\"/path\"]\n",
-    "env": {"EXCUBITOR_LOOP_GUARD": "conservative"},
+    "env": {},
     "repo_branch": "feature",
     "expected_decision": "deny",
     "expected_policy": "self-integrity",
@@ -180,7 +180,7 @@
       "tool_name": "mcp__example__write",
       "tool_input": {"path": "note.txt", "content": "hello"}
     },
-    "env": {"EXCUBITOR_LOOP_GUARD": "conservative"},
+    "env": {},
     "repo_branch": "feature",
     "expected_decision": "pass"
   }

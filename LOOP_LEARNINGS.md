@@ -92,3 +92,15 @@ Append-only observations from vendor-agnostic enforcement iterations.
   trusted baseline.
 - The final support claim needs a matrix and real denial witnesses. A Windows TUI patch denial does not prove
   shell denial, headless dispatch, MCP coverage, another scope, another operating system, or another host.
+
+## 2026-09-05 — Always-on conservative native-hook baseline
+
+- Reaching the neutral resolver from a native adapter is itself the activation signal. An empty environment
+  now selects the conservative posture, so loop version-control and self-integrity policies cannot disappear
+  merely because a host was launched normally.
+- Former `EXCUBITOR_LOOP_GUARD` and `CLAUDE_LOOP_GUARD` values are diagnostics only. Every present value is
+  reported as deprecated and ignored, including `verifiable`, `yolo`, unknown text, and the empty string;
+  none can select elevated autonomy.
+- The live Codex hook immediately enforced the changed resolver against this worktree and rejected a later
+  patch that named the protected package tests. That is useful dogfood evidence that the baseline loaded, but
+  it is not a version-bound ordinary-host support witness and does not replace the final external review.

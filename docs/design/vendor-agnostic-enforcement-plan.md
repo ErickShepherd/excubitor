@@ -74,7 +74,7 @@ their own witnesses exist.
 - [x] Replace the earlier environment-gated plan with the owner-approved native-hook, no-shortcut,
   always-on-baseline, monotonic-policy, dependency-safe-uninstall, fail-closed-mutation, and evidence-matrix
   contract described above.
-- [ ] Make the neutral core resolve the conservative baseline as active under an empty environment; remove
+- [x] Make the neutral core resolve the conservative baseline as active under an empty environment; remove
   provider variables as baseline or elevated activation authority; keep only explicit deprecated-input
   reporting where compatibility requires it; and add empty-environment policy tests.
 - [ ] Make repository policy monotonic: repository content may add restrictions but cannot disable baseline

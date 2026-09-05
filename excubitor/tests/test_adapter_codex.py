@@ -155,7 +155,7 @@ class TestCodexGoldenFixtures(unittest.TestCase):
             decision = codex.decide(payload, {"EXCUBITOR_ALLOW_DEFAULT_BRANCH": "1"})
             self.assertTrue(decision.is_pass)
 
-    def test_armed_patch_cannot_rewrite_installed_policy_core(self) -> None:
+    def test_empty_environment_patch_cannot_rewrite_installed_policy_core(self) -> None:
         with tempfile.TemporaryDirectory() as repo:
             _repo(repo, "feature")
             adapter_path = Path(codex.__file__).resolve().as_posix()
@@ -171,7 +171,7 @@ class TestCodexGoldenFixtures(unittest.TestCase):
                     )
                 },
             }
-            decision = codex.decide(payload, {"EXCUBITOR_LOOP_GUARD": "conservative"})
+            decision = codex.decide(payload, {})
             self.assertTrue(decision.is_deny)
             self.assertEqual(decision.policy, "self-integrity")
 
@@ -237,7 +237,7 @@ class TestCodexProcessContract(unittest.TestCase):
             "tool_name": "Bash",
             "tool_input": {"command": "git status"},
         }
-        result = self._run(json.dumps(payload), {"EXCUBITOR_LOOP_GUARD": "conservative"})
+        result = self._run(json.dumps(payload))
         self.assertEqual((result.returncode, result.stdout, result.stderr), (0, "", ""))
 
     def test_deny_is_native_json(self) -> None:

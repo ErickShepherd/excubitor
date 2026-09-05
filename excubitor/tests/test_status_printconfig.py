@@ -107,14 +107,15 @@ def test_status_text_reports_needs_probe(installed, capsys) -> None:
 
 # --- print-config ----------------------------------------------------------------------------------
 
-def test_print_config_json_shows_provenance(tmp_path: Path, monkeypatch, capsys) -> None:
-    monkeypatch.setenv("EXCUBITOR_LOOP_GUARD", "conservative")
+def test_print_config_json_shows_native_hook_baseline(tmp_path: Path, monkeypatch, capsys) -> None:
+    monkeypatch.delenv("EXCUBITOR_LOOP_GUARD", raising=False)
+    monkeypatch.delenv("CLAUDE_LOOP_GUARD", raising=False)
     monkeypatch.chdir(tmp_path)
     assert cli_main(["print-config", "--json"]) == 0
     data = json.loads(capsys.readouterr().out)
     assert data["schema"] == "excubitor.effective-config.v1"
     assert data["settings"]["loop_mode"]["value"] == "conservative"
-    assert data["settings"]["loop_mode"]["source"] == "env:EXCUBITOR_LOOP_GUARD"
+    assert data["settings"]["loop_mode"]["source"] == "native-hook-baseline"
     assert data["settings"]["opt_out_marker"]["source"] == "default"
     assert data["settings"]["codex_mcp_mutation_profiles"] == {
         "source": "default",
@@ -122,15 +123,16 @@ def test_print_config_json_shows_provenance(tmp_path: Path, monkeypatch, capsys)
     }
 
 
-def test_print_config_surfaces_legacy_warning(tmp_path: Path, monkeypatch, capsys) -> None:
-    monkeypatch.delenv("EXCUBITOR_LOOP_GUARD", raising=False)
-    monkeypatch.setenv("CLAUDE_LOOP_GUARD", "1")
+def test_print_config_surfaces_all_deprecated_guard_inputs(tmp_path: Path, monkeypatch, capsys) -> None:
+    monkeypatch.setenv("EXCUBITOR_LOOP_GUARD", "verifiable")
+    monkeypatch.setenv("CLAUDE_LOOP_GUARD", "yolo")
     monkeypatch.chdir(tmp_path)
     assert cli_main(["print-config", "--json"]) == 0
     data = json.loads(capsys.readouterr().out)
     assert data["settings"]["loop_mode"]["value"] == "conservative"
-    assert "(legacy)" in data["settings"]["loop_mode"]["source"]
-    assert any("legacy" in w for w in data["warnings"])
+    assert data["settings"]["loop_mode"]["source"] == "native-hook-baseline"
+    assert len(data["warnings"]) == 2
+    assert all("deprecated" in warning and "ignored" in warning for warning in data["warnings"])
 
 
 def test_print_config_text(tmp_path: Path, monkeypatch, capsys) -> None:
