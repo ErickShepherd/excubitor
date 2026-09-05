@@ -108,3 +108,31 @@ run after subprocess exit. Preserve incomplete fixtures for review; no hook is a
 The [implementation notes](../../docs/design/protected-ralph-lifecycle.md) explain the result and gaps.
 Dummy candidate facts are not an independently verified branch, and the subprocess boundary does not
 cover every tool in a coding app.
+
+## Native confirmation, output checks, and session reconciliation
+
+`native_start.py` observes the native MCP form and its metadata. `native_start_record.py` connects the
+same form to the shared start handshake using a fixed disposable contract and protected store. Neither
+launches a worker or installs a hook. Use process-only CLI MCP overrides and the already authorized
+disposable project; registration and native trust must not be inferred from these scripts being present.
+Both scripts require `--output` with an absolute create-only JSONL log path. The record experiment also
+creates a sibling `.authority` directory. Native metadata stays in local evidence, not repository docs.
+
+The CLI test observed a cancelled form producing no run and a confirmed form creating exactly the native
+task/project record. No identity environment variable was present; context came in the host's MCP metadata
+outside tool arguments. The native client advertised form and URL elicitation. The parser intentionally
+handles only the observed Windows CLI shape and does not authenticate arbitrary copies of that JSON.
+
+`native_output.py --codex ABSOLUTE_CODEX --python ABSOLUTE_PYTHON --output NEW_FOLDER` runs five known,
+finite programs in the native read-only sandbox. Incorrect output, a forged test summary, and an early
+zero exit fail one unchanged oracle. Correct output and a denied oracle-overwrite attempt preserve the
+expected result. Review remains required. This fixture's Git identity is deliberately dummy; its simple
+subprocess wrapper must not be reused as a general untrusted-code executor or worker-drain proof.
+
+CLI exit terminated the record observer before its cleanup handler ran. Its record correctly remained
+active; explicit host cleanup of that worker-free fixture followed process-exit checks. The new
+`native_session_end.py` accepts only a SessionEnd envelope for its configured exact project and stores
+interruption, retaining protection and making no worker-drain or completion claim. Repeated events are
+idempotent and other tasks remain inactive. This binding has offline tests, not a live delivery witness.
+Its one-hook candidate is prepared outside the native configuration and requires separate registration
+and native-trust approval before testing.

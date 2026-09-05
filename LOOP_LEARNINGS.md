@@ -520,3 +520,26 @@ Append-only observations from vendor-agnostic enforcement iterations.
   worker-callable mutation endpoint. Native owner authentication, writable-surface admission, crash
   routing, independent evidence collection, and the actual launcher remain unfinished. The always-active
   adapter is unchanged and still unsuitable for reinstallation.
+
+## 2026-09-05 — Native confirmation bridge and independent output comparison
+
+- Codex CLI 0.153.4 supplied task/workspace context in native MCP metadata separately from tool
+  arguments and displayed a form with a false default. The test selected cancel and accept in that
+  native UI. Cancellation created no run; acceptance created the exact task/project record with its
+  original protected check definitions. Another task in that project stayed inactive. Copied metadata
+  or a client-name string remains insufficient to authenticate arbitrary peers or admit every tool.
+- The shared start handshake consumes a connection-bound pending confirmation once, freezes its
+  exact contract and check definitions, and rejects conflicting scope, replay, changed checks,
+  malformed replies, expired approval, and late responses after transport cancellation. It is an
+  internal component; the disposable MCP bridge is not a registered production activation service.
+- Five native read-only subprocess cases used one frozen output oracle. Wrong output, a forged green
+  summary, and an early zero exit failed. Correct output passed. An oracle overwrite was denied and
+  the original bytes survived. A passing output check did not bypass independent review. The fixture
+  used dummy Git facts; general execution containment and committed-candidate collection remain open.
+- The native CLI killed its MCP process without running Python cleanup. The accepted record stayed
+  active, and the trusted parent closed that worker-free fixture after both processes exited. Do not
+  depend on EOF/finally to revoke a real run. The new native SessionEnd binding records interruption
+  without inventing worker shutdown; its live one-hook experiment is prepared but not registered.
+- Process-only CLI MCP overrides needed no hook registration or new native trust. The top-level CLI
+  rejected the sandbox helper's -P flag; interactive CLI used its verified -s workspace-write option.
+  Both test CLIs exited. No production hook, trust rewrite, merge, push, or publication occurred.

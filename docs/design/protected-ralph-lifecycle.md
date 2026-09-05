@@ -1,9 +1,10 @@
 # Protected Ralph lifecycle candidate
 
-`excubitor/runs.py` is an internal library for a trusted host controller. It has no activation command,
-service endpoint, or adapter integration. It does not activate installed hooks. Native owner
-authentication and independent verification remain required before this becomes a working launcher.
-The old always-active adapter remains unsuitable for reinstallation.
+`excubitor/runs.py`, `approval.py`, `acceptance.py`, and `session.py` are internal host-controller
+components. A disposable native CLI experiment now connects confirmation to the run store and tests
+protected output comparison. There is no production launcher, registered endpoint, or active hook
+integration. Complete native admission, worker supervision, candidate collection, and independent
+review remain required. The old always-active adapter remains unsuitable for reinstallation.
 
 ## Implemented behavior
 
@@ -23,6 +24,11 @@ updates require the current revision, rejecting delayed workers and duplicate co
 changes invalidate previous check and review results. Completion requires all units, all original
 checks passing against the current candidate, passing review, a clean committed isolated candidate,
 and worker shutdown. The library validates the supplied facts; it does not yet collect them.
+
+The new output-check component stores exact command, input, expected output, expected exit status, and
+timeout definitions outside the worker project. It reloads and verifies those original bytes before
+comparing host-captured subprocess results. A worker's claimed test summary is never parsed as a pass.
+This does not provide a general sandbox executor, collect Git facts, or establish independent review.
 
 Cancellation first enters a stopping state. Only confirmed worker shutdown ends protection. An
 interrupted job resumes in the original task after old workers stop, retaining progress and limits.
@@ -59,12 +65,41 @@ authentication, privileged Git operations, verifier isolation, or complete Ralph
 
 ## Native integration still required
 
+The internal start handshake now freezes the displayed contract and output-check definitions, requests
+one confirmation with a false default, and consumes the matching response once on its native connection.
+Preparation, cancellation, malformed or late replies, responses from another handshake, replay, changed
+checks, and conflicting native scope cannot start a run. A transport cancellation or explicit connection
+closure discards pending confirmations. Definitions are written before activation; an interrupted write
+can leave an unused blob but cannot activate a partially stored check set.
+
+A disposable Codex CLI 0.153.4 experiment supplied native MCP metadata separately from tool arguments,
+including matching task identities, one workspace, sandbox mode, and automatic-review mode. The test
+selected cancellation and confirmation in the actual CLI form. Cancellation created no run. Confirmation
+created the exact scoped record and preserved its original acceptance definitions; another task in that
+project remained inactive. This demonstrates the native bridge under the tested connection. Client-name
+strings or copied metadata do not authenticate arbitrary MCP clients, and the parser does not attest
+all writable tools. The bridge remains test apparatus rather than a production activation endpoint.
+
+Five finite programs ran through Codex's native read-only subprocess sandbox against one frozen output
+check. Wrong output, a forged green summary, and an early zero exit failed. Correct output passed. A
+program's attempt to rewrite the protected oracle was denied and the original bytes remained intact.
+The output pass could not finish the run without review. These programs used a dummy Git identity;
+this experiment is not a committed-branch witness or a general arbitrary-code execution service.
+
+Native CLI shutdown killed the test MCP process without executing its Python cleanup handler. The
+accepted record remained active. The trusted test parent closed that dummy record only after both
+processes exited and after checking that no worker had started. `record_session_end` now records a native
+session ending as an interruption, preserving progress and protection rather than inventing completion
+or worker drainage. Its exact-scope and repeated-event tests pass; native delivery into this implementation
+still needs the separately prepared, unregistered one-hook experiment. Never rely on MCP EOF/finally for
+production run termination.
+
 The host must obtain one owner approval of the exact job outside the worker's ability to forge it.
 The earlier native hook experiment established task identity and continuation, but its prompt envelope
 supplied no independent owner-origin assertion. Prompt text, an environment flag, a skill invocation,
 or a worker-written marker cannot fill that gap. Native approval of a bounded privileged start helper
-is a candidate to investigate, not implemented behavior. This library needs no global dispatcher or
-application launch wrapper.
+was an earlier candidate mechanism. Native elicitation now has direct CLI evidence and is the current
+connection candidate. This library needs no global dispatcher or application launch wrapper.
 
 The controller and acceptance authority must be outside every worker-writable surface, including
 tools outside the shell sandbox. Do not expose RunStore mutation methods through a worker-callable
@@ -89,6 +124,9 @@ Current official references describe capabilities, not support certification:
 - [Codex approval and security boundaries](https://learn.chatgpt.com/docs/agent-approvals-security):
   local command containment and separate external-tool surfaces.
 - [Codex hooks](https://learn.chatgpt.com/docs/hooks): lifecycle events and hook limitations.
+- [Codex app server](https://learn.chatgpt.com/docs/app-server): native MCP elicitation and response flow.
+- [Claude Code hooks](https://code.claude.com/docs/en/hooks): elicitation hooks can automatically answer
+  a form and modify its result, so that host needs a separate approval-path assessment.
 
 The next implementation must connect authenticated approval and independently collected evidence to
 this lifecycle, then demonstrate a real multi-unit job through native continuation. Replacement
