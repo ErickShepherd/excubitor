@@ -53,9 +53,10 @@ Do not change a live registration until all of the following exist:
   target-to-artifact dependency.
 - The promotion operation locks one target, rechecks its exact preimage immediately before mutation, journals the
   change, replaces configuration safely, and can recover after interruption.
-- The owner has selected and provisioned the platform's enforceable native-configuration writer boundary. An
-  advisory lock plus before-and-after hashes is not an exclusive-write boundary against an unrelated process, and
-  a quiesced/cooperative-writer deployment must carry that narrower limitation explicitly.
+- The owner has opened a maintenance window and stopped every known writer for the selected native target,
+  including the host. The writers remain stopped until the transaction completes or recovery reaches a durable
+  outcome. Locks coordinate cooperating appliers; they do not exclude unrelated same-user processes, and this
+  deployment makes no stronger claim.
 - Rollback is runnable through the known-good prior interpreter and runtime even when the candidate cannot start.
 - Both the candidate and prior interpreter have canonical closed inventories covering the exact executable, base
   executable, every file under isolated import paths, standard-library and extension-module bytes, shared Python
@@ -121,10 +122,13 @@ source in place, or make a temporary registration exception to get around bootst
    that identity has different bytes. After writing, it reopens and re-hashes the stored object before recording
    it as staged. Existing known-good objects are never replaced.
 
-8. **Activate exactly one target.** Acquire the target lock, resolve and revalidate its canonical path, and compare
-   the current configuration with the approved preimage. On drift or sharing conflict, make no configuration
-   change. Otherwise, journal the prior bytes and rollback dependencies, safely replace the registration, verify
-   the written bytes, and mark only that target `needs-trust`. Do not report the fleet as atomically migrated.
+8. **Activate exactly one target.** Stop every known writer for that target and keep the maintenance window
+   quiesced for the whole transaction. Acquire the target lock, resolve and revalidate its canonical path, and
+   compare the current configuration with the approved preimage. On drift or sharing conflict, make no
+   configuration change. Otherwise, journal the prior bytes and rollback dependencies, safely replace the
+   registration, read it back, and mark only that target `needs-trust`. If drift appears or recovery becomes
+   uncertain, preserve the journal, both configurations, retained runtimes, and conflict evidence for owner
+   reconciliation rather than overwriting the uncertain surface. Do not report the fleet as atomically migrated.
 
 9. **Complete the native trust handoff.** Launch the host through its ordinary entry point with activation variables
    absent. Use the host's own review or enablement surface to inspect and trust the new definition. For Codex, this

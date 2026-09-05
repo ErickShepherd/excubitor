@@ -296,3 +296,23 @@ Append-only observations from vendor-agnostic enforcement iterations.
 - Selecting that boundary changes owner provisioning, privileges, recovery, and the supported-platform claim.
   The plan did not choose those consequences, so this iteration records the fork instead of presenting the current
   advisory lock and hash rechecks as a completed security mechanism.
+
+## 2026-09-05 — Astra-reviewed quiesced maintenance selected
+
+- Astra confirmed the final-read-to-replacement race but falsified the claim that a new operating-system account
+  is logically required. The actual requirement for the stronger claim is an enforceable exclusive mutation
+  interval or a genuine host/filesystem conditional update; a dedicated principal is only one possible mechanism.
+- Protecting a settings file alone would also be incomplete. A strong design must control replaceable parent and
+  ancestor paths, account for existing handles or mappings, preserve protections on replacement files, and remain
+  compatible with hosts that write trust or unrelated preferences into the same configuration.
+- The selected campaign contract is therefore owner-operated quiesced maintenance. All known target writers remain
+  stopped for the complete transaction. Locks coordinate cooperating appliers, and protection against arbitrary
+  same-user processes stays explicitly unsupported.
+- Quiescence does not excuse avoidable correctness gaps. Promotion and rollback must read settings back before
+  deleting the journal. Recovery must recheck each surface immediately before restoring it and must retain the
+  journal plus both byte versions and conflict evidence when state is uncertain instead of blindly overwriting.
+- The race after the last preimage read cannot be represented as mechanically prevented under this contract.
+  Adversarial tests must preserve it as an explicit excluded case while separately proving that detectable
+  post-write and recovery interference stops with recoverable evidence.
+- This decision changes only the reviewed contract. It does not provision a principal, stop a host, approve a
+  packet, invoke an applier, migrate a target, or broaden any native support claim.

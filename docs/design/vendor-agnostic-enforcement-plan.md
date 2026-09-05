@@ -80,10 +80,14 @@ real-host denial probe proves that the host loaded the reviewed hook and honored
 - First deployment is a separate owner-controlled migration bound to an exact reviewed candidate and exact
   registration diff. It never edits or disables the active protected runtime to escape bootstrap, and recovery
   remains runnable through the verified prior artifact and interpreter when a candidate cannot start.
-- Promotion revalidates approved preimages immediately before each configuration mutation, refuses concurrent
-  drift, rejects symlinks and platform redirections including Windows junctions/reparse points, and documents
-  durability limits. Verification covers hostile import shadowing, inherited Python state, path replacement,
-  concurrent installers, interrupted promotion, rollback, sharing violations, spaces, and shell metacharacters.
+- Promotion runs only during an owner-operated maintenance window in which all known writers for the selected
+  native target remain stopped. It revalidates approved preimages immediately before each configuration mutation,
+  verifies written bytes before completion, rejects detected drift, symlinks, and platform redirections including
+  Windows junctions/reparse points, and documents durability limits. Locks coordinate cooperating appliers; they
+  do not exclude unrelated same-user processes. On drift or uncertain recovery state, it preserves the journal,
+  prior and proposed bytes, runtimes, and conflict evidence for owner reconciliation instead of blindly restoring.
+  Verification covers hostile import shadowing, inherited Python state, path replacement, concurrent installers,
+  interrupted promotion, rollback, sharing violations, spaces, and shell metacharacters.
 - Reproducibility establishes byte identity, not trust. Promotion evidence includes policy regressions, safe
   allow and denial checks, and a fresh native activation witness for every claimed target and tool surface.
   A harmless denial proves dispatch only. Host launch shortcuts, aliases, shims, PATH targets, and executables
@@ -157,20 +161,23 @@ their own witnesses exist.
   system loader and system libraries are stated as the host trusted-computing-base boundary. This is candidate-only
   mechanism evidence; independent review, protected storage, authority provisioning, and live migration remain
   separate gates.
-- [ ] DECIDE: Choose the enforceable native-configuration writer boundary for each claimed operating system.
-  The existing kernel lock serializes cooperating promotion processes, and hash rechecks detect many races, but
-  neither makes pathname replacement a compare-and-swap against an unrelated writer. Windows no-share handles
-  exclude conflicting opens while held but also prevent the same atomic replacement operation; POSIX file locks
-  are advisory and remain attached to an inode that another process can replace by pathname. The robust option is
-  an independently protected writer principal with exclusive write authority over the native configuration and a
-  candidate-independent recovery path. The lower-assurance option is a cooperative/quiesced-writer contract with
-  an explicitly narrower claim. This choice changes platform provisioning and the security boundary, so the loop
-  must not select it on its own or describe the present advisory lock as enforcement.
+- [x] DECIDE: Use owner-operated, quiesced maintenance for native-configuration promotion, rollback, and
+  interrupted recovery in this campaign. Every known writer for the selected target, including the native host,
+  must remain stopped for the complete transaction. Locks coordinate cooperating appliers, while immediate
+  rechecks, post-write verification, protected journals, and conflict-preserving recovery provide correctness
+  checks. They do not exclude unrelated same-user processes, and protection against such processes remains
+  unsupported. Enforced exclusion is deferred until a separately reviewed platform design proves control of both
+  content and pathname replacement, handles existing writers, and preserves native host operation. GPT-6 Astra
+  reviewed the fork and the owner selected its recommendation. This decision performs no provisioning or migration.
 - [ ] Implement per-target staged promotion, platform redirection defenses, and candidate-independent interrupted
-  recovery with an enforceable exclusive-write strategy for native configuration. Test Windows junctions,
-  reparse points, path aliases, sharing violations, substitution after the final validation read, concurrent
-  writers during promotion and recovery, rollback through the retained prior runtime, and honest mixed-version
-  status. Do not claim an atomic all-host rollout.
+  recovery under the quiesced-maintenance contract. Add native-settings readback before journal removal; recheck
+  each surface immediately before restoring it; and preserve an explicit attention-required journal, prior and
+  proposed bytes, retained runtimes, and conflict evidence on observed or uncertain recovery conflicts instead of
+  blindly restoring. Test Windows junctions, reparse points, path aliases, sharing violations, interference after
+  replacement, interference between recovery validation and restoration, rollback through the retained prior
+  runtime, and honest mixed-version status. Preserve a regression that demonstrates final-read-to-replacement
+  interference is outside the quiescence prerequisite rather than claiming the cooperating lock prevents it. Do
+  not claim arbitrary-writer exclusion or an atomic all-host rollout.
 - [ ] Derive activation evidence from independently captured native trust, harmless allow, harmless denial, and
   denied-side-effect results for each claimed host tool surface. Do not accept caller-supplied booleans or tool
   names as proof of native activation.
