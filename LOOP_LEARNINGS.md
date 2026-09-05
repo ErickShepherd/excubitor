@@ -316,3 +316,28 @@ Append-only observations from vendor-agnostic enforcement iterations.
   post-write and recovery interference stops with recoverable evidence.
 - This decision changes only the reviewed contract. It does not provision a principal, stop a host, approve a
   packet, invoke an applier, migrate a target, or broaden any native support claim.
+
+## 2026-09-05 — Conflict-preserving staged promotion and recovery
+
+- Digest-only journal allowlists were insufficient recovery evidence. The isolated candidate now retains exact
+  preimages and every generated postimage, validates each digest against those bytes, and records bounded observed
+  bytes or an explicit incomplete observation when recovery cannot establish the current state.
+- Recovery must not validate all surfaces once and then restore them later. It now rechecks each surface directly
+  before restoration, reads the restored bytes back, verifies all recovered preimages once more before journal
+  removal, and refuses automatic retries after any conflict has been recorded so owner-attention evidence cannot
+  disappear merely because a surface later returns to an allowed digest.
+- Promotion and rollback read native settings back immediately after replacement and again before deleting their
+  journal. Interference after replacement becomes an attention-required conflict without overwriting the unknown
+  bytes; unreadable recovery state records the surface, phase, expected digests, and exception type without leaking
+  exception text.
+- Atomic replacement still is not compare-and-swap. A regression deliberately demonstrates that an unrelated
+  writer between the final preimage read and replacement can be overwritten; this is evidence for the maintenance
+  prerequisite, not a passing exclusion witness. Every known target writer must remain stopped for the transaction.
+- Fifty-five combined approval, registry, promotion, and runtime-closure checks passed under Python 3.14, including
+  new post-replacement, between-surface recovery, unreadable-state, rollback-readback, and failed-candidate recovery
+  cases. The implementation remains only in the isolated candidate; no protected applier, registration, trust
+  decision, live host, or migration changed.
+- The wider Windows installer run passed 168 checks and reproduced only the six already recorded baseline defects:
+  four text-mode CRLF-versus-LF expectations and two POSIX-only receipt-path lookups. Both changed files compile
+  under Python 3.11, and their configured 110-character line limit is clean. Ruff remains unavailable in the
+  isolated environment.

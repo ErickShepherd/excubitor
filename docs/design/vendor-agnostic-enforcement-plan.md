@@ -169,7 +169,7 @@ their own witnesses exist.
   unsupported. Enforced exclusion is deferred until a separately reviewed platform design proves control of both
   content and pathname replacement, handles existing writers, and preserves native host operation. GPT-6 Astra
   reviewed the fork and the owner selected its recommendation. This decision performs no provisioning or migration.
-- [ ] Implement per-target staged promotion, platform redirection defenses, and candidate-independent interrupted
+- [x] Implement per-target staged promotion, platform redirection defenses, and candidate-independent interrupted
   recovery under the quiesced-maintenance contract. Add native-settings readback before journal removal; recheck
   each surface immediately before restoring it; and preserve an explicit attention-required journal, prior and
   proposed bytes, retained runtimes, and conflict evidence on observed or uncertain recovery conflicts instead of
@@ -177,7 +177,15 @@ their own witnesses exist.
   replacement, interference between recovery validation and restoration, rollback through the retained prior
   runtime, and honest mixed-version status. Preserve a regression that demonstrates final-read-to-replacement
   interference is outside the quiescence prerequisite rather than claiming the cooperating lock prevents it. Do
-  not claim arbitrary-writer exclusion or an atomic all-host rollout.
+  not claim arbitrary-writer exclusion or an atomic all-host rollout. The isolated candidate now stores exact
+  preimages and postimages in a strict journal, reads settings back after promotion and rollback writes and again
+  before journal removal, validates and reads back each recovery surface around restoration, and makes detected or
+  unreadable recovery state an owner-attention outcome whose journal cannot be automatically cleared. Existing
+  canonical-identity, redirection, sharing-violation, retained-prior-runtime, and mixed-version tests remain green;
+  new adversarial checks preserve both the detectable conflict behavior and the final-read-to-replacement gap as
+  an explicit quiescence violation. This is isolated-candidate mechanism evidence only. The recovery logic does
+  not read or execute a failed candidate artifact, but independently provisioned recovery packaging remains a
+  later prerequisite; no arbitrary-writer exclusion, integration, authority provisioning, or migration is claimed.
 - [ ] Derive activation evidence from independently captured native trust, harmless allow, harmless denial, and
   denied-side-effect results for each claimed host tool surface. Do not accept caller-supplied booleans or tool
   names as proof of native activation.

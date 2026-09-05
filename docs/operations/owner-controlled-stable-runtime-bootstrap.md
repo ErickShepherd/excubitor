@@ -161,9 +161,14 @@ source in place, or make a temporary registration exception to get around bootst
 ## Current repository state
 
 This procedure does not authorize a migration today. The direct isolated zipapp entry is implemented. Registry,
-promotion, and complete Python-owned runtime-closure verification exist only in an isolated candidate and are not
-integrated or trusted. The operating-system loader and system libraries remain an explicit host trust boundary. The
-protected signature verifier, concurrent-writer defenses, independently captured activation evidence, and
-independently provisioned verifier/applier and recovery program remain prerequisites. Until they are implemented
-and reviewed, the current native hook and registration remain unchanged and protected-source work must happen only
-in an isolated candidate checkout.
+promotion, conflict-preserving recovery, and complete Python-owned runtime-closure verification exist only in an
+isolated candidate and are not integrated or trusted. The candidate reads native settings back before completing,
+rechecks every recovery surface immediately around restoration, and keeps exact prior and proposed bytes plus
+observed or uncertain conflict evidence in an attention-required journal that automatic recovery will not clear.
+Recovery does not read or execute the failed candidate artifact, but the separately provisioned recovery program
+has not been packaged. These mechanisms require the owner to keep every known target writer stopped throughout the
+transaction; cooperating locks do not exclude arbitrary same-user processes, and no such exclusion is claimed.
+The operating-system loader and system libraries remain an explicit host trust boundary. The protected signature
+verifier, independently captured activation evidence, and independently provisioned verifier/applier and recovery
+program remain prerequisites. Until they are implemented and reviewed, the current native hook and registration
+remain unchanged and protected-source work must happen only in an isolated candidate checkout.
