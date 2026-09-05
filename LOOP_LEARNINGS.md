@@ -104,3 +104,17 @@ Append-only observations from vendor-agnostic enforcement iterations.
 - The live Codex hook immediately enforced the changed resolver against this worktree and rejected a later
   patch that named the protected package tests. That is useful dogfood evidence that the baseline loaded, but
   it is not a version-bound ordinary-host support witness and does not replace the final external review.
+
+## 2026-09-05 — Stable-runtime bootstrap fork
+
+- Codex currently registers the importable package in place: its command pins the active interpreter and
+  development package parent, while the Codex profile stages and receipts no runtime artifact. Once the
+  baseline became always-on, that correctly made the development package an uneditable protected surface.
+- The deterministic zipapp builder is a strong candidate for the stable runtime because Python can import
+  the adapter from one hashable file and the existing registration machinery already understands a package
+  loaded from `.pyz`. Running the installer from an arbitrary zipapp is not enough, however: the current
+  receipt would own only the registration and could leave that dependency behind or dangling.
+- Choosing the deployed artifact and promotion authority affects user-level host configuration and the
+  enforcement trust boundary. It is therefore not a reversible, repository-internal implementation detail;
+  record it as an open checklist decision rather than letting the loop silently choose or bypass the active
+  self-integrity fence.

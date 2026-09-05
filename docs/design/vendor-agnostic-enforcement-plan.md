@@ -77,6 +77,13 @@ their own witnesses exist.
 - [x] Make the neutral core resolve the conservative baseline as active under an empty environment; remove
   provider variables as baseline or elevated activation authority; keep only explicit deprecated-input
   reporting where compatibility requires it; and add empty-environment policy tests.
+- [ ] DECIDE: Select and authorize the stable deployed enforcement artifact and trusted promotion boundary
+  before further protected-source work. The candidate default is a deterministic, content-addressed `.pyz`
+  under Excubitor's per-user state root, referenced only by native host registrations. Promotion must stage
+  new bytes beside the active version, verify their hash and a harmless denial, atomically replace each exact
+  registration, retain the prior known-good version for rollback, receipt every artifact and dependency, and
+  require an explicit trusted user action. It must not create a shortcut, alias, shim, PATH target, launcher,
+  provider-specific activation variable, or agent-writable authorization token.
 - [ ] Make repository policy monotonic: repository content may add restrictions but cannot disable baseline
   controls, select a tracked opt-out escape, or arm elevated behavior. Add hostile and malformed repository
   policy tests.
