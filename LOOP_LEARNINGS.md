@@ -341,3 +341,20 @@ Append-only observations from vendor-agnostic enforcement iterations.
   four text-mode CRLF-versus-LF expectations and two POSIX-only receipt-path lookups. Both changed files compile
   under Python 3.11, and their configured 110-character line limit is clean. Ruff remains unavailable in the
   isolated environment.
+
+## 2026-09-05 — Activation-evidence authority fork
+
+- Both existing witness writers accept caller-supplied success booleans, host metadata, limitations, and tool
+  names. The checked-in observed Codex fixture has useful sanitized payload shapes, but its observation fields are
+  also asserted booleans; parsing it would only move the same trust problem behind a file boundary.
+- The contract says native trust, tool results, and denied-side-effect state must be captured independently, but it
+  does not select the capturing principal or program, the authoritative raw record for each host, or the freshness
+  and replay mechanism. Those are prerequisites for deriving a verdict rather than restating one.
+- A collector inside the protected verifier/applier minimizes independent provisioning surfaces; a separate
+  protected collector keeps activation evidence decoupled from promotion; host-native audit records offer stronger
+  native provenance where they exist but may force unsupported results for hosts or interfaces without adequate
+  records. All three can satisfy the words of the current item while producing materially different trust and
+  support boundaries.
+- This fork reaches owner-controlled provisioning and external host support, so it is not a reversible internal
+  implementation choice. No witness API, fixture, test, protected state, live host, registration, or trust record
+  changed in this iteration.

@@ -186,6 +186,16 @@ their own witnesses exist.
   an explicit quiescence violation. This is isolated-candidate mechanism evidence only. The recovery logic does
   not read or execute a failed candidate artifact, but independently provisioned recovery packaging remains a
   later prerequisite; no arbitrary-writer exclusion, integration, authority provisioning, or migration is claimed.
+- [ ] DECIDE: Select the authority and capture protocol that can produce non-self-asserted activation evidence.
+  The viable designs are: extend the independently provisioned verifier/applier with a host-specific one-shot
+  collector; provision a separate protected collector that emits an owner-signed closed evidence packet; or accept
+  only independently verifiable host-native audit records and leave interfaces without adequate records
+  unsupported. The selected design must pin who controls and may invoke the collector, the raw trust and tool-event
+  sources accepted for each host, how tool identity and allow/deny outcomes are derived, an operating-system
+  observation of the denied marker, sanitization without changing evidentiary meaning, and target, registration,
+  artifact, host-version, time, freshness, and replay bindings. Caller-authored booleans, tool labels, prose,
+  fixtures, and agent-writable capture state never qualify. This choice changes protected provisioning and the
+  achievable support matrix, so implementation waits for owner selection after independent review.
 - [ ] Derive activation evidence from independently captured native trust, harmless allow, harmless denial, and
   denied-side-effect results for each claimed host tool surface. Do not accept caller-supplied booleans or tool
   names as proof of native activation.
