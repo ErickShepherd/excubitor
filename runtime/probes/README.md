@@ -271,6 +271,14 @@ trust does not carry across a move to another drive. All raw evidence remains in
 
 ## Native process-job access and task persistence
 
+The normal-start proposal component is separate from these fixed-fixture probes. An admitted host can
+construct `JobPlanner` from reusable `LaunchDefaults`, named `CheckRunner` commands, and a required host
+admission callback, then pass it as `drafts` to `RalphAction`. Start advertises a `job` object and freezes
+its input/output checks through the same native form. Existing jobs reconnect with empty arguments.
+The old probes do not automatically enable that path or admit arbitrary projects. The candidate skill
+is stored in `runtime/skills/ralph`, outside automatic discovery; it has not been installed in a host.
+See the protected lifecycle design for its component boundaries and remaining native integration.
+
 `named_job_access.py --codex ABSOLUTE_CODEX --python ABSOLUTE_PYTHON --output NEW_FOLDER`
 tests the unelevated Windows sandbox without model work. The host creates one exact private job and
 an external acceptance file. The native child writes an ordinary project file, attempts to change

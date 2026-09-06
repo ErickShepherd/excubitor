@@ -218,6 +218,16 @@ during a model turn, and app-closed continuation were not tested. The everyday n
 tool admission, GUI surfaces, other vendors, and representative workflow comparisons remain open.
 No replacement registration, saved tool allowance, hook, merge, push, or promotion occurred.
 
+The next candidate replaces fixed test-plan input with agent-proposed jobs through the shared native
+Start action. A host-supplied planner resolves advertised verification runners, reuses configured
+limits, and requires an independent host admission check before the single native confirmation.
+Draft fields cannot grant permission or replace native scope; an existing job reconnects without
+draft arguments and retains its original budget. Status now exposes exact-task progress and recorded
+completion without keeping the task active. The explicit `ralph` skill candidate uses these tools;
+it refuses a manual-loop fallback if they are unavailable. Its source is retained outside automatic
+skill discovery. This advances preparation and presentation; the skill, general project executor,
+and scoped native connection have not been installed or live-verified together.
+
 ## Remediation checklist
 
 - [x] Record the owner-agreed Ralph-only product scope and default completion behavior; remove the
@@ -248,6 +258,10 @@ No replacement registration, saved tool allowance, hook, merge, push, or promoti
   resumption, one original confirmation, unchanged limits/checks, automatic repair, independent review,
   complete process drainage, and ordinary-task exclusion. The test driver reopens the task; automatic
   reopening, mid-worker crashes, production admission, and other native surfaces remain open.
+- [x] Implement the normal-start proposal and confirmation path, reusable host defaults, exact-task
+  result history, and explicit command skill candidate. Verify draft mutation, authority injection,
+  admission refusal, replay, cancellation, and unchanged recovery limits in component tests. Native
+  command discovery, general project execution, and scoped installation remain open.
 - [ ] Compare workflow variants on representative tasks with fixed acceptance checks, permissions,
   model versions, and budgets. Record all attempts, failures, interventions, setup effort, quality, and
   resource use. Keep safety protections fixed and select the simplest adequately performing defaults.

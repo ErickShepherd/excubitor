@@ -748,3 +748,28 @@ Append-only observations from vendor-agnostic enforcement iterations.
   the retained candidate still matched after ordinary-file cleanup. No settings restoration or extra
   native run followed the difference. Two model-task rollouts were archived; the trust-only task had
   no matching saved rollout in the dated directory, so its captured native UI remains the evidence.
+
+### Normal-start proposal and command candidate, 2026-09-06
+
+- The verified Start protocol still depended on a fixed host-built test plan. A new optional planner
+  accepts proposed work units and input/output cases, resolves only host-admitted named runners, and
+  reuses host defaults for omitted limits. Its required admission callback preserves the host checks
+  previously performed by fixed-plan callbacks. Neither proposal conversion nor tool discovery starts
+  work. The existing native confirmation remains the only activation path in this component.
+- Caller edits after preview cannot alter the pending agreement. Replacing a pending preview is
+  refused. Active jobs reject replacement proposals and reconnect with empty arguments; changes to
+  defaults cannot reset their original attempts, deadline, or checks. The caller cannot specify native
+  scope, executables, environment, authority storage, approval, or additional completion powers.
+- Exact-task status can now report recorded completion or cancellation without reactivation. Database
+  insertion order selects the last accepted job; revision counts, UUID order, and wall-clock guesses
+  do not establish that ordering. A completed record describes its retained snapshot, not later edits.
+- The new explicit command skill is a candidate outside normal discovery, with Codex implicit
+  invocation disabled. It uses the native tools, requires the actual native form, and has no manual
+  loop or installation fallback. Ordinary development and discussion of Ralph remain outside its scope.
+- Component tests use fixture transport and host facts. They do not supply native discovery or
+  production admission evidence. Input/output verifiers are the first supported proposal format;
+  running worker-editable tests and freezing only their command would not freeze acceptance criteria.
+  The existing fixed-plan probe protocol and installed skills remain unchanged.
+- Final focused verification passed 124 tests and nine subtests, including the prior native-action,
+  approval, lifecycle, supervisor, and connection-process regressions. No native app was launched for
+  this change; the fixture transport tests do not broaden the previously observed native support.

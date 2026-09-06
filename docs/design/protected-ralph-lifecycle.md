@@ -8,6 +8,47 @@ units and a repair without owner restarts. There is no production launcher, regi
 active hook integration. Complete native admission and crash reconciliation remain required. The old
 always-active adapter remains unsuitable for reinstallation.
 
+The normal-start candidate now accepts a job proposal through `RalphAction` when its host supplies
+`JobPlanner`. The proposal contains work and input/output checks; native metadata still supplies the
+task and project. Reusable host defaults supply omitted limits, and a required host admission callback
+checks the complete proposal before any confirmation. The callback is trusted code supplied by the
+adapter, never a tool argument. Existing fixed-plan adapters keep their original protocol.
+
+The candidate skill at `runtime/skills/ralph` describes the explicit command workflow. It is not in an
+auto-discovered skill location and has not been installed. The Codex invocation policy is explicit-only.
+The shared proposal path is component-tested; a production backend, project-scoped connection, native
+command discovery, and general-purpose verifier admission still need integration and native evidence.
+
+## Preparing a normal job
+
+The coding agent proposes the goal, units, and concrete input/output cases from the owner's request.
+It selects verification runners by their advertised names. The host owns their actual commands,
+execution policy, time ceilings, and reusable defaults. A proposal cannot supply an executable,
+environment, storage location, native identity, approval, or extra completion powers. A registered
+runner must exercise candidate behavior rather than accept a worker-written verdict or mutable tests
+as the oracle. Freezing a command that merely runs editable tests would not freeze the tests themselves.
+
+`ralph_start` receives the proposal as `job` and presents the existing native confirmation. Nothing
+executes and no active record or oracle file is written before acceptance. Later edits to the submitted
+data cannot alter the preview's immutable contract and checks. A pending preview cannot be replaced;
+decline, transport cancellation, expiry, or connection closure starts nothing. Work is retained on an
+isolated branch by default; automatic merge, publishing, and deployment remain unavailable.
+
+With an active job, `ralph_start` takes no arguments and follows the existing reconnect path. A new
+proposal in that task is rejected rather than resetting scope, attempts, or deadline. Changed host
+defaults are considered only for a new proposal, never for recovery. The schema's structural ceilings
+are implementation bounds, not claims about empirically optimal loop size or budgets.
+
+In proposal mode, status includes unit and attempt progress. After completion it reads the last
+accepted job's recorded result for that exact task. It distinguishes completed work from cancellation
+and from a task that never started Ralph. This history does not reactivate protection or certify later
+ordinary edits. Old fixed-plan adapter status text remains unchanged.
+
+Codex documents [explicit skill invocation](https://learn.chatgpt.com/docs/build-skills) and
+[project-scoped MCP configuration](https://learn.chatgpt.com/docs/extend/mcp). These support the chosen
+entry-point design; they do not certify this candidate on a native surface. No global dispatcher,
+launch wrapper, or environment-variable activation ceremony is introduced.
+
 ## Implemented behavior
 
 Provisioning an empty store does not start Ralph. An authenticated host start records the exact native

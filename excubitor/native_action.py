@@ -1,18 +1,21 @@
 """Ralph start/status protocol for an admitted native MCP connection.
 
 The native adapter supplies authenticated metadata, a trusted planner and a
-nonblocking host launcher. No tool argument grants approval or selects executable
+nonblocking host launcher. An optional planner accepts untrusted job proposals for
+native confirmation. No tool argument grants approval or selects host executable
 code, storage, run identity, recovery evidence, or completion authority.
 Installing this Python module does not register a tool in any app.
 """
 
 from __future__ import annotations
 
+import json
 import uuid
 from typing import Callable
 
 from excubitor.acceptance import OutputOracle
 from excubitor.approval import StartHandshake
+from excubitor.job_setup import JobPlanner
 from excubitor.runs import Binding, Contract, Run, RunError, RunStore
 
 
@@ -26,11 +29,13 @@ class RalphAction:
         launch: Callable[[Run], None],
         reconnect: Callable[[Run], None] | None = None,
         is_attached: Callable[[Run], bool] | None = None,
+        drafts: JobPlanner | None = None,
     ):
         self.gate, self.emit = StartHandshake(store), emit
         self.binding, self.plan, self.launch = binding, plan, launch
         self.reconnect = reconnect
         self.is_attached = is_attached
+        self.drafts = drafts
         self.attached = set()
         self.pending = {}
         self.form_supported = False
@@ -46,6 +51,29 @@ class RalphAction:
                 },
             }
         )
+
+    def status(self, binding: Binding) -> str:
+        active = self.gate.store.lookup(binding)
+        if self.drafts is None:
+            return f"Ralph is {active.state}." if active else "No active Ralph job in this task."
+        if active is not None:
+            return (
+                f"Ralph is {active.state}: {active.completed_units} of {len(active.contract.units)} units; "
+                f"{active.attempts} of {active.contract.max_attempts} attempts used."
+            )
+        previous = self.gate.store.latest(binding)
+        text = "No active Ralph job in this task."
+        if previous is not None and previous.state == "complete":
+            text += (
+                f" Last job completed: {json.dumps(previous.contract.goal)}. "
+                f"{previous.completed_units} units; {previous.attempts} of "
+                f"{previous.contract.max_attempts} attempts used. All original checks and independent "
+                "review passed; verified work was retained on an isolated committed branch. "
+                "This is the recorded completion result, not a check of later ordinary edits."
+            )
+        elif previous is not None and previous.state == "cancelled":
+            text += " The last job was cancelled; no completion is claimed."
+        return text
 
     def receive(self, message: dict) -> None:
         method, request_id = message.get("method"), message.get("id")
@@ -76,7 +104,9 @@ class RalphAction:
                                 "description": description,
                                 "inputSchema": {
                                     "type": "object",
-                                    "properties": {},
+                                    "properties": {"job": self.drafts.schema}
+                                    if name == "ralph_start" and self.drafts is not None
+                                    else {},
                                     "additionalProperties": False,
                                 },
                                 "annotations": {
@@ -88,7 +118,14 @@ class RalphAction:
                                 (
                                     "ralph_start",
                                     "Confirm a new Ralph job or reconnect this task's existing job "
-                                    "within its original limits. Ordinary development needs no Ralph action.",
+                                    "within its original limits. Ordinary development needs no Ralph action."
+                                    + (
+                                        " For a new job, propose goal, units, and checks in job; "
+                                        "omit limits to reuse host defaults. Only native owner confirmation "
+                                        "starts work. To reconnect, call with no arguments."
+                                        if self.drafts is not None
+                                        else ""
+                                    ),
                                 ),
                                 (
                                     "ralph_status",
@@ -104,20 +141,27 @@ class RalphAction:
                 if self.gate.closed:
                     raise RunError("this native connection is closed")
                 params = message.get("params", {})
-                if params.get("arguments", {}) != {}:
-                    raise RunError("Ralph actions accept no approval or authority arguments")
+                if not isinstance(params, dict):
+                    raise RunError("Ralph action parameters must be an object")
                 name = params.get("name")
                 if name not in ("ralph_start", "ralph_status"):
                     raise RunError("unknown Ralph action")
+                arguments = params.get("arguments", {})
+                if not isinstance(arguments, dict) or (
+                    arguments and (name != "ralph_start" or self.drafts is None or set(arguments) != {"job"})
+                ):
+                    raise RunError("Ralph actions accept only job proposals, never approval or authority")
                 binding = self.binding(params.get("_meta", {}))
                 if name == "ralph_status":
-                    run = self.gate.store.lookup(binding)
-                    self.reply(
-                        request_id, f"Ralph is {run.state}." if run else "No active Ralph job in this task."
-                    )
+                    self.reply(request_id, self.status(binding))
                 else:
                     existing = self.gate.store.lookup(binding)
                     if existing is not None:
+                        if arguments:
+                            raise RunError(
+                                "this task already has an agreed job; reconnect with no arguments "
+                                "to preserve its original scope and limits"
+                            )
                         attached = (
                             self.is_attached(existing)
                             if self.is_attached is not None
@@ -146,7 +190,16 @@ class RalphAction:
                         return
                     if not self.form_supported:
                         raise RunError("this native connection does not provide owner form confirmation")
-                    contract, oracles = self.plan(binding)
+                    if self.pending:
+                        raise RunError("finish or cancel the pending native confirmation first")
+                    if self.drafts is not None:
+                        if not arguments:
+                            raise RunError(
+                                "propose the new job's goal, units, and checks through Ralph Start"
+                            )
+                        contract, oracles = self.drafts(binding, arguments["job"])
+                    else:
+                        contract, oracles = self.plan(binding)
                     confirmation = self.gate.prepare(binding, contract, oracles)
                     token = "ralph-confirm-" + uuid.uuid4().hex
                     self.pending[token] = (request_id, confirmation.id)

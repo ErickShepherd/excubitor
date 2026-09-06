@@ -351,6 +351,19 @@ class RunStore:
                 raise RunError("unknown run")
             return self._read(row)
 
+    def latest(self, binding: Binding) -> Run | None:
+        """Read the last accepted job in this exact task, including terminal history.
+
+        Insertion order is database-owned; revisions, clocks, and UUID ordering
+        do not tell which of several successive jobs was accepted last.
+        Historical completion is not permission to start or reactivate a job.
+        """
+        with self._connect() as db:
+            row = db.execute(
+                "SELECT * FROM runs WHERE binding = ? ORDER BY rowid DESC LIMIT 1", (binding.key,)
+            ).fetchone()
+            return self._read(row) if row is not None else None
+
     def _change(self, run: Run, operation: Callable[[dict, Run], str], *, working: bool = False) -> Run:
         expired = False
         with self._connect() as db:
