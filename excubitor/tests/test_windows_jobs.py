@@ -61,8 +61,8 @@ def test_suspended_root_is_already_owned_before_python_can_observe_it(tmp_path):
     original = processes.create_process_in_job
     observed = []
 
-    def create(argv, cwd, env, handles, job):
-        result = original(argv, cwd, env, handles, job)
+    def create(argv, cwd, env, handles, job, **kwargs):
+        result = original(argv, cwd, env, handles, job, **kwargs)
         inside = w.BOOL()
         assert kernel.IsProcessInJob(result[0], job, c.byref(inside)) and inside.value
         observed.append(result[2])
@@ -85,8 +85,8 @@ from pathlib import Path
 sys.path.insert(0,{ROOT!r})
 import excubitor.processes as processes
 original=processes.create_process_in_job
-def create(*args):
-    result=original(*args)
+def create(*args, **kwargs):
+    result=original(*args, **kwargs)
     Path({str(marker)!r}).write_text(str(result[2]))
     time.sleep(.3)
     os._exit(77)

@@ -13,9 +13,26 @@ import os
 import re
 import subprocess
 import time
+import uuid
 from ctypes import wintypes as w
 
 from excubitor.runs import RunError
+
+
+def require_background_session():
+    """User32-compatible workers require the OS noninteractive session boundary.
+
+    A private desktop alone is insufficient: LPAC can reopen the visible desktop
+    in the same session. Do not dispatch model-controlled native programs there.
+    """
+    kernel, _ = api()
+    kernel.GetCurrentProcessId.restype = w.DWORD
+    kernel.ProcessIdToSessionId.argtypes = [w.DWORD, c.c_void_p]
+    kernel.ProcessIdToSessionId.restype = w.BOOL
+    session = w.DWORD()
+    require(kernel.ProcessIdToSessionId(kernel.GetCurrentProcessId(), c.byref(session)))
+    if session.value != 0:
+        raise RunError("Windows sandbox requires an admitted background worker in session 0")
 
 
 class SecurityAttributes(c.Structure):
@@ -263,18 +280,33 @@ def recover_job(name):
         kernel.CloseHandle(handle)
 
 
-def create_process_in_job(argv, cwd, env, child_handles, job):
+def create_process_in_job(
+    argv, cwd, env, child_handles, job, *, appcontainer_sid=None, release_resources=None
+):
     """Windows creates the suspended process ALREADY assigned to its job.
 
     PROC_THREAD_ATTRIBUTE_JOB_LIST closes the create-then-assign crash window.
     Only the three explicitly selected standard handles are inherited.
     """
-    kernel, _ = api()
+    kernel, security = api()
+    if appcontainer_sid is not None and not isinstance(release_resources, list):
+        raise RunError("sandbox desktop lifetime must be owned by the process controller")
+    if appcontainer_sid is not None:
+        require_background_session()
+    sid = c.c_void_p()
+    capability_sids, group_sids = c.c_void_p(), c.c_void_p()
+    capability_count, group_count = w.DWORD(), w.DWORD()
+    desktop, desktop_api = None, None
     size = c.c_size_t()
-    kernel.InitializeProcThreadAttributeList(None, 2, 0, c.byref(size))
+    count = 2 if appcontainer_sid is None else 5
+    kernel.InitializeProcThreadAttributeList(None, count, 0, c.byref(size))
     attributes = c.create_string_buffer(size.value)
-    require(kernel.InitializeProcThreadAttributeList(attributes, 2, 0, c.byref(size)))
+    require(kernel.InitializeProcThreadAttributeList(attributes, count, 0, c.byref(size)))
     try:
+        if appcontainer_sid is not None:
+            security.ConvertStringSidToSidW.argtypes = [w.LPCWSTR, c.c_void_p]
+            security.ConvertStringSidToSidW.restype = w.BOOL
+            require(security.ConvertStringSidToSidW(appcontainer_sid, c.byref(sid)))
         inherited = (w.HANDLE * len(child_handles))(*child_handles)
         jobs = (w.HANDLE * 1)(job)
         require(
@@ -283,10 +315,102 @@ def create_process_in_job(argv, cwd, env, child_handles, job):
             )
         )
         require(kernel.UpdateProcThreadAttribute(attributes, 0, 0x2000D, jobs, c.sizeof(jobs), None, None))
+        if sid:
+
+            class Capabilities(c.Structure):
+                _fields_ = [
+                    ("sid", c.c_void_p),
+                    ("capabilities", c.c_void_p),
+                    ("count", w.DWORD),
+                    ("reserved", w.DWORD),
+                ]
+
+            capability_api = c.WinDLL("kernelbase", use_last_error=True)
+            capability_api.DeriveCapabilitySidsFromName.argtypes = [w.LPCWSTR] + [c.c_void_p] * 4
+            capability_api.DeriveCapabilitySidsFromName.restype = w.BOOL
+            require(
+                capability_api.DeriveCapabilitySidsFromName(
+                    "registryRead",
+                    c.byref(group_sids),
+                    c.byref(group_count),
+                    c.byref(capability_sids),
+                    c.byref(capability_count),
+                )
+            )
+            if capability_count.value != 1:
+                raise RunError("unexpected Windows registry capability derivation")
+
+            class SidAttributes(c.Structure):
+                _fields_ = [("sid", c.c_void_p), ("attributes", w.DWORD)]
+
+            capability = SidAttributes(c.cast(capability_sids, c.POINTER(c.c_void_p))[0], 4)
+            capabilities = Capabilities(sid, c.cast(c.byref(capability), c.c_void_p), 1, 0)
+            # LPAC excludes the broad ALL APPLICATION PACKAGES grant. No network capabilities.
+            package_policy = w.DWORD(1)
+            # Native Python's ctypes needs User32 initialization. Session 0 is required above;
+            # the private desktop and job UI limits alone did not isolate the visible desktop.
+            mitigation = c.c_ulonglong(1 << 32)  # Disable legacy extension-point injection.
+            for key, value in ((0x20009, capabilities), (0x2000F, package_policy), (0x20007, mitigation)):
+                require(
+                    kernel.UpdateProcThreadAttribute(
+                        attributes, 0, key, c.byref(value), c.sizeof(value), None, None
+                    )
+                )
         startup = StartupInfoEx()
         startup.startup.cb = c.sizeof(startup)
         startup.startup.flags = 0x100
         startup.startup.stdin, startup.startup.stdout, startup.startup.stderr = child_handles
+        if sid:
+            from excubitor.windows_sandbox import _owner_sid
+
+            desktop_api = c.WinDLL("user32", use_last_error=True)
+            desktop_api.CreateDesktopW.argtypes = [
+                w.LPCWSTR,
+                c.c_void_p,
+                c.c_void_p,
+                w.DWORD,
+                w.DWORD,
+                c.c_void_p,
+            ]
+            desktop_api.CreateDesktopW.restype = w.HANDLE
+            desktop_api.CloseDesktop.argtypes, desktop_api.CloseDesktop.restype = [w.HANDLE], w.BOOL
+            desktop_api.GetProcessWindowStation.argtypes = []
+            desktop_api.GetProcessWindowStation.restype = w.HANDLE
+            desktop_api.GetUserObjectInformationW.argtypes = [
+                w.HANDLE,
+                c.c_int,
+                c.c_void_p,
+                w.DWORD,
+                c.c_void_p,
+            ]
+            desktop_api.GetUserObjectInformationW.restype = w.BOOL
+            station_name = c.create_unicode_buffer(256)
+            station_size = w.DWORD()
+            require(
+                desktop_api.GetUserObjectInformationW(
+                    desktop_api.GetProcessWindowStation(),
+                    2,
+                    station_name,
+                    c.sizeof(station_name),
+                    c.byref(station_size),
+                )
+            )
+            desktop_name = "Excubitor.Worker." + uuid.uuid4().hex
+            sd = c.c_void_p()
+            sddl = (
+                f"D:P(A;;GA;;;SY)(A;;GA;;;{_owner_sid()})(A;;RC;;;OW)"
+                f"(A;;0x200c7;;;{appcontainer_sid})S:(ML;;NW;;;LW)"
+            )
+            require(security.ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl, 1, c.byref(sd), None))
+            try:
+                desktop_attributes = SecurityAttributes(c.sizeof(SecurityAttributes), sd, False)
+                desktop = desktop_api.CreateDesktopW(
+                    desktop_name, None, None, 0, 0x1F01FF, c.byref(desktop_attributes)
+                )
+                require(desktop)
+            finally:
+                kernel.LocalFree(sd)
+            startup.startup.desktop = station_name.value + "\\" + desktop_name
         startup.attributes = c.cast(attributes, c.c_void_p)
         command = c.create_unicode_buffer(subprocess.list2cmdline(argv))
         environment = (
@@ -314,6 +438,20 @@ def create_process_in_job(argv, cwd, env, child_handles, job):
                 c.byref(result),
             )
         )
+        if desktop:
+            # User32 connects lazily, possibly long after the process starts. Retain the
+            # host reference until the entire job drains, not merely until CreateProcess returns.
+            release_resources.append(lambda handle=desktop: require(desktop_api.CloseDesktop(handle)))
+            desktop = None
         return result.process, result.thread, result.pid
     finally:
         kernel.DeleteProcThreadAttributeList(attributes)
+        if desktop:
+            desktop_api.CloseDesktop(desktop)
+        if sid:
+            kernel.LocalFree(sid)
+        for array, count in ((capability_sids, capability_count), (group_sids, group_count)):
+            if array:
+                for index in range(count.value):
+                    kernel.LocalFree(c.cast(array, c.POINTER(c.c_void_p))[index])
+                kernel.LocalFree(array)

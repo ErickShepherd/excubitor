@@ -51,6 +51,9 @@ class WindowsProcessTree:
         terminate_on_root_exit: bool = False,
         env: dict[str, str] | None = None,
         job_name: str | None = None,
+        appcontainer_sid: str | None = None,
+        memory_bytes: int | None = None,
+        process_limit: int = 64,
     ) -> ProcessResult:
         if os.name != "nt":
             raise RunError("process-tree backend currently requires CPython on Windows")
@@ -65,6 +68,10 @@ class WindowsProcessTree:
             or not isinstance(stdin, bytes)
             or len(stdin) > 1024 * 1024
             or type(terminate_on_root_exit) is not bool
+            or type(process_limit) is not int
+            or not 1 <= process_limit <= 64
+            or memory_bytes is not None
+            and (type(memory_bytes) is not int or not 16 * 1024 * 1024 <= memory_bytes <= 4 * 1024**3)
             or env is not None
             and (
                 not isinstance(env, dict)
@@ -83,12 +90,43 @@ class WindowsProcessTree:
             return ProcessResult(Execution(None, b"", b"", 0), True, True, 0)
         if job_name is not None:
             valid_name(job_name)
+        if appcontainer_sid is not None:
+            import re
+
+            if not isinstance(appcontainer_sid, str) or not re.fullmatch(
+                r"S-1-15-2(?:-[0-9]+){7}", appcontainer_sid
+            ):
+                raise ValueError("invalid AppContainer SID")
         return _windows_run(
-            argv, cwd, stdin, timeout, output_limit, cancelled, terminate_on_root_exit, env, job_name
+            argv,
+            cwd,
+            stdin,
+            timeout,
+            output_limit,
+            cancelled,
+            terminate_on_root_exit,
+            env,
+            job_name,
+            appcontainer_sid,
+            memory_bytes,
+            process_limit,
         )
 
 
-def _windows_run(argv, cwd, stdin, timeout, output_limit, cancelled, terminate_on_root_exit, env, job_name):
+def _windows_run(
+    argv,
+    cwd,
+    stdin,
+    timeout,
+    output_limit,
+    cancelled,
+    terminate_on_root_exit,
+    env,
+    job_name,
+    appcontainer_sid,
+    memory_bytes,
+    process_limit,
+):
     import _winapi
     import ctypes as c
     import msvcrt
@@ -145,7 +183,7 @@ def _windows_run(argv, cwd, stdin, timeout, output_limit, cancelled, terminate_o
             raise c.WinError(c.get_last_error())
 
     job = create_job(job_name)
-    handles, descriptors, threads = [], set(), []
+    handles, descriptors, threads, release_resources = [], set(), [], []
     process = None
     started = time.monotonic()
     limited = threading.Event()
@@ -203,8 +241,14 @@ def _windows_run(argv, cwd, stdin, timeout, output_limit, cancelled, terminate_o
     try:
         limits = Limits()
         limits.basic.flags = 0x2000 | 0x8  # KILL_ON_JOB_CLOSE + ACTIVE_PROCESS; no breakaway flags.
-        limits.basic.active_limit = 64
+        limits.basic.active_limit = process_limit
+        if memory_bytes is not None:
+            limits.basic.flags |= 0x200  # JOB_OBJECT_LIMIT_JOB_MEMORY: aggregate committed bytes.
+            limits.job_memory = memory_bytes
         require(kernel.SetInformationJobObject(job, 9, c.byref(limits), c.sizeof(limits)))
+        if appcontainer_sid is not None:
+            ui_limits = w.DWORD(0xFF)
+            require(kernel.SetInformationJobObject(job, 4, c.byref(ui_limits), c.sizeof(ui_limits)))
         input_read, input_write = pipe()
         output_read, output_write = pipe()
         error_read, error_write = pipe()
@@ -212,7 +256,15 @@ def _windows_run(argv, cwd, stdin, timeout, output_limit, cancelled, terminate_o
         child_handles = [msvcrt.get_osfhandle(fd) for fd in child_fds]
         for handle in child_handles:
             os.set_handle_inheritable(handle, True)
-        process, primary_thread, _ = create_process_in_job(argv, cwd, env, child_handles, job)
+        process, primary_thread, _ = create_process_in_job(
+            argv,
+            cwd,
+            env,
+            child_handles,
+            job,
+            appcontainer_sid=appcontainer_sid,
+            release_resources=release_resources,
+        )
         handles.extend((process, primary_thread))
         for fd in child_fds:
             close_fd(fd)
@@ -270,3 +322,5 @@ def _windows_run(argv, cwd, stdin, timeout, output_limit, cancelled, terminate_o
             close_fd(fd)
         for handle in handles:
             _winapi.CloseHandle(handle)
+        for release in release_resources:
+            release()

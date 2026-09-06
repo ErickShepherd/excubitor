@@ -1,5 +1,11 @@
 # Ralph-only native enforcement remediation
 
+Current development evidence: the owner-approved native-development-v1 baseline now completes a
+real Claude code fix, bounded Windows execution, frozen checks and fresh review without intermediate
+owner input. It is consolidated in this worktree. See [the development-loop implementation](native-development-loop.md)
+for its measured scope. This does not promote installed runtime support or credential isolation; the
+older strict-isolation findings below remain historical evidence.
+
 Status: product behavior agreed on 2026-09-05; broad Codex registration removed and ordinary-work
 checks passed on 2026-09-05. Ralph-only runtime correction remains pending.
 
@@ -14,6 +20,12 @@ ordinary development. Recording this correction does not change the running impl
 
 ## Agreed user experience
 
+- Native Windows and Linux are both required implementation targets. Windows must run entirely
+  natively, without WSL, a Linux worker, or a virtual machine. The earlier Linux-worker choice was
+  superseded by the owner's explicit request for both platforms. Preserve the tested Linux backend;
+  WSL may host Linux development tests but is not a dependency of Windows operation. Share the run
+  contract, budgets, verification and completion behavior while implementing OS-specific isolation.
+  Existing native vendor authentication must remain usable without another login or credential copying.
 - Start Ralph from the existing coding app window using a consistent Ralph command or action, or
   from the host CLI. Codex, Claude Code, and Antigravity are requested integrations; Cursor is a
   prospective extension. Use native entry points with shared behavior, not a separate control panel.
@@ -336,6 +348,11 @@ fallback or live registration in this adapter. Authenticated native testing rema
 
 ## Remediation checklist
 
+The current platform requirement is full native Windows plus Linux support. The Ubuntu work below
+records Linux component evidence, not the required Windows architecture. Native Windows filesystem,
+network, process and resource boundaries, authenticated vendor execution, and in-app/CLI integration
+still require implementation and direct verification; Linux authentication and integration remain open.
+
 The owner subsequently directed use of the existing Ubuntu WSL distribution. It is separate from the
 recovery distribution and boots successfully. This replaces the separate QEMU launch for the current
 Claude path; the earlier 5 GiB free-memory threshold was a provisional QEMU budget, not an established
@@ -376,6 +393,28 @@ Separate native controller-death, deadline-expiry and unsafe-service-refusal che
 outside-sandbox interop failures remain recorded; no global registration or settings were changed.
 Authentication and provider networking are deliberately unavailable in this component, so this does
 not establish native Claude job completion. See [the executor boundary](linux-worker-executor.md).
+
+The maintained Windows command API was then tested as a possible shared executor.
+It enforced explicit private-directory denial and bounded a different-user process
+tree, but could read a synthetic credential file with the real login file's access
+rules. After Fable review, one bounded attempt combined that existing account with
+the existing LPAC identity. Windows refused child creation before Python ran. The
+experiment stopped, its process tree drained, and its D: fixture grants were revoked.
+Neither result admits a Windows executor; no new account, registration or scheduler
+was introduced. The [maintained executor assessment](maintained-windows-executor-assessment.md)
+records the distinction between launch failure and untested security behavior.
+
+A tools-disabled native Claude controller rehearsal then completed two text-only
+units, fixed host checks and a fresh structured review after one start. It reused
+the existing supervisor, store, project backend and native framing checks. The host
+saved returned text at two fixed paths and retained real isolated Git checkpoints;
+Claude's writers exposed no tools and its reviewer exposed only StructuredOutput.
+Reopened state preserved progress, the original deadline and attempt budget. All
+native process trees drained, and calling the completed run started nothing. The
+62 existing controller and Claude protocol tests passed. This establishes the tested
+native coordination flow; it does not admit project-code execution or in-app launching.
+The sample reviewer missed wording that incorrectly required human review and implied
+a manual, single-unit workflow, so those cards remain diagnostic data, not product copy.
 
 - [x] Record the owner-agreed Ralph-only product scope and default completion behavior; remove the
   repository instruction that routes ordinary roadmap work through Ralph. This is a documentation change.

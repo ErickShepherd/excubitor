@@ -987,3 +987,9 @@ Append-only observations from vendor-agnostic enforcement iterations.
   All new artifacts and test dependencies stayed on D:. Authentication, provider-only access,
   production transport/admission and complete Claude model execution remain open. No existing
   credentials were copied, refreshed or changed.
+
+## 2026-09-06: explicit native development baseline
+
+The owner chose a smaller ordinary-development loop rather than further hostile-code sandbox work. In an isolated candidate, structured Claude edits plus the maintained Windows command API completed a real median fix, a model-requested test, the frozen host check, fresh review and a clean retained fixture branch after one start. Both native calls identified Fable 5.1; no intermediate owner input was needed. This is bounded CLI evidence, not production registration or credential isolation.
+
+Two practical findings: Windows command/exec rejects custom output caps, and extending the workspace profile while adding a read rule does not make verification read-only. Extending the read-only profile corrected that mistake and a native write-denial witness passed. Separate checks confirmed outside-write denial and cancellation of Python plus its detached child while an ordinary command still worked. Preserve the failed preflights as well as the passing evidence. The new development baseline is explicit; strict runtime admission was not weakened.
