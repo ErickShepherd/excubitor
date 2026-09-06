@@ -44,6 +44,8 @@ class WindowsProcessTree:
         timeout: float = 60,
         output_limit: int = 1024 * 1024,
         cancelled: threading.Event | None = None,
+        terminate_on_root_exit: bool = False,
+        env: dict[str, str] | None = None,
     ) -> ProcessResult:
         if os.name != "nt":
             raise RunError("process-tree backend currently requires CPython on Windows")
@@ -57,14 +59,27 @@ class WindowsProcessTree:
             or not 0 < output_limit <= 16 * 1024 * 1024
             or not isinstance(stdin, bytes)
             or len(stdin) > 1024 * 1024
+            or type(terminate_on_root_exit) is not bool
+            or env is not None
+            and (
+                not isinstance(env, dict)
+                or any(
+                    not isinstance(key, str)
+                    or not isinstance(value, str)
+                    or not key
+                    or "\x00" in key
+                    or "\x00" in value
+                    for key, value in env.items()
+                )
+            )
         ):
             raise ValueError("invalid bounded process request")
         if cancelled is not None and cancelled.is_set():
             return ProcessResult(Execution(None, b"", b"", 0), True, True, 0)
-        return _windows_run(argv, cwd, stdin, timeout, output_limit, cancelled)
+        return _windows_run(argv, cwd, stdin, timeout, output_limit, cancelled, terminate_on_root_exit, env)
 
 
-def _windows_run(argv, cwd, stdin, timeout, output_limit, cancelled):
+def _windows_run(argv, cwd, stdin, timeout, output_limit, cancelled, terminate_on_root_exit, env):
     import _winapi
     import ctypes as c
     import msvcrt
@@ -202,7 +217,7 @@ def _windows_run(argv, cwd, stdin, timeout, output_limit, cancelled):
             None,
             True,
             0x4 | 0x08000000,
-            None,
+            env,
             str(cwd),
             startup,  # suspended + no visible window
         )
@@ -225,7 +240,8 @@ def _windows_run(argv, cwd, stdin, timeout, output_limit, cancelled):
             timed_out = time.monotonic() - started >= timeout
             if state.active == 0:
                 break
-            if was_cancelled or timed_out or limited.is_set() or io_errors:
+            root_exited = terminate_on_root_exit and _winapi.WaitForSingleObject(process, 0) == 0
+            if was_cancelled or timed_out or limited.is_set() or io_errors or root_exited:
                 require(kernel.TerminateJobObject(job, 1))
                 drain_deadline = time.monotonic() + 5
                 while accounting().active:

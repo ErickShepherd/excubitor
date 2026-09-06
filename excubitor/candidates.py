@@ -14,6 +14,7 @@ import stat
 import subprocess
 from pathlib import Path
 
+from excubitor.processes import WindowsProcessTree
 from excubitor.runs import Candidate, RunError
 
 
@@ -71,20 +72,40 @@ class GitCandidateReader:
             GIT_NO_REPLACE_OBJECTS="1",
             GIT_OPTIONAL_LOCKS="0",
         )
-        result = subprocess.run(
-            [
-                str(self.git),
-                "--no-replace-objects",
-                "--git-dir=" + str(self.metadata),
-                "--work-tree=" + str(self.project),
-                *args,
-            ],
-            cwd=self.metadata,
-            env=env,
-            capture_output=True,
-            timeout=15,
+        argv = (
+            str(self.git),
+            "--no-replace-objects",
+            "--git-dir=" + str(self.metadata),
+            "--work-tree=" + str(self.project),
+            *args,
         )
-        if result.returncode:
+        if os.name == "nt":
+            # A Windows Git launcher can leave its child holding captured pipes
+            # after subprocess.run kills only the launcher on timeout. Contain
+            # the complete tree, and never inherit the native MCP transport stdin.
+            result = (
+                WindowsProcessTree()
+                .run(
+                    argv,
+                    self.metadata,
+                    env=env,
+                    timeout=15,
+                    output_limit=16 * 1024 * 1024,
+                )
+                .execution
+            )
+            failed = result.exit_code != 0 or result.timed_out or result.output_limited
+        else:
+            result = subprocess.run(
+                argv,
+                cwd=self.metadata,
+                env=env,
+                stdin=subprocess.DEVNULL,
+                capture_output=True,
+                timeout=15,
+            )
+            failed = result.returncode != 0
+        if failed:
             raise RunError("trusted Git candidate inspection failed")
         if len(result.stdout) > 16 * 1024 * 1024:
             raise RunError("candidate exceeds inspection size limit")

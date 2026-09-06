@@ -177,7 +177,46 @@ Current official references describe capabilities, not support certification:
 - [Claude Code hooks](https://code.claude.com/docs/en/hooks): elicitation hooks can automatically answer
   a form and modify its result, so that host needs a separate approval-path assessment.
 
-The next implementation must connect the native owner-confirmation path to this supervisor, complete
-mode admission and crash reconciliation, and provide the in-app launcher. The native CLI demonstration
+The next implementation must complete mode admission, recovery after losing the watchdog itself,
+and the production in-app launcher. The native CLI demonstration
 uses a trusted test parent, not a registered owner-facing activation endpoint. GUI behavior and other
 vendors still require their own adapters and evidence. Replacement registration and trust remain separate.
+
+## Native start and bounded controller recovery
+
+`RalphAction` now connects an admitted native connection to the existing confirmation handshake and
+a host launcher. Its start and status tools take no arguments. The adapter supplies the exact native
+binding and a trusted plan; a tool argument cannot select authority storage, executable code, another
+task, or an approval answer. Only acceptance of the pending native form dispatches the frozen job.
+Declined, cancelled, late, malformed, and replayed answers cannot start workers. A launch failure
+retains interruption. Closing the connection retires pending offers but does not claim that accepted
+workers stopped. Status reads only the calling task's scope and never activates a run.
+
+`ControllerWatchdog` owns a controller from its first launch, inside a Windows job that includes the
+controller's descendants. When that controller exits, the watchdog terminates remaining descendants
+and waits for an empty job before recovery. This differs from an ordinary bounded worker call, which
+may legitimately wait for children to finish after its parent exits. The watchdog holds a separate OS
+lock, records each launch before spawning, and persists actual drainage before resuming the same run.
+It preserves the original journal bytes, including a torn final line, in a separate crash archive.
+The resumed supervisor consumes the next original attempt and reloads original acceptance definitions.
+No successful check or review from the interrupted attempt can authorize the new candidate.
+
+At most two controller restarts are allowed. Original attempts and deadline remain unchanged. A
+handled admission error is surfaced without retrying the denied operation. Cancellation releases the
+run only after drainage. If the watchdog itself dies, its Windows job kills descendants, but a future
+watchdog refuses the existing history: the missing durable drainage acknowledgement remains unresolved.
+This conservative boundary is deliberate. A timestamp, empty process-name search, or copied history
+does not prove safe takeover. Automatic recovery across app/watchdog loss still needs native ownership
+and drainage evidence. The candidate does not run after an arbitrary app exit by assumption.
+
+The connected Windows CLI experiment completed in four attempts: a real worker ran, the controller
+was forcibly terminated with a live descendant, the watchdog drained that tree and restarted, and
+the remaining workers repaired a deliberately wrong arithmetic implementation. Four unchanged checks
+and a fresh native reviewer passed. The original native confirmation and task identity matched the
+retained contract. The final report then exposed a separate Git helper left alive after its launcher's
+timeout. That failure report remains; the exact read-only helper was stopped after identification.
+Windows candidate inspection now contains Git and its children in the existing bounded process runner,
+with explicit input and environment, instead of killing only a timed-out launcher. A separate native
+MCP inspection using that correction verified the completed candidate, unchanged native configuration,
+and complete process drainage. No additional model implementation run or production support claim is
+inferred from that read-only inspection.

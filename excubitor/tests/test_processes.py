@@ -31,6 +31,22 @@ def test_captures_actual_bytes_and_drains(tmp_path):
     assert not result.execution.timed_out and result.observed_pids
 
 
+def test_explicit_environment_does_not_inherit_removed_settings(tmp_path, monkeypatch):
+    monkeypatch.setenv("EXCUBITOR_TEST_PARENT_ONLY", "parent")
+    env = dict(os.environ)
+    del env["EXCUBITOR_TEST_PARENT_ONLY"]
+    env["EXCUBITOR_TEST_CHILD_ONLY"] = "child"
+    result = WindowsProcessTree().run(
+        command(
+            "import os; print(os.getenv('EXCUBITOR_TEST_PARENT_ONLY')); "
+            "print(os.getenv('EXCUBITOR_TEST_CHILD_ONLY'))"
+        ),
+        tmp_path,
+        env=env,
+    )
+    assert result.drained and result.execution.stdout.splitlines() == [b"None", b"child"]
+
+
 def test_parent_exit_does_not_hide_child(tmp_path):
     child = "import time; time.sleep(.25); print('child finished')"
     source = f"import subprocess,sys; subprocess.Popen([sys.executable,'-I','-B','-c',{child!r}])"
@@ -101,7 +117,7 @@ def test_breakaway_request_cannot_escape_supervisor_job(tmp_path):
         f" subprocess.Popen([sys.executable,'-I','-B','-c',{child!r}],creationflags=0x01000000)\n"
         "except OSError:\n print(json.dumps({'denied':True}))\n"
     )
-    result = WindowsProcessTree().run(command(source), tmp_path, timeout=.8)
+    result = WindowsProcessTree().run(command(source), tmp_path, timeout=0.8)
     observation = json.loads(result.execution.stdout)
     if observation != {"denied": True}:
         # Nested native jobs may accept the flag while retaining this ancestor

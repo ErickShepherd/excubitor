@@ -587,3 +587,25 @@ Append-only observations from vendor-agnostic enforcement iterations.
 - This closes the small real CLI demonstration, not the full product. A production owner-start connection,
   complete writable-tool admission, durable crash reconciliation, native GUI entry points, and other
   vendor adapters still need implementation and verification. Ordinary development has no new policy.
+
+### Native confirmation and controller recovery, 2026-09-05
+
+- The native Start action now dispatches the shared supervisor after the exact pending form is accepted.
+  It takes no worker-supplied authority arguments. Closing the MCP connection only retires pending
+  offers; it cannot certify drainage or disarm accepted work. The action remains candidate/test wiring.
+- A trusted parent can recover a crashed controller after its Windows job is observed empty. Preserve
+  original authority and torn journal bytes, then consume the next original attempt. A crashed parent's
+  own unacknowledged launch remains an unresolved fence, never permission to restart by elapsed time.
+- The first crash test caught that ordinary worker semantics wait for surviving children. Controller
+  supervision needs an explicit stricter mode: terminate remaining descendants when its root exits.
+  Live Windows tests now cover that distinction, original deadlines/budgets, cancellation, handled
+  denial without retry, torn journals, and watchdog death killing its controller without blind takeover.
+- In the connected native CLI run, four real workers covered a forced controller crash, two features,
+  and repair of an injected bug. Eight executions of the four frozen checks and one independent native
+  review led to completion. The watchdog recorded both controller trees drained and preserved the base.
+- The final reporter exposed another process boundary: subprocess.run timed out a Windows Git launcher
+  while a child retained its output pipe. The failed report and identified helper are preserved. Windows
+  candidate inspection now supervises the full Git tree with bounded output/time and explicit input and
+  environment. A separate native MCP inspection using the correction verified the completed candidate
+  and final drainage. Native configuration remained byte-identical; no hook or permanent tool allowance
+  was installed. The full GUI/product rollout and takeover after watchdog loss remain unverified.

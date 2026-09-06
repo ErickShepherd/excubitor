@@ -158,6 +158,16 @@ project-trust persistence; that fixture entry is retained and the driver now ref
 This is bounded CLI demonstration evidence, not complete GUI, crash-recovery, or cross-vendor support.
 Production adapters do not import these components.
 
+The native CLI Start action has now dispatched that supervisor through the shared confirmation
+handshake. One agreed job recovered automatically from a forced controller crash, repaired the
+deliberate arithmetic bug, and passed all four original checks and a fresh review in four attempts.
+The watchdog recorded the old tree empty before restarting and preserved the interrupted journal.
+The first final report exposed an uncontained Windows Git inspection helper; that failure is retained.
+Git candidate inspection now uses the bounded Windows process-tree runner, and a separate native MCP
+recheck verified the completed candidate and unchanged configuration with all inspection processes
+drained. This does not establish recovery after losing the watchdog, app-exit survival, GUI behavior,
+full native-tool admission, or another vendor. No persistent hook or tool registration was added.
+
 ## Remediation checklist
 
 - [x] Record the owner-agreed Ralph-only product scope and default completion behavior; remove the

@@ -183,3 +183,38 @@ Implementation references: [native CLI execution](https://learn.chatgpt.com/docs
 [Windows sandbox configuration](https://learn.chatgpt.com/docs/config-file/config-basic),
 [Windows job lifetime](https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects), and
 [explicit inherited handles](https://learn.microsoft.com/en-us/windows/win32/procthread/creating-processes).
+
+## Native confirmed supervised job
+
+`native_supervised_start.py` connects the shared native Start action to the shared watchdog and the
+real CLI-worker demonstration. `prepare` accepts the same absolute executable/config/output paths
+as the earlier driver and a passing `--reuse-completed` packet. It resolves that packet's actual
+project, verifies its committed candidate, and prepares a fresh isolated branch in the already trusted
+disposable fixture. Preparation creates no active run. Existing branches and evidence remain intact.
+The initial fixture uses its original demo branch as the protected base; newer packets record the
+base explicitly, so successive demonstrations can reuse their real project location.
+
+`serve --packet ABSOLUTE_PACKET` exposes `ralph_start` and `ralph_status` through a process-only MCP
+configuration for the disposable native CLI. Native tool permission and the exact job confirmation
+are separate host interactions. Use a one-call tool allowance for this test; do not save a permanent
+allowance. The confirmed job runs in a background host thread so the Start tool returns promptly.
+Keep the native CLI open while the test runs. This script is not a plugin installer or a universal
+slash command, and no project/user hook is created.
+
+The first actual worker drains, then the test abruptly terminates its controller while a descendant
+is still alive. The watchdog must kill that descendant, preserve the interrupted journal, and resume
+the same contract without extending its limits. The restarted workers also encounter the earlier
+deliberate arithmetic fault, which must fail the original checks and be repaired before review.
+The packet retains raw native confirmation messages, separate controller outputs, watchdog receipts,
+the crash archive, and the final candidate report. A handled native denial stops the experiment.
+
+This fixture exercises native CLI confirmation and bounded controller recovery. It does not certify
+all native writable tools, production owner authentication, GUI behavior, app-exit survival, another
+vendor, or recovery after losing the watchdog. Production adapters do not import this apparatus.
+
+The first connected run completed its work, checks, and review in four attempts. Its final reporter
+failed when a Git launcher timed out but left a child holding captured pipes. Preserve that failed
+report rather than relabeling it successful. After Windows Git inspection was moved into the bounded
+process-tree runner, a separate native MCP read verified the original run and candidate with clean
+drainage and unchanged native configuration. A whole-job completion and a successful reporter are
+separate observations; the retained evidence records both the failure and the successful recheck.
