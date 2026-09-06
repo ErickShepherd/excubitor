@@ -288,6 +288,13 @@ Read-only legacy previews and existing-installation diagnostics and removal rema
 transaction library is retained for maintenance and isolated regression tests. Nothing is newly
 registered on the owner's machine by this correction.
 
+A separate bounded native diagnostic then demonstrated an allowed patch and shell write inside the
+candidate, an OS-denied shell write to an external canary, and a native-router outside-project patch
+rejection. The protected canary and candidate preimages stayed unchanged, all 57 observed processes
+drained, and removal of the one owned canary restored the completed clean candidate. The native JSON
+stream omitted the rejected patch target; the router error is preserved separately. This supplies
+observed shell/patch boundary evidence, not admission of every tool, path or host surface.
+
 ## Remediation checklist
 
 - [x] Record the owner-agreed Ralph-only product scope and default completion behavior; remove the

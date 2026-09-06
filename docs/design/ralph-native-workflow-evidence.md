@@ -165,3 +165,25 @@ The initial research changed no live hook, native trust, launcher, skill install
 support claim. A subsequent owner-operated transaction removed the broad Codex registration on
 2026-09-05; ordinary-work checks passed after the app reopened. Ralph-only runtime correction remains
 pending. These removal results do not establish replacement support.
+
+## Windows integration follow-up, 2026-09-06
+
+The current Claude Code sandbox documentation explicitly excludes native Windows. It describes
+filesystem/network isolation for Bash subprocesses on macOS, Linux and WSL2; built-in file tools use
+the permission system separately. It also documents that unavailable sandboxing can fall back to
+unsandboxed commands unless configured to fail. This is a concrete gap for a native Windows worker
+adapter, not evidence that Claude cannot ever be a supported launcher. An admitted isolated execution
+backend is still needed; a prompt or permissive mode cannot supply it. No WSL environment or host
+configuration was changed during this follow-up.
+([Claude Code sandboxing](https://code.claude.com/docs/en/sandboxing))
+
+Antigravity's current CLI feature page names Windows AppContainer alongside its Linux and macOS
+sandbox mechanisms. Its dedicated CLI sandbox page lists only Linux and macOS in the platform table.
+That documentation difference leaves Windows behavior needing a direct version-specific check; it
+does not justify either a support claim or a categorical statement that Windows is unsupported.
+([Antigravity CLI features](https://www.antigravity.google/docs/cli/features),
+[Antigravity CLI sandbox](https://www.antigravity.google/docs/cli/sandbox/))
+
+The successful Codex project run and subsequent shell/patch diagnostic remain Windows CLI evidence.
+The app's GUI, complete native tool admission and other vendors need their own tests. The reusable
+installer is also unfinished; temporary disposable registration is not the everyday setup experience.

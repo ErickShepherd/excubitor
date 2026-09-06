@@ -871,3 +871,17 @@ Append-only observations from vendor-agnostic enforcement iterations.
   byte round trip. The fixture now writes canonical LF bytes explicitly; the equality assertion and
   transaction behavior are unchanged. Arbitrarily formatted settings retain their parsed values during
   legacy uninstall; only rollback promises verbatim restoration regardless of original formatting.
+
+### Additional native boundary evidence, 2026-09-06
+
+- A separate native diagnostic allowed patch and shell writes inside the candidate and rejected an
+  external shell write. The native router also logged an outside-project patch rejection, although
+  its JSON event stream omitted the rejected path. Preserve that narrower evidence claim instead of
+  treating the model's final explanation as a complete tool receipt.
+- All 57 observed processes drained, native settings and protected bytes stayed unchanged, and the
+  host removed its exact owned canary and rechecked the clean completed candidate. No new run or
+  registration was created. The earlier exhausted packets stayed unchanged.
+- Current first-party documentation excludes native Windows from Claude's built-in Bash sandbox.
+  Antigravity documentation differs between its Windows AppContainer feature claim and its dedicated
+  sandbox platform table. These are integration gaps to verify, not permission to weaken the boundary
+  or present the successful Codex CLI demonstration as cross-vendor or GUI support.
