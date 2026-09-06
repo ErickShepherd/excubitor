@@ -368,8 +368,14 @@ WSL binary loader. The loader started but failed before the harmless Windows com
 that failure is not an adequate isolation boundary. A separate corrected canary initializes an empty
 binary-format table inside a fresh private user namespace, hides the table and drops every capability
 before executing the worker. The real Windows executable then fails with an executable-format error,
-while ordinary WSL Windows execution still succeeds. This namespace-local correction must be included
-and tested in the eventual Claude executor; the earlier startup diagnostic alone does not prove it.
+while ordinary WSL Windows execution still succeeds. The correction is now included in the reusable
+offline executor and was retested with a working outside-sandbox baseline. The executor also joins
+filesystem isolation to validated service lifetime and cgroup limits. Its final native suite passed
+28 checks, with one Unix-socket case skipped because the candidate filesystem refused socket creation.
+Separate native controller-death, deadline-expiry and unsafe-service-refusal checks passed. Earlier
+outside-sandbox interop failures remain recorded; no global registration or settings were changed.
+Authentication and provider networking are deliberately unavailable in this component, so this does
+not establish native Claude job completion. See [the executor boundary](linux-worker-executor.md).
 
 - [x] Record the owner-agreed Ralph-only product scope and default completion behavior; remove the
   repository instruction that routes ordinary roadmap work through Ralph. This is a documentation change.

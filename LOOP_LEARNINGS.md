@@ -967,3 +967,23 @@ Append-only observations from vendor-agnostic enforcement iterations.
   authorization and the documentation does not guarantee that another login remains intact. Do not
   mint one or share rotating credentials as an automatic workaround. Authentication coexistence
   remains open; sandbox development can continue without touching the working Windows login.
+
+### Reusable offline Ubuntu worker, 2026-09-06
+
+- The previously separate namespace and cgroup probes now form a reusable executor. It validates its
+  actual bounded service, serializes candidate access and uses fresh namespaces for each command.
+  The private binary-format table and capability drop now run before every requested program.
+- Native tests exercised read-only remount resistance, hidden host paths, hard links, environment
+  injection, cancellation, detached descendants, output flooding, memory/process limits and the
+  actual Claude version command. The final suite passed 28 checks. The socket-entry case was skipped
+  because the D: filesystem itself refuses socket creation; do not claim a native socket witness.
+- Ordinary WSL Windows interop was intermittently absent before the new executor ran. Preserve those
+  failed baselines. The final suite had working ordinary interop before and after and returned
+  ENOEXEC for the real Windows binary inside the sandbox. No WSL configuration was changed to get it.
+- Separate native tests killed the controller and let the service deadline expire. Both removed
+  detached children without delayed writes. A service with KillMode=process was refused before
+  dispatch. These are process-lifetime results, not automatic app or machine restart recovery.
+- Python 3.10 ran the Ubuntu diagnostic module; the package still declares Python 3.11 or newer.
+  All new artifacts and test dependencies stayed on D:. Authentication, provider-only access,
+  production transport/admission and complete Claude model execution remain open. No existing
+  credentials were copied, refreshed or changed.
