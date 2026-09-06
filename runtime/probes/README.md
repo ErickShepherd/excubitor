@@ -149,3 +149,37 @@ state. Native trust updated the existing fixture SessionEnd entry, which remains
 configuration was unchanged. No trust file was manually rewritten. This is a normal interactive CLI
 exit witness only. Forced termination, crashes, resumption, worker supervision, GUI, and other hosts
 remain unverified. New registration and trust changes still require their own exact authorization.
+
+## Real supervised CLI job
+
+`supervised_job.py` connects the shared supervisor to actual Codex CLI workers, protected output
+oracles, Git inspection, and a separate reviewer. It implements a small stdin arithmetic program in
+two units, deliberately commits a wrong doubling function, and lets the next worker repair it after
+the unchanged checks fail. The final native run took three worker attempts and thirteen supervised
+process calls. All four original checks and an independent review passed. The reviewer also executed
+ten additional cases. The resulting isolated branch and its base were retained, and the run ended inactive.
+
+This is test apparatus with a trusted owner-authorized parent, not the production Ralph command.
+It requires absolute `--codex`, `--python`, `--git`, `--native-config`, `--output`, and
+`--reuse-completed` paths. The last argument identifies a previously completed disposable experiment
+whose project is already natively trusted. The driver checks its retained commit and clean state,
+creates a new branch, and preserves the previous branch. Output must be a new directory. Do not point
+this fixture-only driver at a development checkout. Its direct Git writes are confined to the disposable
+fixture; production commits must use the authorized broker.
+
+On the tested Windows CLI, omitting `windows.sandbox` from isolated configuration caused policy to
+refuse worker file operations. The driver preserves the owner's already provisioned sandbox implementation
+and model settings while leaving execpolicy rules enabled. It stops on a native policy denial. The native
+CLI also saved project trust automatically for a fresh writable fixture despite `--ignore-user-config`.
+That observed trust entry remains. The driver now refuses fresh projects; the final reused-project run
+left native configuration byte-identical. No hook registration or manual trust-file rewrite occurred.
+
+The Windows process backend is not itself a filesystem or network sandbox. It accounts for processes
+in its job; native services outside the tree require separate admission. This benign CLI example does
+not certify arbitrary native tools, production owner authentication, GUI launching, another vendor,
+automatic crash recovery, or optional merging. The earlier failed reports remain evidence.
+
+Implementation references: [native CLI execution](https://learn.chatgpt.com/docs/non-interactive-mode),
+[Windows sandbox configuration](https://learn.chatgpt.com/docs/config-file/config-basic),
+[Windows job lifetime](https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects), and
+[explicit inherited handles](https://learn.microsoft.com/en-us/windows/win32/procthread/creating-processes).

@@ -560,3 +560,30 @@ Append-only observations from vendor-agnostic enforcement iterations.
 - The final local report initially failed while reading UTF-8 terminal evidence with Windows' default
   legacy encoding. Explicit UTF-8 fixed the report; the existing configuration capture was preserved
   and checked byte-for-byte. This did not affect the native test or mutate its run before the retry.
+
+## 2026-09-05 — Shared supervision and a real multi-unit CLI job
+
+- The shared supervisor now drives an already authorized run through workers, committed checkpoints,
+  frozen output checks, repair, independent review, and completion. It reloads original checks each
+  attempt, holds an OS lock against duplicate supervisors, and leaves interrupted protection when an
+  in-flight journal or failing backend cannot prove drainage. Worker exit zero or a green summary is
+  insufficient to complete the run. Repair feedback includes bounded actual verifier output.
+- A Windows job owns the suspended root before execution and retains descendants after parent exit.
+  Tests cover timeout, cancellation, output flooding, controller death, and breakaway requests. On one
+  Python version the breakaway flag was accepted while the child remained in the supervisor's job;
+  the corrected assertion checks actual membership and termination instead of demanding an error.
+- The first model-worker attempt omitted the existing Windows sandbox implementation from isolated
+  config. Native policy refused file operations and the run exhausted its budget without completion.
+  Carrying forward the already provisioned native sandbox fixed startup; no policy bypass flag was used.
+- A later job completed, but its configuration comparison caught native CLI project-trust persistence
+  despite --ignore-user-config. The disposable project entry remains and is reported. The final driver
+  refuses fresh enrollment and requires an already trusted completed fixture with a preserved branch.
+- The final real Codex CLI job built two arithmetic features, observed an injected tripling bug fail
+  unchanged doubling checks, repaired it without owner intervention, and passed all four original checks.
+  A separate reviewer read the code and ran ten additional cases. Three worker attempts and thirteen
+  supervised process calls produced a clean committed isolated branch, preserved base, and inactive run.
+  Its native sandbox child was observed in the supervisor job; all calls drained. Native configuration
+  stayed byte-identical in this final run. No hooks were installed, and no merge or publication occurred.
+- This closes the small real CLI demonstration, not the full product. A production owner-start connection,
+  complete writable-tool admission, durable crash reconciliation, native GUI entry points, and other
+  vendor adapters still need implementation and verification. Ordinary development has no new policy.

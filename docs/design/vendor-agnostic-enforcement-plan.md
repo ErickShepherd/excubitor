@@ -149,8 +149,14 @@ MCP shutdown skipped cleanup. A separately authorized native SessionEnd test has
 for the exact confirmed record on normal CLI exit, without declaring completion or worker drainage.
 Ordinary work in another task in the same project stayed inactive. The temporary hook was removed and
 a fresh CLI showed zero hooks; its updated fixture trust entry remains. Forced termination, crash recovery,
-complete native admission, candidate collection, review, worker supervision, and the full runner remain
-unfinished. Production adapters do not import these components.
+complete native admission and the full owner-facing runner remain unfinished. A shared supervisor has
+since completed a real two-feature Codex CLI job with an injected bug, automatic repair, original
+acceptance checks, independent review, actual committed-candidate inspection, and process-tree drainage.
+The final run used an already trusted disposable project, retained an isolated branch and its base,
+ended inactive, and left native configuration unchanged. An earlier attempt exposed native automatic
+project-trust persistence; that fixture entry is retained and the driver now refuses fresh enrollment.
+This is bounded CLI demonstration evidence, not complete GUI, crash-recovery, or cross-vendor support.
+Production adapters do not import these components.
 
 ## Remediation checklist
 
@@ -175,6 +181,9 @@ unfinished. Production adapters do not import these components.
 - [ ] Connect bounded workers through the host's native continuation facilities. Verify a multi-unit job
   completes without human restarts, tolerates recoverable failures, respects resource limits, preserves
   its acceptance criteria, and produces the default verified branch and report.
+- [x] Demonstrate the shared supervisor with real bounded native CLI workers, a failed unchanged check,
+  automatic repair, independent review, and a clean committed branch. This completes the disposable
+  Windows CLI example; native activation, mode admission, GUI integration, and crash recovery remain open.
 - [ ] Compare workflow variants on representative tasks with fixed acceptance checks, permissions,
   model versions, and budgets. Record all attempts, failures, interventions, setup effort, quality, and
   resource use. Keep safety protections fixed and select the simplest adequately performing defaults.

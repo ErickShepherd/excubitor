@@ -1,10 +1,12 @@
 # Protected Ralph lifecycle candidate
 
 `excubitor/runs.py`, `approval.py`, `acceptance.py`, and `session.py` are internal host-controller
-components. A disposable native CLI experiment now connects confirmation to the run store and tests
-protected output comparison. There is no production launcher, registered endpoint, or active hook
-integration. Complete native admission, worker supervision, candidate collection, and independent
-review remain required. The old always-active adapter remains unsuitable for reinstallation.
+components. `supervisor.py` now drives bounded workers, original checks, repair, and independent review.
+`processes.py` supplies Windows process-tree supervision and `candidates.py` inspects real committed
+bytes, index, selected branch, and the preserved base. A real Codex CLI demonstration completed two
+units and a repair without owner restarts. There is no production launcher, registered endpoint, or
+active hook integration. Complete native admission and crash reconciliation remain required. The old
+always-active adapter remains unsuitable for reinstallation.
 
 ## Implemented behavior
 
@@ -23,18 +25,21 @@ A run advances through the agreed units and retries repairs without another auth
 updates require the current revision, rejecting delayed workers and duplicate completion. Candidate
 changes invalidate previous check and review results. Completion requires all units, all original
 checks passing against the current candidate, passing review, a clean committed isolated candidate,
-and worker shutdown. The library validates the supplied facts; it does not yet collect them.
+and worker shutdown. The lifecycle library validates supplied facts. The new host-side Git reader and
+Windows process backend collect specific candidate and worker facts for the supervised demonstration.
 
 The new output-check component stores exact command, input, expected output, expected exit status, and
 timeout definitions outside the worker project. It reloads and verifies those original bytes before
 comparing host-captured subprocess results. A worker's claimed test summary is never parsed as a pass.
-This does not provide a general sandbox executor, collect Git facts, or establish independent review.
+The supervisor connects this comparison to a host backend. The native demonstration runs original
+checks inside Codex's read-only sandbox and obtains review from a separate native model invocation.
 
 Cancellation first enters a stopping state. Only confirmed worker shutdown ends protection. An
 interrupted job resumes in the original task after old workers stop, retaining progress and limits.
 Exhaustion or an observed expired deadline blocks the job and retains protection. Recorded expiry
 cannot be undone by a later clock correction. The host owns reliable timekeeping, worker termination,
-and prompt reporting of expiry; this library runs no timer and kills no process.
+and prompt reporting of expiry; the lifecycle store runs no timer and kills no process. The Windows
+backend limits individual executions and waits for its entire process job to drain.
 
 Completion releases the run's scope. Merge, publication, and deployment are rejected as unimplemented
 actions. Missing stores, unsupported versions, invalid contract bytes, and inconsistent progress raise
@@ -42,6 +47,41 @@ errors rather than reporting inactive. Consistency checks do not replace filesys
 provide cryptographic integrity against a privileged writer.
 
 ## Verification
+
+The shared supervisor re-reads the durable contract and original oracles each attempt. An OS-held lock
+prevents duplicate supervisors. A durable in-flight event prevents blindly starting another worker
+after a controller crash. An unfinished or damaged journal leaves the run interrupted and protected;
+automatic crash reconciliation and safe resumption remain future host work. Cancellation releases a
+run only after a backend confirms drainage. Backend exceptions never supply that confirmation.
+
+The Windows backend starts the root suspended, assigns it to a non-inherited job, and then resumes it.
+Only standard-I/O handles are inherited. Time, output, and process-count limits apply; the controller
+waits for the job to empty, including children that outlive their parent. Closing the controller kills
+that job's descendants. This is process supervision, not filesystem/network containment. A native
+broker launching outside that job still requires separate admission. Local tests cover parent exit,
+controller death, lingering children, cancellation, output flooding, and breakaway requests. Across
+Python versions, a breakaway request may be refused or accepted while the process remains in the
+ancestor job; test actual membership and drainage rather than requiring one particular error.
+
+The Git reader uses host-selected metadata outside the project and checks actual file bytes against
+the commit, index, expected branch, and unchanged base. It rejects extra/ignored files, links, shared
+files, submodules, and unsupported tree shapes. This is a deliberately small first backend. Production
+commits still need the owner's authorized broker; the demonstration commits only its disposable repo.
+
+On Windows with Codex CLI 0.153.4, real native workers built a two-feature Python CLI. A disclosed fault
+changed doubling to tripling in the retained candidate. Unchanged external checks failed, the next
+worker repaired the code from verifier feedback, and all four original checks passed. A separate
+native reviewer read the final code and ran ten additional cases. The run finished after three worker
+attempts with a clean committed isolated branch, preserved base, and no active run. Its native sandbox
+child was independently observed in the supervisor's Windows job; all thirteen process calls drained.
+
+The first attempt omitted the already provisioned Windows sandbox setting from process-only config.
+Native policy refused worker operations and the job exhausted its budget without claiming success.
+Preserving the configured sandbox implementation fixed startup without disabling policy. A subsequent
+job completed but its configuration check caught Codex automatically saving trust for the disposable
+project despite `--ignore-user-config`. That entry is retained and reported. The final driver requires
+an already trusted completed fixture, preserves its branch, and refuses fresh project enrollment. Its
+final run left the native configuration byte-identical. No hook was installed in these demonstrations.
 
 Run `python -B excubitor/tests/test_runs.py` on Python 3.11 or newer. The regression cases cover progress,
 repair, frozen checks, conflicting updates, isolation, replay, cancellation, interruption/resumption,
@@ -119,8 +159,8 @@ does not establish the actual writable surfaces.
 The host must independently collect the current candidate identity, committed/clean/isolated facts,
 check results, review, and worker liveness. Candidate code and repository-configured commands must
 never execute with authority-store privileges. Worker booleans and test summaries are not verification
-evidence. Check fingerprints currently bind identities; storing and executing the actual protected
-acceptance oracles still requires a trusted backend.
+evidence. The supervised demonstration now connects those specific backend facts to the lifecycle.
+Its benign local task does not attest every native tool or permission configuration for arbitrary work.
 
 The host must retain known-active task information and reconcile crashes. Lost storage must preserve
 a known active boundary without imposing Ralph on unrelated tasks. Catching RunError and returning
@@ -137,6 +177,7 @@ Current official references describe capabilities, not support certification:
 - [Claude Code hooks](https://code.claude.com/docs/en/hooks): elicitation hooks can automatically answer
   a form and modify its result, so that host needs a separate approval-path assessment.
 
-The next implementation must connect authenticated approval and independently collected evidence to
-this lifecycle, then demonstrate a real multi-unit job through native continuation. Replacement
-registration and trust remain separate. Component tests do not complete broader support claims.
+The next implementation must connect the native owner-confirmation path to this supervisor, complete
+mode admission and crash reconciliation, and provide the in-app launcher. The native CLI demonstration
+uses a trusted test parent, not a registered owner-facing activation endpoint. GUI behavior and other
+vendors still require their own adapters and evidence. Replacement registration and trust remain separate.
