@@ -840,3 +840,15 @@ Append-only observations from vendor-agnostic enforcement iterations.
   six worker trees drained, the exact controller job absent, and the prior failed run byte-identical.
   The temporary project files were removed after clean session exit. Only the two authorized native
   trust additions remain. Full project-backend completion, GUI and other vendors remain unverified.
+
+### Capacity-aware native retries, 2026-09-06
+
+- The native service can fail before model output or after tools have already run. Only its observed
+  terminal event is classified as capacity failure; nested program output and ordinary code errors
+  cannot request this treatment. Partial bytes are preserved and every failed launch still counts.
+- The supervisor waits within the accepted deadline, supports cancellation after drainage, and retries
+  an unavailable reviewer against the same verified candidate without another implementation turn.
+  Attempt exhaustion remains blocked. A crash during waiting requires shutdown reconciliation.
+- Native status now explains capacity failures, including blocked jobs. The launch skill describes
+  accepted check names and avoids redundant work units for checks and review that the host already owns.
+  Component results do not establish native recovery from a real service outage or full project completion.

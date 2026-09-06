@@ -13,6 +13,7 @@ import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 from excubitor.acceptance import Execution
 from excubitor.runs import RunError
@@ -26,6 +27,9 @@ class ProcessResult:
     drained: bool
     processes: int
     observed_pids: tuple[int, ...] = ()
+    # Set only by a trusted native transport from its service event envelope.
+    # Candidate stdout and reviewer findings cannot set this classification.
+    retryable_error: Literal["capacity"] | None = None
 
 
 class WindowsProcessTree:

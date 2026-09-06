@@ -131,6 +131,28 @@ class Supervisor:
                     raise _CancelledAfterDrain("owner cancelled the run")
 
             feedback = ""
+            capacity_failures = 0
+
+            def wait_for_capacity(phase):
+                nonlocal capacity_failures, run
+                run = self.store.record_capacity_failure(run, phase)
+                capacity_failures += 1
+                # Every launch is charged, even if the service fails midway
+                # through a turn. Waiting never buys another attempt or model.
+                delay = min(30 * 2 ** min(capacity_failures - 1, 2), 120)
+                remaining = run.contract.deadline - self.store.clock()
+                if run.attempts >= run.contract.max_attempts or remaining <= 0:
+                    record("capacity_exhausted", phase=phase)
+                    return
+                until = self.store.clock() + min(delay, remaining)
+                record("capacity_wait", phase=phase, retry_at=until)
+                while (remaining := min(until, run.contract.deadline) - self.store.clock()) > 0:
+                    if cancel.wait(min(remaining, 0.25)):
+                        raise _CancelledAfterDrain("owner cancelled during capacity backoff")
+                # A crash inside the wait leaves an unresolved journal entry.
+                # Recovery must reconcile it before another controller can run.
+                record("drained")
+
             try:
                 while run.state == "running":
                     if cancel.is_set():
@@ -151,6 +173,11 @@ class Supervisor:
                     record("work_started", unit=unit)
                     work = self.backend.work(run, unit, feedback, cancel)
                     drained(work)
+                    if work.retryable_error == "capacity":
+                        wait_for_capacity("work")
+                        # Preserve any existing check/review feedback. Service
+                        # availability is not evidence that code needs repair.
+                        continue
                     execution = work.execution
                     if execution.exit_code != 0 or execution.timed_out or execution.output_limited:
                         feedback = (
@@ -193,11 +220,24 @@ class Supervisor:
                         # This event is a stable, drained checkpoint for crash recovery.
                         record("drained")
                         continue
-                    record("review_started", candidate=candidate.digest)
-                    result, passed, explanation = self.backend.review(run, cancel)
-                    drained(result)
-                    if self.backend.current(run) != candidate:
-                        raise Conflict("candidate changed during independent review")
+                    while True:
+                        for check in run.contract.checks:
+                            OutputOracle.load(self.store, check)
+                        self.backend.admit(run)
+                        if self.backend.current(run) != candidate:
+                            raise Conflict("candidate changed before independent review")
+                        record("review_started", candidate=candidate.digest)
+                        result, passed, explanation = self.backend.review(run, cancel)
+                        drained(result)
+                        if self.backend.current(run) != candidate:
+                            raise Conflict("candidate changed during independent review")
+                        if result.retryable_error != "capacity":
+                            break
+                        wait_for_capacity("review")
+                        run = self.store.retry_review(run, candidate)
+                        if run.state != "running":
+                            record("stopped", reason="model capacity; original attempt budget exhausted")
+                            return run
                     passed = (
                         passed is True
                         and result.execution.exit_code == 0

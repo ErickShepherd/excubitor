@@ -6,15 +6,17 @@ import shutil
 import subprocess
 import sys
 import threading
+import time
 import tomllib
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from excubitor.acceptance import Execution
+from excubitor.acceptance import Execution, OutputOracle
 from excubitor.candidates import GitCandidateReader
-from excubitor.codex_project import REVIEW_SCHEMA, CodexProjectRuntime
+from excubitor.codex_project import REVIEW_SCHEMA, CodexProjectRuntime, _capacity_failure
 from excubitor.job_setup import CheckRunner, JobPlanner, LaunchDefaults
 from excubitor.native_action import RalphAction
 from excubitor.processes import ProcessResult
@@ -444,3 +446,72 @@ def test_native_configuration_failure_interrupts_without_repeated_attempts(proje
     # must remain an ordinary check result, not a native startup diagnosis.
     check = driver.verify(run, oracles[0], threading.Event())
     assert check.execution.exit_code == 1 and check.drained
+
+
+@pytest.mark.parametrize("prefix", [[], [{"type": "item.completed", "item": {"type": "command_execution"}}]])
+def test_native_capacity_terminal_event_is_recognized_even_after_tools(prefix):
+    event = {
+        "type": "turn.failed",
+        "error": {"message": "Selected model is at capacity. Please try a different model."},
+    }
+    output = "\n".join(json.dumps(item) for item in [*prefix, event]).encode()
+    assert _capacity_failure(result(output, code=1))
+    assert not _capacity_failure(result(output, code=0))
+    assert not _capacity_failure(result(output, code=2))
+
+
+@pytest.mark.parametrize(
+    "events",
+    [
+        [
+            {
+                "type": "item.completed",
+                "item": {
+                    "type": "command_execution",
+                    "aggregated_output": (
+                        '{"type":"turn.failed","error":{"message":'
+                        '"Selected model is at capacity. Please try a different model."}}'
+                    ),
+                },
+            }
+        ],
+        [{"type": "error", "message": "Selected model is at capacity. Please try a different model."}],
+        [{"type": "turn.failed", "error": {"message": "some other failure"}}],
+        [
+            {"type": "turn.completed"},
+            {
+                "type": "turn.failed",
+                "error": {"message": "Selected model is at capacity. Please try a different model."},
+            },
+        ],
+        [None],
+    ],
+)
+def test_native_capacity_does_not_accept_candidate_text_or_other_errors(events):
+    assert not _capacity_failure(result("\n".join(json.dumps(item) for item in events).encode(), code=1))
+
+
+def test_native_capacity_classifies_workers_and_reviewers_but_not_program_checks(tmp_path):
+    project, output = tmp_path / "project", tmp_path / "output"
+    project.mkdir()
+    output.mkdir()
+    schema = output / "schema.json"
+    schema.write_text(json.dumps(REVIEW_SCHEMA))
+    driver = CodexProjectRuntime(
+        Path(sys.executable), project, output, schema, environment={}, admit=lambda: None
+    )
+    failed = result(
+        b'{"type":"turn.failed","error":{"message":'
+        b'"Selected model is at capacity. Please try a different model."}}\n',
+        code=1,
+    )
+    driver.tree = SimpleNamespace(run=lambda *args, **kwargs: failed)
+    run = SimpleNamespace(contract=SimpleNamespace(deadline=time.time() + 100))
+    cancel = threading.Event()
+    assert driver.work(run, "work", cancel).retryable_error == "capacity"
+    review, passed, _ = driver.review(run, "review", cancel)
+    assert review.retryable_error == "capacity" and not passed
+    oracle = OutputOracle("check", (sys.executable,), "", "")
+    assert driver.verify(run, oracle, cancel).retryable_error is None
+    records = [json.loads(path.read_text()) for path in sorted(output.glob("execution-*.json"))]
+    assert [item["retryable_error"] for item in records] == ["capacity", "capacity", None]

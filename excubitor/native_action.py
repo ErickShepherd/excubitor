@@ -57,10 +57,18 @@ class RalphAction:
         if self.drafts is None:
             return f"Ralph is {active.state}." if active else "No active Ralph job in this task."
         if active is not None:
-            return (
+            text = (
                 f"Ralph is {active.state}: {active.completed_units} of {len(active.contract.units)} units; "
                 f"{active.attempts} of {active.contract.max_attempts} attempts used."
             )
+            if active.service_failure:
+                phase = "worker" if active.service_failure == "work_capacity" else "independent reviewer"
+                text += f" The model service reported capacity exhaustion for the {phase}."
+                if active.state == "running":
+                    text += " Retries wait within the original time and attempt limits."
+                else:
+                    text += " Partial work is preserved; the job is not complete."
+            return text
         previous = self.gate.store.latest(binding)
         text = "No active Ralph job in this task."
         if previous is not None and previous.state == "complete":

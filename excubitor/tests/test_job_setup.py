@@ -312,6 +312,28 @@ def test_status_keeps_latest_cancelled_job_separate_from_prior_history(setup):
     assert store.lookup(last.contract.binding) is None
 
 
+@pytest.mark.parametrize("phase", ["work", "review"])
+def test_status_explains_capacity_failure_without_new_approval_or_other_task_capture(setup, phase):
+    action, create, _, store, _, clock, messages, launches, _ = setup
+    call(action, {"job": proposal()})
+    answer(action, messages[-1]["id"])
+    run = store.begin_attempt(launches[0])
+    run = store.record_capacity_failure(run, phase)
+    assert "capacity exhaustion" in action.status(run.contract.binding)
+    assert "original time and attempt limits" in action.status(run.contract.binding)
+    clock[0] = run.contract.deadline
+    run = store.begin_attempt(run)
+    assert run.state == "blocked"
+    reopened = create()
+    call(reopened, name="ralph_status")
+    text = messages[-1]["result"]["content"][0]["text"]
+    assert "capacity exhaustion" in text and "not complete" in text
+    assert ("independent reviewer" in text) == (phase == "review")
+    call(reopened, name="ralph_status", task="unrelated")
+    assert messages[-1]["result"]["content"][0]["text"] == "No active Ralph job in this task."
+    assert len(launches) == 1 and store.get(run.id).contract == run.contract
+
+
 def test_host_admission_refusal_cannot_be_replaced_by_a_valid_draft(setup):
     action, _, planner, store, project, _, messages, launches, _ = setup
 

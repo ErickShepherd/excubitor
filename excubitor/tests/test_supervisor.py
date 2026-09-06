@@ -3,6 +3,7 @@
 import json
 import sys
 import threading
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -158,3 +159,141 @@ def test_another_supervisor_cannot_start_duplicate_work(setup):
         with pytest.raises(RunError, match="another supervisor"):
             Supervisor(store, host).drive(run.id)
     assert not host.calls
+
+
+class AdvancingCancel:
+    """An event double advances the authoritative clock without real sleeps."""
+
+    def __init__(self, store):
+        self.now, self.waited, self.cancelled = 100, 0, False
+        store.clock = lambda: self.now
+
+    def is_set(self):
+        return self.cancelled
+
+    def wait(self, seconds):
+        self.now += seconds
+        self.waited += seconds
+        return self.cancelled
+
+
+def capacity_result(host):
+    return replace(host.result(), execution=Execution(1, b"", b"", 0.01), retryable_error="capacity")
+
+
+def test_capacity_wait_retries_same_unit_and_preserves_budget(setup):
+    store, run, host = setup
+    cancel = AdvancingCancel(store)
+    original_work = host.work
+
+    def work(*args):
+        result = original_work(*args)
+        return capacity_result(host) if len(host.calls) <= 2 else result
+
+    host.work = work
+    host.fail_first = False
+    final = Supervisor(store, host).drive(run.id, cancel=cancel)
+    assert final.state == "complete" and final.attempts == 4
+    assert final.contract == run.contract and cancel.waited == 90
+    assert final.service_failure is None
+    assert [unit for unit, _ in host.calls] == ["first", "first", "first", "second"]
+    assert all(feedback == "" for _, feedback in host.calls)
+
+
+def test_capacity_in_review_retries_review_without_reimplementation(setup):
+    store, run, host = setup
+    cancel = AdvancingCancel(store)
+    host.fail_first = False
+    original_review = host.review
+
+    def review(*args):
+        result = original_review(*args)
+        return (capacity_result(host), False, "unavailable") if host.reviews == 1 else result
+
+    host.review = review
+    final = Supervisor(store, host).drive(run.id, cancel=cancel)
+    assert final.state == "complete" and final.attempts == 3
+    assert len(host.calls) == 2 and host.verifications == 1 and host.reviews == 2
+    assert cancel.waited == 30 and final.contract == run.contract
+
+
+@pytest.mark.parametrize("phase", ["work", "review"])
+def test_capacity_exhaustion_preserves_limits_and_never_completes(setup, phase):
+    store, run, host = setup
+    cancel = AdvancingCancel(store)
+    host.fail_first = False
+    if phase == "work":
+        host.work = lambda *args: capacity_result(host)
+    else:
+        host.review = lambda *args: (capacity_result(host), False, "unavailable")
+    final = Supervisor(store, host).drive(run.id, cancel=cancel)
+    assert final.state == "blocked" and final.enforces and not final.reviewed
+    assert final.contract == run.contract
+    assert final.service_failure == phase + "_capacity"
+    assert final.attempts == (3 if phase == "work" else 4)
+    assert cancel.waited == (100 if phase == "work" else 90)
+    if phase == "review":
+        assert len(host.calls) == 2 and final.candidate == host.candidate
+        assert dict(final.check_results) == {"answer": True}
+
+
+def test_cancel_during_capacity_wait_drains_before_releasing(setup):
+    store, run, host = setup
+    cancel = AdvancingCancel(store)
+    host.work = lambda *args: capacity_result(host)
+    cancel.wait = lambda seconds: True
+    final = Supervisor(store, host).drive(run.id, cancel=cancel)
+    assert final.state == "cancelled" and final.attempts == 1 and not final.enforces
+
+
+def test_capacity_cannot_hide_undrained_worker_or_changed_review_candidate(setup):
+    store, run, host = setup
+    host.drained = False
+    host.work = lambda *args: capacity_result(host)
+    with pytest.raises(RunError, match="remaining workers"):
+        Supervisor(store, host).drive(run.id)
+    assert store.get(run.id).state == "interrupted"
+
+
+def test_capacity_review_rechecks_candidate_after_wait(setup):
+    store, run, host = setup
+    host.fail_first = False
+    cancel = AdvancingCancel(store)
+    original_wait = cancel.wait
+
+    def wait(seconds):
+        host.candidate = Candidate("c" * 64, "d" * 40, True, True)
+        return original_wait(seconds)
+
+    cancel.wait = wait
+    host.review = lambda *args: (capacity_result(host), False, "unavailable")
+    with pytest.raises(RunError, match="changed before independent review"):
+        Supervisor(store, host).drive(run.id, cancel=cancel)
+    assert store.get(run.id).state == "interrupted"
+
+
+def test_review_retry_rejects_missing_original_checks(setup):
+    store, run, host = setup
+    run = store.begin_attempt(run)
+    run = store.checkpoint(run, host.candidate, unit="first")
+    run = store.checkpoint(run, host.candidate, unit="second")
+    with pytest.raises(RunError, match="all original checks"):
+        store.retry_review(run, host.candidate)
+    assert store.get(run.id).attempts == 1
+
+
+def test_crash_during_capacity_wait_requires_reconciliation(setup):
+    store, run, host = setup
+    cancel = AdvancingCancel(store)
+    host.work = lambda *args: capacity_result(host)
+
+    def crash(seconds):
+        raise RuntimeError("controller lost")
+
+    cancel.wait = crash
+    with pytest.raises(RuntimeError, match="controller lost"):
+        Supervisor(store, host).drive(run.id, cancel=cancel)
+    current = store.get(run.id)
+    assert current.state == "interrupted" and current.attempts == 1
+    events = (store.directory / "supervision" / (run.id + ".jsonl")).read_text().splitlines()
+    assert json.loads(events[-1])["event"] == "capacity_wait"

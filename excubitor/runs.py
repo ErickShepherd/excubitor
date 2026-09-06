@@ -191,6 +191,7 @@ class Run:
     candidate: Candidate | None
     check_results: tuple[tuple[str, bool], ...]
     reviewed: bool
+    service_failure: str | None = None
 
     @property
     def enforces(self) -> bool:
@@ -262,7 +263,9 @@ class RunStore:
             progress = json.loads(row["progress"])
             candidate = Candidate(**progress["candidate"]) if progress["candidate"] else None
             if (
-                set(progress) != {"attempts", "completed_units", "candidate", "checks", "reviewed", "drained"}
+                set(progress) - {"service_failure"}
+                != {"attempts", "completed_units", "candidate", "checks", "reviewed", "drained"}
+                or progress.get("service_failure") not in (None, "work_capacity", "review_capacity")
                 or type(progress["attempts"]) is not int
                 or not 0 <= progress["attempts"] <= contract.max_attempts
                 or type(progress["completed_units"]) is not int
@@ -303,6 +306,7 @@ class RunStore:
                 candidate,
                 tuple(sorted(progress["checks"].items())),
                 progress["reviewed"],
+                progress.get("service_failure"),
             )
         except (ValueError, TypeError, KeyError, OSError) as exc:
             raise RunError("invalid authority record; do not treat it as inactive") from exc
@@ -410,6 +414,35 @@ class RunStore:
                     raise Conflict("checkpoint does not match the next agreed work unit")
                 progress["completed_units"] += 1
             progress.update(candidate=asdict(candidate), checks={}, reviewed=False)
+            progress.pop("service_failure", None)
+            return "running"
+
+        return self._change(run, change, working=True)
+
+    def retry_review(self, run: Run, candidate: Candidate) -> Run:
+        """Charge another reviewer launch without discarding verified work."""
+
+        def change(progress: dict, current: Run) -> str:
+            if (
+                candidate != current.candidate
+                or current.completed_units != len(current.contract.units)
+                or dict(current.check_results) != {check.name: True for check in current.contract.checks}
+            ):
+                raise NotReady("review retry requires the same candidate and all original checks")
+            if current.attempts >= current.contract.max_attempts:
+                return "blocked"
+            progress.update(attempts=current.attempts + 1, reviewed=False)
+            return "running"
+
+        return self._change(run, change, working=True)
+
+    def record_capacity_failure(self, run: Run, phase: str) -> Run:
+        """Host-observed service availability, separate from candidate correctness."""
+        if phase not in ("work", "review"):
+            raise ValueError("unknown native phase")
+
+        def change(progress: dict, current: Run) -> str:
+            progress["service_failure"] = phase + "_capacity"
             return "running"
 
         return self._change(run, change, working=True)
@@ -435,6 +468,7 @@ class RunStore:
             if candidate != current.candidate or type(passed) is not bool:
                 raise Conflict("review is not bound to this candidate")
             progress["reviewed"] = passed
+            progress.pop("service_failure", None)
             return "running"
 
         return self._change(run, change, working=True)

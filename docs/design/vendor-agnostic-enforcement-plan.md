@@ -262,11 +262,14 @@ temporary project files were removed after the native sessions exited, with only
 trust entries added and unrelated settings unchanged. This establishes native unit progression and
 ordinary-task exclusion during productive work, while full project-job completion remains unverified.
 
-Model availability failures need their own bounded wait-and-retry handling instead of immediate
-code-repair retries. Any such change must preserve the original deadline and attempt cap, cancellation,
-partial work and model selection; it must not reset a run or create a replacement agreement. Native
-status also needs to expose the concrete failure reason, beyond its current state and attempt count.
-These are follow-up findings from the fresh test, not implemented capabilities.
+The candidate now recognizes the observed native capacity terminal event separately from candidate
+output. It waits 30, then 60, then at most 120 seconds between capacity retries, bounded by the original
+deadline and cancellable after worker drainage. Every failed launch still consumes the accepted attempt
+budget. Reviewer capacity retries retain the same verified candidate and consume another attempt without
+rerunning the implementer. Native status reports capacity failures and preserves them when blocked.
+No model switching, reset or replacement agreement is part of retry handling. Component tests cover
+these behaviors; a fresh native project run is still needed. The launch skill also explains valid check
+names and omits redundant work units for verification and review already performed by the host.
 
 ## Remediation checklist
 

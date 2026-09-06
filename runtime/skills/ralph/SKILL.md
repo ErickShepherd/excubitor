@@ -16,13 +16,17 @@ only for the owner's explicit new Ralph request.
 
 For a new job, use the owner's request and existing project context to propose
 the goal, manageable work units, and concrete input/output acceptance checks.
+Units should advance the requested deliverable. The host automatically runs final
+checks and independent review; those actions do not need a separate work unit.
 Use only the verification runners advertised in the tool schema. Check that the
 proposed checks distinguish the requested behavior from plausible wrong results.
 Ask only for missing requirements that materially affect the job; do not make
 the owner hand-write a plan or repeat preferences already captured by the host.
 
 Call `ralph_start` with `job` containing `goal`, `units`, and `checks`. Each check
-has a short `name`, an advertised `runner`, and exact `stdin` and `stdout` strings;
+has a short `name` beginning with a letter and containing only letters, digits,
+underscores, periods or hyphens (for example, `empty_input`), an advertised `runner`,
+and exact `stdin` and `stdout` strings;
 `stderr`, `exit_code`, and a shorter `timeout_seconds` are optional. Omit `attempts`
 and `seconds` to use the displayed host defaults unless the owner requested
 different limits within the advertised bounds. The first supported check format

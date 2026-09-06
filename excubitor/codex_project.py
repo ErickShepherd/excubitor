@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import time
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from pathlib import Path
 from typing import Callable
 
@@ -22,6 +22,33 @@ REVIEW_SCHEMA = {
     "properties": {"passed": {"type": "boolean"}, "findings": {"type": "string"}},
     "required": ["passed", "findings"],
 }
+
+
+def _capacity_failure(result):
+    """Recognize the observed native terminal event, never nested tool output."""
+    execution = result.execution
+    if (
+        execution.exit_code != 1
+        or execution.timed_out
+        or execution.output_limited
+        or result.cancelled
+        or not result.drained
+    ):
+        return False
+    try:
+        events = [json.loads(line) for line in execution.stdout.decode().splitlines()]
+        return (
+            bool(events)
+            and all(isinstance(event, dict) for event in events)
+            and (
+                events[-1].get("type") == "turn.failed"
+                and events[-1].get("error")
+                == {"message": "Selected model is at capacity. Please try a different model."}
+                and not any(event.get("type") == "turn.completed" for event in events)
+            )
+        )
+    except (ValueError, UnicodeError):
+        return False
 
 
 class CodexProjectRuntime:
@@ -117,6 +144,8 @@ class CodexProjectRuntime:
             output_limit=2 * 1024 * 1024,
             cancelled=cancel,
         )
+        if label in ("worker", "independent-review") and _capacity_failure(result):
+            result = replace(result, retryable_error="capacity")
         self.calls += 1
         record = {"label": label, **asdict(result)}
         for field in ("stdout", "stderr"):
