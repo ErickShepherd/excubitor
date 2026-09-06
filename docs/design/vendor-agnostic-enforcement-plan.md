@@ -356,8 +356,12 @@ intended version without that warning. The native Windows setting was not edited
 advertised built-in skills, so the adapter now explicitly disables slash-command skills and verifies
 their absence. A native authentication failure can carry a success subtype while its error flag is
 true; the adapter recognizes the actual error envelope and interrupts for sign-in instead of spending
-the remaining attempts. An interactive sign-in helper is prepared. Authentication, provider access,
-native model tool denial and complete Claude job execution remain open.
+the remaining attempts. The proposed interactive sign-in helper was subsequently disabled: the owner
+reports that a new WSL login would disrupt the existing Windows login. The missing-authentication
+diagnostic used an empty, separate WSL profile; it did not test the Windows login. Preserve ordinary
+Windows authentication and do not copy or share its rotating credentials. A supported authentication
+arrangement that preserves those sessions remains unresolved. Authentication, provider access, native
+model tool denial and complete Claude job execution remain open.
 
 A later test with a real Windows executable found that hiding `/init` does not remove the inherited
 WSL binary loader. The loader started but failed before the harmless Windows command completed;

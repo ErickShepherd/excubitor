@@ -955,3 +955,15 @@ Append-only observations from vendor-agnostic enforcement iterations.
   namespace capabilities and failed before dispatch. The corrected bootstrap is root only inside its
   new user namespace, mapped to the unprivileged outer worker; no global registration changes occur.
   Incorporate this tested boundary into the real Claude executor before admitting model tools.
+
+### Preserve the existing Windows Claude login, 2026-09-06
+
+- The owner reports an existing Windows login and that another WSL login would disrupt it. The
+  prepared login helper is now disabled before process launch, and its user instruction is withdrawn.
+- File metadata confirms a Windows credential file exists and the separate D: WSL profile has none.
+  The prior missing-authentication result came from the empty profile, not the Windows installation.
+  No credential contents were inspected, copied, refreshed or changed during this correction.
+- Anthropic documents a long-lived token for unattended scripts, but its creation still requires
+  authorization and the documentation does not guarantee that another login remains intact. Do not
+  mint one or share rotating credentials as an automatic workaround. Authentication coexistence
+  remains open; sandbox development can continue without touching the working Windows login.
