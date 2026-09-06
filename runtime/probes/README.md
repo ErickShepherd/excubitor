@@ -219,6 +219,27 @@ process-tree runner, a separate native MCP read verified the original run and ca
 drainage and unchanged native configuration. A whole-job completion and a successful reporter are
 separate observations; the retained evidence records both the failure and the successful recheck.
 
+The candidate now wires native reconnection to the same watchdog. Each native connection retains its
+own log and outcome; reconnect checks the original agreement and oracle bytes before dispatching.
+Live thread state suppresses duplicate calls without leaving an ended thread permanently attached.
+Closed connections cannot issue another Start. An already used disposable packet cannot offer a
+replacement job, and configuration drift cannot produce a passing completion report.
+
+For a separately authorized rehearsal, a host-prepared packet may set `fault_mode` to `connection`.
+After the first real model worker drains, the controller starts a disclosed test descendant and waits.
+The test server then exits itself, losing the watchdog too. Its marker is bound to that connection's
+unique lifetime, so a resumed server cannot repeat the exit. Resume the exact original native task;
+its `ralph_start` call must reuse the accepted contract and reconcile the old job before another worker.
+This fault does not terminate the user's app, and no process-name search supplies termination authority.
+It tests loss with a live fixture child after a native worker has drained, not death during a model turn.
+
+The new wiring passed Windows component tests with real process death, both absent and retained jobs,
+unchanged authority, other-task exclusion, and no replacement confirmation. A real test server also
+exited only its first lifetime and accepted a later connection. These tests use fixture identity and
+approval; the complete native task-resumption rehearsal is prepared but has not run. Production
+adapters remain unchanged. Fresh native project trust and selected-home storage need explicit scope;
+an old disposable fixture's trust does not carry across a move to another drive.
+
 ## Native process-job access and task persistence
 
 `named_job_access.py --codex ABSOLUTE_CODEX --python ABSOLUTE_PYTHON --output NEW_FOLDER`

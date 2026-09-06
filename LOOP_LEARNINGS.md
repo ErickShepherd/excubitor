@@ -698,3 +698,20 @@ Append-only observations from vendor-agnostic enforcement iterations.
   the tested access denials and containment observation, not native forced-owner-death recovery,
   protected Ralph reconnection, GUI entry points, other writable tools, or cross-vendor support.
   Reports and test artifacts remain in private task storage; production adapters remain unchanged.
+
+### Reconnecting the native supervised candidate, 2026-09-06
+
+- The native demonstration adapter had a reconnect-capable core but no reconnect callback, and its
+  create-once log prevented another connection lifetime. The candidate now dispatches the original
+  watchdog, checks agreement and oracle bytes first, and retains separate logs and outcomes.
+- A remembered attachment is not evidence that a controller thread is still alive. The native action
+  can now ask its host about current thread liveness, while the watchdog lock and kernel observations
+  continue to establish process safety. Closed transports cannot issue another Start.
+- Real Windows process tests complete the original fixture after losing its connection process,
+  both with and without a retained job handle. They preserve original limits, exclude another task,
+  and request no new approval. A test server's injected exit applies only to its original lifetime.
+  These tests use fixture identities; they do not authenticate native task resumption.
+- The prepared native fault runs after the first actual worker drains, with a disclosed fixture child
+  still alive. It exits only its own test server, then requires exact native task resumption. The live
+  rehearsal remains pending; project trust from an old location cannot authorize a relocated fixture.
+  No native application, native trust change, or production installation ran while preparing it.

@@ -220,6 +220,21 @@ It reuses the accepted contract without replanning or another approval; blocked 
 limits. An adapter without a reconnect implementation reports that capability missing. Reconnection
 does not imply that the application can continue working while closed.
 
+The native supervised CLI candidate now supplies that reconnect implementation. Each connection
+rechecks the frozen agreement and original oracles, then dispatches the same watchdog using the stored
+task binding. Logs and outcomes are retained per connection. Actual thread liveness replaces the
+candidate's permanent attachment assumption, while the watchdog's OS lock remains the authority for
+exclusive process ownership. A closed native connection cannot restart anything. Native configuration
+drift stops preparation or dispatch and prevents a passing final report.
+
+Windows component tests exercise this connection path through real owner-process loss with and
+without a retained job handle. The next action completes the original fixture within its unchanged
+attempt budget and without replanning, while another task remains inactive. Those identities and
+approvals are fixtures. A new native CLI rehearsal is prepared to lose the test connection after a
+real worker has drained, with a disclosed fixture child still alive, and resume the exact native task.
+That live rehearsal has not run; neither the component tests nor its prepared scripts close native
+reconnection, all-tool admission, GUI, or cross-vendor support.
+
 Live Windows component tests cover owner death immediately after process creation, watchdog death
 with and without a retained host job handle, repeated watchdog deaths exhausting the shared restart
 limit, and malformed or inaccessible recovery evidence. The native unelevated Windows sandbox has

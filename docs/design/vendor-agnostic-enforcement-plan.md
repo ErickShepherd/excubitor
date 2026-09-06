@@ -192,6 +192,13 @@ identical native configuration without saved credentials. Incomplete tool contex
 Protected same-task Ralph reconnect, full native-tool admission, GUI behavior, and other vendors still
 require direct verification. The full replacement remains unfinished.
 
+The native supervised CLI candidate now connects its Start action's reconnect path to that watchdog,
+retaining the original agreement and oracle bytes across separate connection logs. Windows component
+tests passed through real connection-process death, including a retained kernel handle, without new
+approval or reset limits. Closed connections cannot restart, and ended threads no longer look attached.
+The new native rehearsal and disposable project are prepared; actual native task resumption remains
+pending its exact project-trust and storage authority. No replacement registration or promotion occurred.
+
 ## Remediation checklist
 
 - [x] Record the owner-agreed Ralph-only product scope and default completion behavior; remove the

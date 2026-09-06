@@ -190,6 +190,8 @@ class NativeDemo:
                 "sandbox",
                 "-P",
                 ":read-only",
+                "-c",
+                "log_dir=" + json.dumps(str(self.args.output / "native-logs")),
                 "-C",
                 str(self.project),
                 "--",

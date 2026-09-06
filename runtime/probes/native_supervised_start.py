@@ -1,9 +1,10 @@
 """Disposable native confirmation -> watchdog -> real Codex workers experiment.
 
 Prepare an already trusted fixture, then serve via process-only MCP overrides.
-The native CLI must remain open during this test. No hooks or app registrations
-are installed. Forced controller death is injected once; watchdog death is NOT
-automatically recoverable. This is not production or GUI admission.
+No hooks or app registrations are installed. A new native connection can reconnect
+the same accepted job through the shared watchdog, after exact old-worker drainage.
+Forced controller death is injected once. Native task resumption with this wiring
+still needs a live witness. This is not production or GUI admission.
 """
 
 from __future__ import annotations
@@ -150,8 +151,9 @@ class CrashingDemo(NativeDemo):
             # Actual worker has drained. Simulate an abrupt controller death with
             # a still-live descendant that would write outside the candidate later.
             # The OUTER job must terminate it before restarting the controller.
+            connection_loss = getattr(self.args, "fault_mode", "controller") == "connection"
             child = (
-                "from pathlib import Path; import time; time.sleep(5); "
+                f"from pathlib import Path; import time; time.sleep({600 if connection_loss else 5}); "
                 f"Path({str(self.args.packet / 'orphan-survived')!r}).write_text('bad')"
             )
             subprocess.Popen(
@@ -163,15 +165,24 @@ class CrashingDemo(NativeDemo):
                     "attempt": run.attempts,
                     "worker_drained": result.drained,
                     "contract": run.contract.digest,
+                    "connection": getattr(self.args, "connection", None),
+                    "fault_mode": "connection" if connection_loss else "controller",
                 },
             )
+            if connection_loss:
+                # The serving process observes this exact lifetime's marker and
+                # exits itself. Its watchdog owns this controller and descendant.
+                # The original watchdog deadline remains the outer bound.
+                while True:
+                    time.sleep(1)
             os._exit(77)
         return result
 
 
-def controller(packet, run_id):
+def controller(packet, run_id, connection=None):
     args = settings(packet)
     args.packet = packet
+    args.connection = connection
     args.output = packet / ("controller-" + uuid.uuid4().hex)
     args.output.mkdir()
     store = RunStore(packet / "authority")
@@ -185,13 +196,116 @@ def controller(packet, run_id):
         write(args.output / "finished.json", {"error": f"{type(exc).__name__}: {exc}"})
 
 
+def agreed_job(packet, store, run):
+    """Check the original preview and oracle bytes before any resumed launch."""
+    try:
+        saved = json.loads((packet / "agreed-job.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise RunError("original agreement is missing or unreadable; recovery refused") from exc
+    if saved != json.loads(json.dumps(asdict(run.contract))):
+        raise RunError("reconnect cannot replace the originally agreed job")
+    current = store.get(run.id)
+    if current.contract != run.contract:
+        raise RunError("accepted run changed before dispatch")
+    for check in run.contract.checks:
+        OutputOracle.load(store, check)
+
+
+class ConnectionJobs:
+    """Dispatch the same host-owned watchdog from each admitted connection.
+
+    Thread liveness only suppresses duplicate dispatch in this process. The
+    watchdog's OS lock and kernel reconciliation establish actual worker safety.
+    This class does not authenticate native metadata or create recovery evidence.
+    """
+
+    def __init__(self, packet, store, drive, record):
+        self.packet, self.store, self.drive, self.record = packet, store, drive, record
+        self.threads = {}
+        self.lock = threading.Lock()
+
+    def active(self, run):
+        with self.lock:
+            worker = self.threads.get(run.id)
+            return worker is not None and worker.is_alive()
+
+    def start(self, run):
+        write(self.packet / "agreed-job.json", asdict(run.contract))
+        self._dispatch(run, "start")
+
+    def reconnect(self, run):
+        self._dispatch(run, "reconnect")
+
+    def _dispatch(self, run, kind):
+        agreed_job(self.packet, self.store, run)
+        with self.lock:
+            existing = self.threads.get(run.id)
+            if existing is not None and existing.is_alive():
+                return
+            self.record(
+                {
+                    "event": "dispatch",
+                    "kind": kind,
+                    "run_id": run.id,
+                    "contract": run.contract.digest,
+                    "attempts": self.store.get(run.id).attempts,
+                }
+            )
+            worker = threading.Thread(target=self._drive, args=(run,), daemon=False)
+            self.threads[run.id] = worker
+            worker.start()
+
+    def _drive(self, run):
+        try:
+            self.drive(run)
+        except Exception as exc:
+            self.record({"event": "dispatch_failed", "error": f"{type(exc).__name__}: {exc}"})
+
+    def join(self):
+        with self.lock:
+            workers = list(self.threads.values())
+        for worker in workers:
+            if worker.ident is not None:
+                worker.join()
+
+
+def connection_directory(packet):
+    parent = packet / "connections"
+    parent.mkdir(exist_ok=True)
+    lifetime = parent / uuid.uuid4().hex
+    lifetime.mkdir()
+    return lifetime
+
+
+def connection_fault_ready(packet, lifetime):
+    path = packet / "injected-controller-crash.json"
+    if not path.exists():
+        return False
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except ValueError:
+        return False  # Writer may still be flushing; never act on partial bytes.
+    return (
+        value.get("fault_mode") == "connection"
+        and value.get("connection") == lifetime.name
+        and value.get("worker_drained") is True
+    )
+
+
+def native_config_unchanged(config, packet):
+    try:
+        return config.read_bytes() == (packet / "native-config-before.toml").read_bytes()
+    except OSError:
+        return False
+
+
 def serve(packet):
     args = settings(packet)
     store = RunStore(packet / "authority")
-    workers = []
+    lifetime = connection_directory(packet)
     output_lock = threading.Lock()
     log_lock = threading.Lock()
-    log = (packet / "native.jsonl").open("x", encoding="utf-8")
+    log = (lifetime / "native.jsonl").open("x", encoding="utf-8")
 
     def record(value):
         with log_lock:
@@ -205,6 +319,10 @@ def serve(packet):
             print(json.dumps(value), flush=True)
 
     def plan(binding):
+        if (packet / "agreed-job.json").exists():
+            raise RunError("this disposable packet already has an agreed job; it cannot start another")
+        if not native_config_unchanged(args.native_config, packet):
+            raise RunError("native configuration changed before confirmation; no job will be prepared")
         if Path(binding.project) != args.project.resolve():
             raise RunError("native task does not match the selected disposable project")
         argv = (
@@ -243,6 +361,9 @@ def serve(packet):
             "protected_base_branch": args.base_branch,
         }
         try:
+            agreed_job(packet, store, run)
+            if not native_config_unchanged(args.native_config, packet):
+                raise RunError("native configuration changed; no controller will be launched")
             watchdog = ControllerWatchdog(
                 store,
                 lambda current: (
@@ -255,6 +376,8 @@ def serve(packet):
                     str(packet),
                     "--run-id",
                     current.id,
+                    "--connection",
+                    lifetime.name,
                 ),
                 ROOT,
             )
@@ -270,9 +393,17 @@ def serve(packet):
                 inactive_after_completion=store.lookup(run.contract.binding) is None,
             )
             assert final.state == "complete" and final.attempts >= 4
+            agreed_job(packet, store, final)
             assert reader.collect() == final.candidate
             assert reader.base_commit == args.base_candidate["commit"]
             assert (packet / "injected-controller-crash.json").exists()
+            if getattr(args, "fault_mode", "controller") == "connection":
+                history = store.directory / "supervision" / (run.id + ".controller.jsonl")
+                events = [json.loads(line) for line in history.read_text().splitlines()]
+                assert events[1]["event"] == "drained" and events[1]["reconciled"]
+                assert events[1]["kernel_evidence"]["active"] == 0
+                assert list((packet / "connections").glob("*/injected-connection-exit.json"))
+                report["watchdog_loss_reconciled"] = True
             assert not (packet / "orphan-survived").exists()
             assert args.native_config.read_bytes() == (packet / "native-config-before.toml").read_bytes()
             assert not (args.project / ".codex" / "hooks.json").exists()
@@ -280,28 +411,49 @@ def serve(packet):
         except Exception as exc:
             report["error"] = f"{type(exc).__name__}: {exc}"
         finally:
-            report["native_configuration_unchanged"] = (
-                args.native_config.read_bytes() == (packet / "native-config-before.toml").read_bytes()
-            )
-            write(packet / "result.json", report)
+            report["native_configuration_unchanged"] = native_config_unchanged(args.native_config, packet)
+            if not report["native_configuration_unchanged"]:
+                report["passed"] = False
+                report.setdefault(
+                    "error", "native configuration drift or missing baseline; evidence retained"
+                )
+            write(lifetime / (run.id + "-" + uuid.uuid4().hex + ".json"), report)
+            # Retain all connection outcomes. Only successful completion provides
+            # a reusable top-level packet; a competing/failed reconnect cannot
+            # overwrite that result or prevent later recovery evidence being saved.
+            if report["passed"] and not (packet / "result.json").exists():
+                write(packet / "result.json", report)
             record({"event": "job_finished", "passed": report["passed"], "state": report.get("state")})
 
-    def launch(run):
-        write(packet / "agreed-job.json", asdict(run.contract))
-        worker = threading.Thread(target=run_job, args=(run,), daemon=False)
-        workers.append(worker)
-        worker.start()
+    jobs = ConnectionJobs(packet, store, run_job, record)
+    action = RalphAction(
+        store, emit, codex_binding, plan, jobs.start, reconnect=jobs.reconnect, is_attached=jobs.active
+    )
+    stop_fault = threading.Event()
 
-    action = RalphAction(store, emit, codex_binding, plan, launch)
+    def fault():
+        while not stop_fault.wait(0.05):
+            if connection_fault_ready(packet, lifetime):
+                write(lifetime / "injected-connection-exit.json", {"connection": lifetime.name})
+                # This disposable serving process terminates only itself. It
+                # never searches for or kills the user's application processes.
+                os._exit(78)
+
+    monitor = None
+    if getattr(args, "fault_mode", "controller") == "connection":
+        monitor = threading.Thread(target=fault, daemon=True)
+        monitor.start()
     try:
         for line in sys.stdin:
             message = json.loads(line)
             record({"direction": "in", "message": message})
             action.receive(message)
     finally:
+        stop_fault.set()
+        if monitor is not None:
+            monitor.join()
         action.close()
-        for worker in workers:
-            worker.join()
+        jobs.join()
         log.close()
 
 
@@ -316,13 +468,14 @@ def main():
         command.add_argument("--packet", type=Path, required=True)
         if name == "controller":
             command.add_argument("--run-id", required=True)
+            command.add_argument("--connection")
     args = parser.parse_args()
     if any(isinstance(value, Path) and not value.is_absolute() for value in vars(args).values()):
         parser.error("all paths must be absolute")
     if args.command == "prepare":
         prepare(args)
     elif args.command == "controller":
-        controller(args.packet, args.run_id)
+        controller(args.packet, args.run_id, args.connection)
     else:
         serve(args.packet)
 

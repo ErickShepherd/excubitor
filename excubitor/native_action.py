@@ -25,10 +25,12 @@ class RalphAction:
         plan: Callable[[Binding], tuple[Contract, tuple[OutputOracle, ...]]],
         launch: Callable[[Run], None],
         reconnect: Callable[[Run], None] | None = None,
+        is_attached: Callable[[Run], bool] | None = None,
     ):
         self.gate, self.emit = StartHandshake(store), emit
         self.binding, self.plan, self.launch = binding, plan, launch
         self.reconnect = reconnect
+        self.is_attached = is_attached
         self.attached = set()
         self.pending = {}
         self.form_supported = False
@@ -99,6 +101,8 @@ class RalphAction:
             )
         elif method == "tools/call":
             try:
+                if self.gate.closed:
+                    raise RunError("this native connection is closed")
                 params = message.get("params", {})
                 if params.get("arguments", {}) != {}:
                     raise RunError("Ralph actions accept no approval or authority arguments")
@@ -114,7 +118,12 @@ class RalphAction:
                 else:
                     existing = self.gate.store.lookup(binding)
                     if existing is not None:
-                        if existing.id in self.attached:
+                        attached = (
+                            self.is_attached(existing)
+                            if self.is_attached is not None
+                            else existing.id in self.attached
+                        )
+                        if attached:
                             self.reply(
                                 request_id, f"Ralph is already attached to this task: {existing.state}."
                             )

@@ -173,3 +173,32 @@ def test_blocked_job_is_not_reapproved_or_restarted_by_start(fixture):
     )
     call(new)
     assert not recoveries and store.lookup(binding) == run
+
+
+def test_finished_connection_thread_does_not_leave_a_stale_attachment(fixture):
+    store, binding, action, messages, launches = fixture
+    alive, recoveries = [True], []
+    action.is_attached = lambda _: alive[0]
+    action.reconnect = recoveries.append
+    call(action)
+    accept(action, messages)
+    call(action)
+    assert not recoveries
+    alive[0] = False
+    call(action)
+    assert recoveries == [store.lookup(binding)]
+    assert len(launches) == 1
+
+
+def test_closed_connection_cannot_reconnect_or_start_again(fixture):
+    store, binding, action, messages, launches = fixture
+    call(action)
+    accept(action, messages)
+    original = store.lookup(binding)
+    recoveries = []
+    action.reconnect = recoveries.append
+    action.is_attached = lambda _: False
+    action.close()
+    call(action)
+    assert messages[-1]["result"]["isError"] and not recoveries
+    assert store.lookup(binding) == original and len(launches) == 1
