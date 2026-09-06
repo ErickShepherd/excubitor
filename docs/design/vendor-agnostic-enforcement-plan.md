@@ -318,6 +318,22 @@ crash recovery. Claude Code's Linux build matching the existing Windows version 
 and its version/help commands ran; the new guest is not authenticated. Native Claude job completion,
 the reusable launcher and GUI integration remain open.
 
+The Claude project adapter now connects the shared backend to a required isolated executor. It
+starts a fresh native session for each worker and reviewer, retains the selected model, carries the
+remaining original deadline and cancellation signal, and runs frozen checks directly in read-only
+mode. The reviewer has file-reading tools only; executable checks belong to the host. Native session,
+model, tool and terminal-result metadata must match before a successful execution can be accepted,
+and the review verdict must come from the exact structured-output object. Malformed or conflicting
+native evidence stops the host path instead of becoming candidate repair feedback. Execution evidence
+is reserved before dispatch and retained before interpretation.
+
+These are protocol component results, with fixtures based on the installed CLI help and current
+[headless documentation](https://code.claude.com/docs/en/headless). They do not admit the CLI flag
+combination, native Bash sandbox, network/credential boundary, native session metadata or complete
+Claude workflow. In particular, post-execution metadata checking cannot protect the first tool call;
+the supplied executor must already enforce every exposed tool boundary. There is no direct process
+fallback or live registration in this adapter. Authenticated native testing remains outstanding.
+
 ## Remediation checklist
 
 - [x] Record the owner-agreed Ralph-only product scope and default completion behavior; remove the

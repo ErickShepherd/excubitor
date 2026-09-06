@@ -906,3 +906,18 @@ Append-only observations from vendor-agnostic enforcement iterations.
   Verified byte-range download and a temporary SSH setup tunnel resolved transfer/setup problems.
   The restricted execution session has no general egress; authentication and provider-only traffic
   still require their own checked path. Claude version/help success is not a completed Claude job.
+
+### Claude project transport candidate, 2026-09-06
+
+- Native help and first-party documentation support noninteractive permission denial, explicit tools,
+  fresh sessions, disabled customizations and structured results. Flags alone are not an isolation
+  witness. The adapter requires an admitted executor and never falls back to direct local execution.
+- The independent reviewer has only file-reading tools. The host executes the frozen acceptance
+  programs separately under read-only candidate access. Model prose and nested tool output cannot
+  substitute for a uniquely completed native review with the required structured fields.
+- Component fixtures reject changed model/tool/session metadata, duplicate JSON keys, conflicting
+  terminal messages, prose verdicts and unsuccessful or undrained executions. These tests do not prove
+  the installed native CLI actually emits the expected events with this complete flag combination.
+- Host memory remained below the 4 GiB guest plus 1 GiB headroom threshold. The private VM helper now
+  enforces that admission internally before creating a session packet. No Claude login or model job
+  was attempted during this continuation; the earlier diagnostic packets remain unchanged.
