@@ -222,10 +222,25 @@ does not imply that the application can continue working while closed.
 
 Live Windows component tests cover owner death immediately after process creation, watchdog death
 with and without a retained host job handle, repeated watchdog deaths exhausting the shared restart
-limit, and malformed or inaccessible recovery evidence. Native sandbox isolation of the named job
-and actual same-task native reconnect remain unverified. In particular, an unrestricted worker running
-as the host account can access host-owned objects; every native tool must be admitted separately.
+limit, and malformed or inaccessible recovery evidence. The native unelevated Windows sandbox has
+since failed the named-job isolation probe: it denied termination, assignment, permission changes,
+and external oracle changes, but allowed a query handle. Such a handle can keep the job alive after
+its host closes its own handle. The probe opened and closed it; it did not demonstrate a malicious
+native worker retaining it through host death. This mode remains excluded by the metadata parser.
+The elevated sandbox still requires a separate access-denial witness; neither its name nor the
+unelevated mode's successful filesystem denials prove that boundary. Every native tool needs admission.
 Production adapters still do not import these components.
+
+The native app-server preserved a seeded test task's identity across forced server termination and
+`thread/resume`, while another task in the same project received a different identity. Direct MCP
+calls supplied only task identity and a progress token, without the interactive CLI's turn envelope;
+the approval parser rejected all three calls. An empty newly started task had no saved rollout, so
+the probe used the native history-injection API with clearly labelled, non-authoritative fixture text.
+This verifies protocol persistence, not owner confirmation, protected Ralph reconnection, or GUI support.
+The final state comparison failed because Codex automatically saved project trust in each isolated
+fixture home. Those entries and failed reports remain for review. The probe now refuses fresh trust
+and compares config after each native lifetime; this correction is verified offline only. No model
+turn or saved tool registration was involved, and the owner's normal native home was not used.
 
 The atomic creation mechanism follows Microsoft's
 [job-list attribute guidance](https://devblogs.microsoft.com/oldnewthing/20230209-00/?p=107812).

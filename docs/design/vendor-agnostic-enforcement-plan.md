@@ -173,8 +173,15 @@ created together with its controller process. Tests kill the owner immediately a
 and replace watchdogs with both absent and retained kernel objects, and confirm repeated replacement
 cannot reset the restart budget. Malformed history and denied kernel access preserve protection.
 The native action can reuse the original accepted job through an adapter's reconnect callback.
-These are component results: native same-task reconnect, worker denial of access to named jobs, GUI
-behavior, and other vendors still require direct verification. The full replacement remains unfinished.
+These are component results. A subsequent actual native sandbox test rejected the unelevated Windows
+mode: workers could open query handles to host-owned jobs despite denied mutation access. That mode
+was already excluded from the approval parser; regression coverage now preserves the exclusion.
+Elevated-mode isolation remains unverified. A native app-server experiment preserved a seeded task's
+identity through server loss and resumption, but direct MCP calls lacked the required approval context
+and were correctly rejected. Its final config comparison failed: Codex automatically trusted the
+disposable project in each isolated test home. Those entries remain for review; the corrected probe
+refuses fresh enrollment and has only offline preflight coverage. Protected same-task Ralph reconnect,
+GUI behavior, and other vendors still require direct verification. The full replacement remains unfinished.
 
 ## Remediation checklist
 

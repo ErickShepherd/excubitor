@@ -1,8 +1,9 @@
 """Windows kernel ownership primitives; no service or hook registration.
 
-Named jobs are ephemeral, exact-run resources. Only the creating host account
-receives access. A native adapter must separately prove workers cannot run as
-that unrestricted account. Names and Windows process jobs are not sandboxes.
+Named jobs are ephemeral, exact-run resources. Their access list grants only the
+creating host account. An adapter must prove workers cannot open even a query
+handle: same-account write-restricted tokens can retain read access and keep the
+job alive. Names and Windows process jobs are not sandboxes.
 """
 
 from __future__ import annotations

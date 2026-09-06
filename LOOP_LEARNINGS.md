@@ -628,3 +628,30 @@ Append-only observations from vendor-agnostic enforcement iterations.
   environmental limitation; a zero test exit alone does not explain a native exception.
 - Native sandbox isolation of named jobs and actual native same-task reconnect still require evidence.
   Component recovery does not establish app-exit survival, GUI support, or a completed product.
+
+### Native isolation and reconnect limits, 2026-09-06
+
+- With the game closed, all 29 process/recovery tests passed without the earlier exception notices.
+  The later admission/recovery run passed 50 tests and 7 subtests without those notices. This supports
+  the environmental correlation; no game-specific behavior belongs in Excubitor.
+- The actual unelevated Windows sandbox denied writes to the external acceptance file and mutation
+  access to the host-owned named job, but allowed a query handle. Read access can retain the object's
+  lifetime after host death. The probe correctly failed; the approval parser already excludes this
+  mode and now has regression coverage for that exclusion. Elevated-mode isolation is still unverified.
+- A native app-server task with no history had no saved rollout to resume. Explicitly labelled fixture
+  history through the native injection API made the task persistent. Its identity survived server loss;
+  another task in the same project kept a distinct identity. Both server lifetimes drained completely.
+- Direct app-server MCP calls supplied a task ID and progress token, without the interactive CLI's
+  active-turn envelope. All such calls failed the approval parser. Protocol identity does not establish
+  protected Ralph resumption or authentic authority on an arbitrary connection.
+- The final config comparison caught Codex saving project trust automatically inside the fresh isolated
+  test homes. This repeats the earlier fresh-project enrollment hazard. Preserve the failed packets
+  and entries for owner review; do not count phase-level RPC success as a clean native run. The updated
+  driver requires an already trusted, separately approved disposable profile, checks configuration after
+  each lifetime, and has offline refusal coverage. It has not yet been rerun against an approved fixture.
+- All new task state and temporary files use the relocated task storage. The normal native profile was
+  not used by these probes. No model turn, saved MCP registration, hook, or sandbox provisioning ran.
+- The commit broker classified the reconnect probe's synthetic protocol-message example as a model
+  conversation record. Following its private-retention instruction, the whole exploratory probe and
+  its tests remain in private task storage. The broker and its policy are unchanged. Repository docs
+  retain the findings; the native named-job probe and admission-parser regression remain code candidates.

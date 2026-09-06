@@ -182,6 +182,9 @@ class TestApprovalAcceptance(unittest.TestCase):
         self.assertEqual(codex_binding(meta), self.binding)
         for key, value in (
             ("session_id", "different"),
+            ("thread_id", "different"),
+            ("sandbox", "windows_unelevated"),
+            ("sandbox", "none"),
             ("sandbox_mode", "danger-full-access"),
             ("auto_review_enabled", True),
             ("workspaces", {}),
@@ -193,6 +196,10 @@ class TestApprovalAcceptance(unittest.TestCase):
                 codex_binding(changed)
         with self.assertRaises(NotReady):
             codex_binding({"arguments": meta})
+        # Observed app-server direct MCP calls have no active-turn envelope.
+        # Their task ID alone must never acquire the CLI approval path's authority.
+        with self.assertRaises(NotReady):
+            codex_binding({"threadId": "native-task", "progressToken": 1})
 
 
 if __name__ == "__main__":

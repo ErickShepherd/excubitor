@@ -218,3 +218,56 @@ report rather than relabeling it successful. After Windows Git inspection was mo
 process-tree runner, a separate native MCP read verified the original run and candidate with clean
 drainage and unchanged native configuration. A whole-job completion and a successful reporter are
 separate observations; the retained evidence records both the failure and the successful recheck.
+
+## Native process-job access and task persistence
+
+`named_job_access.py --codex ABSOLUTE_CODEX --python ABSOLUTE_PYTHON --output NEW_FOLDER`
+tests the unelevated Windows sandbox without model work. The host creates one exact private job and
+an external acceptance file. The native child writes an ordinary project file, attempts to change
+the acceptance file, and attempts query, terminate, assignment, DACL, and owner access to the job.
+It only opens and closes handles; it never changes the kernel object's permissions or terminates it.
+A nonexistent random object is a control for distinguishing absence from access denial.
+
+Codex CLI 0.153.4 on Windows denied all requested mutation access and preserved the acceptance file,
+but allowed a query handle. The report correctly fails and exits nonzero. Even a query handle can
+retain a job's lifetime, so this mode cannot be admitted for recovery based on last-handle closure.
+Do not weaken that condition to turn the report green. The current approval parser already rejects
+unelevated mode. This probe does not provision or test the elevated Windows sandbox.
+
+The private `native_reconnect.py` experiment uses the installed app-server protocol and a read-only
+MCP observer with process-only registration. The commit broker classified its synthetic protocol
+message as a conversation record and required private retention. The complete probe and its tests
+remain in local task storage; they are not shipped in this repository. The observations below are
+retained findings, not instructions to reconstruct or enroll a native fixture automatically.
+Use only an owner-approved disposable profile containing its one exact existing project trust entry
+and no credentials or other saved settings. The driver refuses missing trust, parent/sibling trust,
+and general-purpose profiles before starting Codex. It preserves and compares native config after
+each lifetime and stops on drift. Existing trust alone is not owner authorization for the experiment.
+It creates a native task, injects explicitly labelled fixture text through the native history API,
+observes tool metadata, terminates the disposable server, drains its process tree, then resumes the
+same task in a new server lifetime. A second task in the same project checks identity separation.
+The seed provides persistence; it is never an owner approval, model response, or acceptance result.
+An earlier empty-task experiment had no saved rollout and could not resume; preserve failed packets.
+
+On the tested CLI, task identity and project survived resumption, and the other task kept a distinct
+identity. Direct tool calls supplied a task ID and progress token without the active-turn context
+needed by the approval parser; all were rejected. The final state comparison caught native automatic
+project-trust writes in each formerly fresh isolated profile. Those failed packets and trust entries
+remain for review. Earlier phase-success flags describe only RPC completion. The new preflight refusal
+is tested offline; the changed driver has not been rerun against a newly approved native fixture.
+An identity report explicitly leaves
+`ralph_reconnect_verified` false. It does not prove native confirmation, autonomous continuation,
+protected-store recovery, GUI support, or authentic identity on an arbitrary client connection.
+
+The access probe creates a fresh native home and temporary directory inside the output folder. The
+reconnect probe now requires a pre-existing, separately approved fixture home and uses a fresh output
+and temporary directory. Both set native state locations only in child environments, use no
+credentials, and install no hooks. Their reports stay private because they contain local paths and native metadata.
+All child processes are bounded by the Windows tree runner. Native app-server startup can make
+unauthenticated background catalog requests; this is not a claim of a network-isolated host process.
+New native setup, registration, and trust still need their own authority.
+
+References: [native app-server protocol](https://learn.chatgpt.com/docs/app-server),
+[native state locations](https://learn.chatgpt.com/docs/config-file/environment-variables),
+[Windows sandbox implementations](https://learn.chatgpt.com/docs/windows/windows-sandbox), and
+[Windows job lifetime](https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects).
