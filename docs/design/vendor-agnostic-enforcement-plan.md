@@ -168,6 +168,14 @@ recheck verified the completed candidate and unchanged configuration with all in
 drained. This does not establish recovery after losing the watchdog, app-exit survival, GUI behavior,
 full native-tool admission, or another vendor. No persistent hook or tool registration was added.
 
+The Windows component can now reconcile loss of the watchdog using an exact host-owned kernel job,
+created together with its controller process. Tests kill the owner immediately after creation, kill
+and replace watchdogs with both absent and retained kernel objects, and confirm repeated replacement
+cannot reset the restart budget. Malformed history and denied kernel access preserve protection.
+The native action can reuse the original accepted job through an adapter's reconnect callback.
+These are component results: native same-task reconnect, worker denial of access to named jobs, GUI
+behavior, and other vendors still require direct verification. The full replacement remains unfinished.
+
 ## Remediation checklist
 
 - [x] Record the owner-agreed Ralph-only product scope and default completion behavior; remove the

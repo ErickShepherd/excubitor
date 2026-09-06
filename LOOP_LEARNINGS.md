@@ -609,3 +609,22 @@ Append-only observations from vendor-agnostic enforcement iterations.
   environment. A separate native MCP inspection using the correction verified the completed candidate
   and final drainage. Native configuration remained byte-identical; no hook or permanent tool allowance
   was installed. The full GUI/product rollout and takeover after watchdog loss remain unverified.
+
+### Recoverable Windows ownership, 2026-09-05
+
+- Creating a suspended process and assigning it to a job in a later call leaves an orphan window if
+  the owner dies between calls. The job-list process attribute performs both in one Windows operation.
+  A real owner-death test now verifies that even a never-resumed root is terminated.
+- Named host-owned kernel jobs let a replacement watchdog reconcile its exact old tree under the
+  same lock. Reopen access denial is not absence evidence. Global object names avoid false absence
+  across Windows login sessions, without registering any global hook or service.
+- An empty job count can precede complete process termination and release of the controller lock.
+  Recovery also waits for the snapshotted process handles to signal before resuming the original job.
+- Three watchdog lifetimes cannot reset the controller launch budget. Original attempts, deadline,
+  and checks remain fixed; legacy or malformed histories cannot authorize another launch.
+- Windows test runs printed handled access-violation notices despite passing assertions. An observation
+  handler, which neither handled nor suppressed exceptions, attributed them to a loaded GameGuard
+  module in both the previous process backend and the new backend. Preserve the noisy logs and this
+  environmental limitation; a zero test exit alone does not explain a native exception.
+- Native sandbox isolation of named jobs and actual native same-task reconnect still require evidence.
+  Component recovery does not establish app-exit survival, GUI support, or a completed product.

@@ -24,9 +24,12 @@ class RalphAction:
         binding: Callable[[dict], Binding],
         plan: Callable[[Binding], tuple[Contract, tuple[OutputOracle, ...]]],
         launch: Callable[[Run], None],
+        reconnect: Callable[[Run], None] | None = None,
     ):
         self.gate, self.emit = StartHandshake(store), emit
         self.binding, self.plan, self.launch = binding, plan, launch
+        self.reconnect = reconnect
+        self.attached = set()
         self.pending = {}
         self.form_supported = False
 
@@ -82,8 +85,8 @@ class RalphAction:
                             for name, description in (
                                 (
                                     "ralph_start",
-                                    "Preview the agreed Ralph job and request native owner confirmation. "
-                                "Starts only after acceptance. Ordinary development needs no Ralph action.",
+                                    "Confirm a new Ralph job or reconnect this task's existing job "
+                                    "within its original limits. Ordinary development needs no Ralph action.",
                                 ),
                                 (
                                     "ralph_status",
@@ -109,6 +112,29 @@ class RalphAction:
                         request_id, f"Ralph is {run.state}." if run else "No active Ralph job in this task."
                     )
                 else:
+                    existing = self.gate.store.lookup(binding)
+                    if existing is not None:
+                        if existing.id in self.attached:
+                            self.reply(
+                                request_id, f"Ralph is already attached to this task: {existing.state}."
+                            )
+                        elif existing.state not in ("running", "interrupted"):
+                            self.reply(
+                                request_id, f"Ralph is {existing.state}; its original limits remain in force."
+                            )
+                        elif self.reconnect is None:
+                            raise RunError(
+                                "this native adapter does not yet support reconnecting an existing job"
+                            )
+                        else:
+                            self.reconnect(existing)
+                            self.attached.add(existing.id)
+                            self.reply(
+                                request_id,
+                                "Reconnecting the agreed Ralph job. The controller will check "
+                                "old-worker shutdown before proceeding within the original limits.",
+                            )
+                        return
                     if not self.form_supported:
                         raise RunError("this native connection does not provide owner form confirmation")
                     contract, oracles = self.plan(binding)
@@ -134,6 +160,7 @@ class RalphAction:
                     self.reply(original, "Ralph was not started.")
                 else:
                     self.launch(run)
+                    self.attached.add(run.id)
                     self.reply(
                         original, "Ralph started for the confirmed job. It will run within the agreed limits."
                     )

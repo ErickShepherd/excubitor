@@ -1,7 +1,7 @@
 """Bounded Windows process trees for trusted host adapters. This is NOT a sandbox.
 
-CPython's Windows launcher creates the root suspended. It is assigned to a job
-before any candidate instruction runs. Only stdin/stdout/stderr handles are
+Windows creates the root suspended and already assigned to its job in one call.
+No create-then-assign crash window exists. Only stdin/stdout/stderr handles are
 inherited. Closing the controller's non-inherited job handle kills descendants.
 Native brokers that launch processes outside this tree require separate admission.
 """
@@ -9,7 +9,6 @@ Native brokers that launch processes outside this tree require separate admissio
 from __future__ import annotations
 
 import os
-import subprocess
 import threading
 import time
 from dataclasses import dataclass
@@ -17,6 +16,7 @@ from pathlib import Path
 
 from excubitor.acceptance import Execution
 from excubitor.runs import RunError
+from excubitor.windows_jobs import create_job, create_process_in_job, valid_name
 
 
 @dataclass(frozen=True)
@@ -46,6 +46,7 @@ class WindowsProcessTree:
         cancelled: threading.Event | None = None,
         terminate_on_root_exit: bool = False,
         env: dict[str, str] | None = None,
+        job_name: str | None = None,
     ) -> ProcessResult:
         if os.name != "nt":
             raise RunError("process-tree backend currently requires CPython on Windows")
@@ -76,10 +77,14 @@ class WindowsProcessTree:
             raise ValueError("invalid bounded process request")
         if cancelled is not None and cancelled.is_set():
             return ProcessResult(Execution(None, b"", b"", 0), True, True, 0)
-        return _windows_run(argv, cwd, stdin, timeout, output_limit, cancelled, terminate_on_root_exit, env)
+        if job_name is not None:
+            valid_name(job_name)
+        return _windows_run(
+            argv, cwd, stdin, timeout, output_limit, cancelled, terminate_on_root_exit, env, job_name
+        )
 
 
-def _windows_run(argv, cwd, stdin, timeout, output_limit, cancelled, terminate_on_root_exit, env):
+def _windows_run(argv, cwd, stdin, timeout, output_limit, cancelled, terminate_on_root_exit, env, job_name):
     import _winapi
     import ctypes as c
     import msvcrt
@@ -117,11 +122,12 @@ def _windows_run(argv, cwd, stdin, timeout, output_limit, cancelled, terminate_o
             ("terminated", w.DWORD),
         ]
 
+    class Members(c.Structure):
+        _fields_ = [("assigned", w.DWORD), ("count", w.DWORD), ("ids", c.c_size_t * 64)]
+
     kernel = c.WinDLL("kernel32", use_last_error=True)
     signatures = {
-        "CreateJobObjectW": ([c.c_void_p, w.LPCWSTR], w.HANDLE),
         "SetInformationJobObject": ([w.HANDLE, c.c_int, c.c_void_p, w.DWORD], w.BOOL),
-        "AssignProcessToJobObject": ([w.HANDLE, w.HANDLE], w.BOOL),
         "QueryInformationJobObject": ([w.HANDLE, c.c_int, c.c_void_p, w.DWORD, c.c_void_p], w.BOOL),
         "TerminateJobObject": ([w.HANDLE, w.UINT], w.BOOL),
         "ResumeThread": ([w.HANDLE], w.DWORD),
@@ -134,8 +140,7 @@ def _windows_run(argv, cwd, stdin, timeout, output_limit, cancelled, terminate_o
         if not ok:
             raise c.WinError(c.get_last_error())
 
-    job = kernel.CreateJobObjectW(None, None)
-    require(job)
+    job = create_job(job_name)
     handles, descriptors, threads = [], set(), []
     process = None
     started = time.monotonic()
@@ -186,9 +191,6 @@ def _windows_run(argv, cwd, stdin, timeout, output_limit, cancelled, terminate_o
         result = Accounting()
         require(kernel.QueryInformationJobObject(job, 1, c.byref(result), c.sizeof(result), None))
 
-        class Members(c.Structure):
-            _fields_ = [("assigned", w.DWORD), ("count", w.DWORD), ("ids", c.c_size_t * 64)]
-
         members = Members()
         require(kernel.QueryInformationJobObject(job, 3, c.byref(members), c.sizeof(members), None))
         observed_pids.update(members.ids[: members.count])
@@ -206,23 +208,8 @@ def _windows_run(argv, cwd, stdin, timeout, output_limit, cancelled, terminate_o
         child_handles = [msvcrt.get_osfhandle(fd) for fd in child_fds]
         for handle in child_handles:
             os.set_handle_inheritable(handle, True)
-        startup = subprocess.STARTUPINFO()
-        startup.dwFlags = subprocess.STARTF_USESTDHANDLES
-        startup.hStdInput, startup.hStdOutput, startup.hStdError = child_handles
-        startup.lpAttributeList = {"handle_list": child_handles}
-        process, primary_thread, _, _ = _winapi.CreateProcess(
-            argv[0],
-            subprocess.list2cmdline(argv),
-            None,
-            None,
-            True,
-            0x4 | 0x08000000,
-            env,
-            str(cwd),
-            startup,  # suspended + no visible window
-        )
+        process, primary_thread, _ = create_process_in_job(argv, cwd, env, child_handles, job)
         handles.extend((process, primary_thread))
-        require(kernel.AssignProcessToJobObject(job, process))
         for fd in child_fds:
             close_fd(fd)
         threads = [
@@ -267,7 +254,7 @@ def _windows_run(argv, cwd, stdin, timeout, output_limit, cancelled, terminate_o
         )
         return ProcessResult(execution, was_cancelled, True, state.total, tuple(sorted(observed_pids)))
     finally:
-        # Also covers a failed assignment: the root is still suspended at that point.
+        # Even a suspended root already belongs to the job if this controller dies.
         if process is not None and _winapi.GetExitCodeProcess(process) == 259:
             _winapi.TerminateProcess(process, 1)
         kernel.TerminateJobObject(job, 1)

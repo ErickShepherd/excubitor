@@ -123,3 +123,53 @@ def test_status_is_exact_scope_and_does_not_create_a_run(fixture):
     assert "No active" in messages[-1]["result"]["content"][0]["text"]
     call(action, name="ralph_status")
     assert "running" in messages[-1]["result"]["content"][0]["text"]
+
+
+def test_reconnect_reuses_exact_authority_without_reapproval_or_replanning(fixture):
+    store, binding, action, messages, launches = fixture
+    call(action)
+    accept(action, messages)
+    original = store.lookup(binding)
+    action.close()
+    recoveries = []
+
+    def no_new_plan(_):
+        raise AssertionError("reconnection must never replace the approved plan")
+
+    new = RalphAction(
+        store, messages.append, action.binding, no_new_plan, launches.append, reconnect=recoveries.append
+    )
+    call(new)
+    assert recoveries == [original] and len(launches) == 1
+    assert store.lookup(binding) == original
+    assert "Reconnecting" in messages[-1]["result"]["content"][0]["text"]
+    call(new)
+    assert recoveries == [original]  # Duplicate native actions do not redispatch.
+
+
+def test_another_task_cannot_reconnect_a_run(fixture):
+    store, binding, action, messages, launches = fixture
+    call(action)
+    accept(action, messages)
+    recoveries = []
+    new = RalphAction(
+        store, messages.append, action.binding, action.plan, launches.append, reconnect=recoveries.append
+    )
+    call(new, task="unrelated")
+    assert not recoveries and store.lookup(binding).enforces
+
+
+def test_blocked_job_is_not_reapproved_or_restarted_by_start(fixture):
+    store, binding, action, messages, launches = fixture
+    call(action)
+    accept(action, messages)
+    run = store.lookup(binding)
+    for _ in range(run.contract.max_attempts + 1):
+        run = store.begin_attempt(run)
+    assert run.state == "blocked"
+    recoveries = []
+    new = RalphAction(
+        store, messages.append, action.binding, action.plan, launches.append, reconnect=recoveries.append
+    )
+    call(new)
+    assert not recoveries and store.lookup(binding) == run

@@ -177,8 +177,8 @@ Current official references describe capabilities, not support certification:
 - [Claude Code hooks](https://code.claude.com/docs/en/hooks): elicitation hooks can automatically answer
   a form and modify its result, so that host needs a separate approval-path assessment.
 
-The next implementation must complete mode admission, recovery after losing the watchdog itself,
-and the production in-app launcher. The native CLI demonstration
+The next native integration must complete mode admission, verify recovery after losing the watchdog,
+and provide the production in-app launcher. The native CLI demonstration
 uses a trusted test parent, not a registered owner-facing activation endpoint. GUI behavior and other
 vendors still require their own adapters and evidence. Replacement registration and trust remain separate.
 
@@ -201,13 +201,38 @@ It preserves the original journal bytes, including a torn final line, in a separ
 The resumed supervisor consumes the next original attempt and reloads original acceptance definitions.
 No successful check or review from the interrupted attempt can authorize the new candidate.
 
-At most two controller restarts are allowed. Original attempts and deadline remain unchanged. A
-handled admission error is surfaced without retrying the denied operation. Cancellation releases the
-run only after drainage. If the watchdog itself dies, its Windows job kills descendants, but a future
-watchdog refuses the existing history: the missing durable drainage acknowledgement remains unresolved.
-This conservative boundary is deliberate. A timestamp, empty process-name search, or copied history
-does not prove safe takeover. Automatic recovery across app/watchdog loss still needs native ownership
-and drainage evidence. The candidate does not run after an arbitrary app exit by assumption.
+At most two controller restarts are allowed across all watchdog lifetimes. Original attempts and
+deadline remain unchanged. A handled admission error is surfaced without retrying the denied operation.
+Cancellation releases the run only after drainage. Each launch now records an exact named Windows job
+whose access list permits only the creating host account. Windows assigns the suspended root to that
+job during process creation, closing the orphan window between creation and a later assignment.
+
+A replacement watchdog holds the same exclusive lock and reconciles the recorded kernel object.
+An existing object must have the expected owner and access list, and its processes must terminate
+before resumption. Kernel-confirmed absence is usable only for this recorded, atomically assigned job.
+The global Windows object namespace prevents another login session from mistaking a live object for
+an absent one; it does not install a global dispatcher or hook. Access denial, changed permissions,
+malformed history, reused names, and legacy histories without ownership evidence refuse recovery.
+Timestamp and process-name searches provide no authority. Historical journals remain unchanged.
+
+`RalphAction` can ask an admitted adapter to reconnect an existing job in the same native task.
+It reuses the accepted contract without replanning or another approval; blocked work cannot reset its
+limits. An adapter without a reconnect implementation reports that capability missing. Reconnection
+does not imply that the application can continue working while closed.
+
+Live Windows component tests cover owner death immediately after process creation, watchdog death
+with and without a retained host job handle, repeated watchdog deaths exhausting the shared restart
+limit, and malformed or inaccessible recovery evidence. Native sandbox isolation of the named job
+and actual same-task native reconnect remain unverified. In particular, an unrestricted worker running
+as the host account can access host-owned objects; every native tool must be admitted separately.
+Production adapters still do not import these components.
+
+The atomic creation mechanism follows Microsoft's
+[job-list attribute guidance](https://devblogs.microsoft.com/oldnewthing/20230209-00/?p=107812).
+The recovery conditions use the documented
+[job lifetime](https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects),
+[job access controls](https://learn.microsoft.com/en-us/windows/win32/procthread/job-object-security-and-access-rights),
+and [object namespaces](https://learn.microsoft.com/en-us/windows/win32/termserv/kernel-object-namespaces).
 
 The connected Windows CLI experiment completed in four attempts: a real worker ran, the controller
 was forcibly terminated with a live descendant, the watchdog drained that tree and restarted, and
