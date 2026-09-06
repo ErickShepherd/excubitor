@@ -232,7 +232,24 @@ Codex CLI 0.153.4 on Windows denied all requested mutation access and preserved 
 but allowed a query handle. The report correctly fails and exits nonzero. Even a query handle can
 retain a job's lifetime, so this mode cannot be admitted for recovery based on last-handle closure.
 Do not weaken that condition to turn the report green. The current approval parser already rejects
-unelevated mode. This probe does not provision or test the elevated Windows sandbox.
+unelevated mode. The later token diagnostic confirmed the worker and host share the same account
+and medium integrity level; it also observed the exact worker in the host's process job. This rules
+out a simple integrity-label separation at the existing levels. Token identifiers stay in private reports.
+
+An explicit `--existing-elevated-home ABSOLUTE_HOME` option prepares reuse of an already provisioned
+native sandbox. It is not yet live-verified. The read-only prerequisite refuses missing/unsupported
+setup and retains only hashes of native config, setup-marker, and sandbox credential bytes. Those
+hashes must match after execution, and the real worker must be observed in the host's kernel job.
+Offline tests cover refusal without setup and detection of changed protected files. No credential
+content is copied, and no explicit setup or repair command is issued. Existing files do not establish
+native readiness; stop on any native setup/elevation request or denial rather than approving or retrying it.
+
+This option can make Codex write native runtime files in the selected existing home. It requires
+storage authority for that location; it cannot satisfy a different-drive-only rule by itself.
+The test project, report, SQLite state, normal CLI logs, and temporary directory remain under the
+new output folder. Native sandbox/helper paths remain native-managed under the selected home.
+The default mode still creates all native state beneath the output folder and has been exercised
+only with the unelevated implementation. Neither mode certifies non-shell native tools.
 
 The private `native_reconnect.py` experiment uses the installed app-server protocol and a read-only
 MCP observer with process-only registration. The commit broker classified its synthetic protocol

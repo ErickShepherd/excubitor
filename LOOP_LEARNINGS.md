@@ -668,3 +668,18 @@ Append-only observations from vendor-agnostic enforcement iterations.
   There were no saved credentials, model turns, permanent tool registrations, hooks, or sandbox setup.
   The result proves protocol identity persistence with unchanged approved fixture settings. It does
   not establish protected Ralph resumption, elevated-worker isolation, GUI support, or another vendor.
+
+### Native Windows identity and existing-sandbox prerequisites, 2026-09-06
+
+- The native unelevated worker and its host share the same user SID and medium integrity level.
+  Its actual process was observed in the host kernel job, and the whole tree drained. Query access
+  remained possible while mutation and acceptance-file writes were denied. A label-only distinction
+  at the existing integrity level cannot close this gap; no weaker mode was admitted.
+- The access probe can now prepare reuse of an already provisioned elevated native home. Its
+  prerequisite checks perform no setup and retain only hashes of config, setup marker, and native
+  sandbox credentials. Offline tests cover missing setup, unsupported state, and protected-file drift.
+  That execution mode is not live-verified. Existing native support files can still be written in the
+  selected home, so a storage restriction covering that drive must be resolved before invocation.
+- The exact existing-sandbox test is prepared in private task storage. No new Windows account,
+  firewall configuration, credential copy, or native installation was performed. Native approval
+  context and full protected reconnect remain open; synthetic identities are not a substitute.

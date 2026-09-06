@@ -231,6 +231,13 @@ The elevated sandbox still requires a separate access-denial witness; neither it
 unelevated mode's successful filesystem denials prove that boundary. Every native tool needs admission.
 Production adapters still do not import these components.
 
+The native token diagnostic confirmed that the unelevated worker shares both the host's Windows
+account and its medium integrity level, and that this exact worker appears in the host job. Windows
+integrity checks distinguish lower-level callers, so changing the job's label at the existing level
+would not separate these two tokens. The candidate therefore retains its elevated-only admission
+requirement. Reuse of an existing elevated sandbox has a prepared prerequisite and fingerprint check;
+it has not been executed, and native runtime writes require authority for the selected home location.
+
 The native app-server preserved a seeded test task's identity across forced server termination and
 `thread/resume`, while another task in the same project received a different identity. Direct MCP
 calls supplied only task identity and a progress token, without the interactive CLI's turn envelope;
