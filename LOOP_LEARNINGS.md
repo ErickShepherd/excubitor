@@ -921,3 +921,26 @@ Append-only observations from vendor-agnostic enforcement iterations.
 - Host memory remained below the 4 GiB guest plus 1 GiB headroom threshold. The private VM helper now
   enforces that admission internally before creating a session packet. No Claude login or model job
   was attempted during this continuation; the earlier diagnostic packets remain unchanged.
+
+### Existing Ubuntu WSL path, 2026-09-06
+
+- The owner directed reuse of the installed Ubuntu distribution. Native inventory distinguishes it
+  from the recovery distribution. It boots with systemd and cgroup v2; no separate 4 GiB VM reservation
+  is necessary. The earlier threshold was a conservative QEMU setup choice, not measured application
+  demand. A full Claude startup diagnostic peaked near 240 MiB; real coding/build demand is unmeasured.
+- Dependencies were checksum-verified and extracted on D:, without installing distro packages. The
+  source, evidence and new native profile stay on D:. Ubuntu's existing system disk stays on C:.
+  Shared WSL settings and recovery distributions were not changed or started.
+- The initial canary allowed creation of a fake `/init` file in the sandbox's private root; it did not
+  access the host interop binary. The corrected sandbox remounts that private root read-only. Native
+  candidate/read-only, control-path, host-path and network boundary tests then passed. Failed packets
+  remain preserved. Killing the bounded systemd controller also drained its detached worker child.
+- The complete native review launch accepted the explicit flags and reached missing authentication.
+  Safe mode still advertised built-in skills; disabling slash commands removed them. Native help alone
+  was insufficient to infer their absence. No model call or authenticated tool execution occurred.
+- Use the intended canonical model name `claude-opus-4-8`; the saved `opus-4.8` shorthand generated an
+  unrecognized-model warning. Do not replace it with a moving `opus` alias or edit unrelated settings.
+- A native authentication error used `subtype=success` together with `is_error=true`. Preserve the
+  full event framing and error flag. The new classifier interrupts after retaining evidence rather
+  than consuming repeated work attempts. A browser-code login requires interactive stdin; the user
+  helper passes that input directly to Claude and does not save it or ask for it in chat.

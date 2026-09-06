@@ -2,7 +2,8 @@
 
 This is process containment, not filesystem/network isolation. The trusted caller
 must supply a sandbox command and an outer lifetime owner (for example the VM's
-host process job). A Linux controller crash alone does not destroy its cgroup.
+host process job, or a bounded systemd service containing the controller and all
+its child cgroups). A Linux controller crash alone does not destroy its cgroup.
 Never use this runner to launch a model directly on an unisolated host.
 """
 
@@ -42,7 +43,7 @@ os.execv(sys.argv[4], sys.argv[4:])
 class LinuxProcessTree:
     """Root-owned cgroup v2, unprivileged workload, independently observed drain.
 
-    The caller provisions a private cgroup parent in its disposable Linux VM.
+    The caller provisions a private cgroup parent inside its admitted lifetime owner.
     Worker UID/GID must differ from the controller. Detached descendants remain
     in the kernel-owned group, including children that close all captured pipes.
     """

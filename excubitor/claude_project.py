@@ -68,6 +68,44 @@ def _clean_exit(result):
     )
 
 
+def _authentication_failure(result, session):
+    """Recognize the observed native auth failure, never nested candidate text."""
+    if (
+        not session
+        or result.execution.exit_code != 1
+        or result.execution.timed_out
+        or result.execution.output_limited
+        or result.cancelled
+        or not result.drained
+    ):
+        return False
+    try:
+        events = [
+            json.loads(line, object_pairs_hook=_unique_object)
+            for line in result.execution.stdout.decode().splitlines()
+        ]
+        if len(events) < 3 or not all(isinstance(event, dict) for event in events):
+            return False
+        initial, terminal = events[0], events[-1]
+        return (
+            initial.get("type") == "system"
+            and initial.get("subtype") == "init"
+            and all(event.get("session_id") == session for event in events)
+            and terminal.get("type") == "result"
+            and terminal.get("is_error") is True
+            and terminal.get("terminal_reason") == "api_error"
+            and not any(event.get("type") == "result" for event in events[:-1])
+            and any(
+                event.get("type") == "assistant"
+                and event.get("error") == "authentication_failed"
+                and event.get("is_api_error_message") is True
+                for event in events[1:-1]
+            )
+        )
+    except (ValueError, UnicodeError, TypeError):
+        return False
+
+
 class ClaudeProjectRuntime:
     def __init__(
         self,
@@ -121,6 +159,7 @@ class ClaudeProjectRuntime:
             "--session-id",
             session,
             "--safe-mode",
+            "--disable-slash-commands",
             "--restricted",
             "--setting-sources",
             "",
@@ -174,6 +213,10 @@ class ClaudeProjectRuntime:
             for field in ("stdout", "stderr"):
                 record["execution"][field] = record["execution"][field].decode("utf-8", errors="replace")
             json.dump(record, stream, indent=2)
+        if _authentication_failure(result, session):
+            raise RunError(
+                "native Claude needs sign-in; preserve the original job and restore authentication"
+            )
         return result
 
     def _completed(self, result, session, mode, *, review=False):
@@ -208,6 +251,7 @@ class ClaudeProjectRuntime:
                 or initial.get("plugins") != []
                 or initial.get("plugin_errors", []) != []
                 or initial.get("mcp_server_errors", []) != []
+                or initial.get("skills", []) != []
             ):
                 raise ValueError("native context differs from the admitted mode")
             if (

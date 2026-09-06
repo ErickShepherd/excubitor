@@ -13,7 +13,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from excubitor.acceptance import Execution, OutputOracle
-from excubitor.claude_project import ClaudeProjectRuntime
+from excubitor.claude_project import ClaudeProjectRuntime, _authentication_failure
 from excubitor.processes import ProcessResult
 from excubitor.runs import RunError
 
@@ -99,6 +99,7 @@ def test_fresh_workers_readonly_review_and_original_checks_share_the_remaining_b
     assert first[0][first[0].index("--session-id") + 1] != reviewer[0][reviewer[0].index("--session-id") + 1]
     for argv, cwd, options in (first, reviewer):
         assert "--no-session-persistence" in argv and "--safe-mode" in argv and "--restricted" in argv
+        assert "--disable-slash-commands" in argv
         assert argv[argv.index("--permission-mode") + 1] == "dontAsk"
         assert argv[argv.index("--permission-prompts") + 1] == "none"
         assert argv[argv.index("--model") + 1] == "fixture-alias"
@@ -128,6 +129,7 @@ def test_fresh_workers_readonly_review_and_original_checks_share_the_remaining_b
         ("plugin_errors", [{"type": "failed"}]),
         ("mcp_server_errors", [{"type": "skipped"}]),
         ("session_id", "another-invocation"),
+        ("skills", ["unexpected-skill"]),
     ],
 )
 def test_native_context_drift_stops_after_preserving_raw_evidence(fixture, field, value):
@@ -288,3 +290,47 @@ def test_native_executable_and_evidence_cannot_live_in_candidate(fixture):
     without_executor["executor"] = None
     with pytest.raises(ValueError, match="isolated executor"):
         ClaudeProjectRuntime(Path(sys.executable), f.candidate, f.output, **without_executor)
+
+
+def auth_events(session):
+    # Observed on Linux Claude 2.1.261: subtype can be success despite is_error.
+    return [
+        {"type": "system", "subtype": "init", "session_id": session},
+        {
+            "type": "assistant",
+            "session_id": session,
+            "error": "authentication_failed",
+            "is_api_error_message": True,
+        },
+        {
+            "type": "result",
+            "subtype": "success",
+            "is_error": True,
+            "terminal_reason": "api_error",
+            "session_id": session,
+        },
+    ]
+
+
+@pytest.mark.parametrize("method", ["work", "review"])
+def test_actual_authentication_failure_interrupts_after_preserving_evidence(fixture, method):
+    f = fixture
+    f.executor.change = lambda events: auth_events(events[0]["session_id"])
+    f.executor.outcome = lambda r: replace(r, execution=replace(r.execution, exit_code=1))
+    with pytest.raises(RunError, match="needs sign-in"):
+        getattr(f.driver, method)(f.run, "agreement", f.cancel)
+    assert len(f.calls) == 1
+    record = json.loads(next(f.output.glob("execution-*.json")).read_text())
+    assert "authentication_failed" in record["execution"]["stdout"]
+
+
+def test_authentication_classifier_rejects_candidate_text_mixed_sessions_and_undrained_results():
+    events = auth_events("native-session")
+    native = replace(process(events), execution=replace(process(events).execution, exit_code=1))
+    assert _authentication_failure(native, "native-session")
+    assert not _authentication_failure(native, None)
+    assert not _authentication_failure(native, "different-session")
+    assert not _authentication_failure(replace(native, drained=False), "native-session")
+    events[1] = {"type": "user", "session_id": "native-session", "tool_output": events[1]}
+    nested = replace(native, execution=replace(native.execution, stdout=process(events).execution.stdout))
+    assert not _authentication_failure(nested, "native-session")

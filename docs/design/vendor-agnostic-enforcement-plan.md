@@ -336,6 +336,29 @@ fallback or live registration in this adapter. Authenticated native testing rema
 
 ## Remediation checklist
 
+The owner subsequently directed use of the existing Ubuntu WSL distribution. It is separate from the
+recovery distribution and boots successfully. This replaces the separate QEMU launch for the current
+Claude path; the earlier 5 GiB free-memory threshold was a provisional QEMU budget, not an established
+Excubitor requirement. Task files, extracted dependencies and the new Claude profile remain on D:.
+Ubuntu's existing system disk is on C:. No distro package installation, global WSL setting change or
+recovery-distribution startup was performed.
+
+Actual WSL canaries passed writable-candidate/read-only-review boundaries and denied host paths,
+control files, Windows interop and network access. A separate test killed the diagnostic controller
+while a detached child was running; the owning transient systemd service removed the entire cgroup,
+and no delayed write appeared. This is a bounded process-lifetime result, not complete job recovery.
+Claude startup with the actual reviewer flags reached the expected missing-authentication result and
+reported only the selected reading/structured-output tools. Its service peaked near 240 MiB; this
+does not measure a complete model job or its build tools.
+
+Native inspection also found that `opus-4.8` is unrecognized, while `claude-opus-4-8` selects the
+intended version without that warning. The native Windows setting was not edited. Safe mode still
+advertised built-in skills, so the adapter now explicitly disables slash-command skills and verifies
+their absence. A native authentication failure can carry a success subtype while its error flag is
+true; the adapter recognizes the actual error envelope and interrupts for sign-in instead of spending
+the remaining attempts. An interactive sign-in helper is prepared. Authentication, provider access,
+native model tool denial and complete Claude job execution remain open.
+
 - [x] Record the owner-agreed Ralph-only product scope and default completion behavior; remove the
   repository instruction that routes ordinary roadmap work through Ralph. This is a documentation change.
 - [x] Record native in-app and CLI launching requirements and a primary-source workflow/capability
