@@ -803,3 +803,21 @@ Append-only observations from vendor-agnostic enforcement iterations.
 - The commit broker refused an unapproved dummy email address in the new Git test fixture. The
   candidate and read-only diagnostic remain private. The fixture now uses the repository's existing
   approved test identity; no broker rule or enrollment was changed.
+
+### Native project launch and startup correction, 2026-09-06
+
+- Actual command discovery and a native confirmation worked. The initiating agent read the README,
+  proposed three units and ten checks, and corrected rejected check names before one accepted form.
+  The validation error now explains the allowed characters instead of merely asking for a short name.
+- A disabled MCP entry still needs a valid transport. Combining a clean native profile with a lone
+  disabled node entry failed before every worker's model call. The launcher now supplies an empty MCP
+  table, and a real read-only native startup returned the expected response without tools or edits.
+- Startup configuration errors are host failures, not work to repair. The old driver spent all six
+  attempts on the same error; the regression now verifies interruption after one attempt, unchanged
+  agreement and candidate, and retained process evidence. Candidate output with the same wording
+  remains an ordinary failed check. The exhausted native job was not restarted or given more attempts.
+- No native unit, acceptance check or review completed in the failed project run. Both source copies
+  stayed unchanged and every recorded process tree drained. Ordinary native editing succeeded after
+  the fast failure; it cannot establish isolation during running work. The owned temporary project
+  registration and skill were removed after the disposable sessions exited. Only the two authorized
+  project trust additions remain; sandbox credentials and unrelated settings were preserved.

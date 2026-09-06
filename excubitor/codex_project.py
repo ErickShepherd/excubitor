@@ -88,7 +88,9 @@ class CodexProjectRuntime:
             "windows.sandbox": "elevated",
             "web_search": "disabled",
             "approval_policy": "never",
-            "mcp_servers.node_repl.enabled": False,
+            # The clean profile has no node_repl transport to disable. Adding
+            # only enabled=false creates an invalid MCP entry in native Codex.
+            "mcp_servers": {},
             "log_dir": str(self.output / "native-logs"),
         }
         if self.model is not None:
@@ -124,6 +126,15 @@ class CodexProjectRuntime:
         # A denied native mode is a host blocker, not feedback for another attempt.
         if b"blocked by policy" in result.execution.stderr + result.execution.stdout:
             raise RunError("native policy refused this execution; host admission needs review")
+        if (
+            label in ("worker", "independent-review")
+            and result.execution.exit_code != 0
+            and not result.execution.stdout.strip()
+            and result.execution.stderr.lstrip().startswith(b"Error loading config.toml:")
+        ):
+            raise RunError(
+                "native configuration failed before model start; correct the host launch configuration"
+            )
         return result
 
     def work(self, run, prompt, cancel):

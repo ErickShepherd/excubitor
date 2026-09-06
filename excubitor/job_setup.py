@@ -174,7 +174,10 @@ class JobPlanner:
         for check in checks:
             _object(check, ("name", "runner", "stdin", "stdout"), ("stderr", "exit_code", "timeout_seconds"))
             if not isinstance(check["name"], str) or not _NAME.fullmatch(check["name"]):
-                raise ValueError("acceptance check needs a short stable name")
+                raise ValueError(
+                    "acceptance check needs a short stable name: begin with a letter, use only "
+                    "letters, digits, underscores, periods or hyphens, and stay within 64 characters"
+                )
             runner_name = check["runner"]
             if not isinstance(runner_name, str) or runner_name not in runners:
                 raise NotReady("the requested verification runner is not admitted by this host")

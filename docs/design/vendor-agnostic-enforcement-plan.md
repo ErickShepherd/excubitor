@@ -226,15 +226,30 @@ draft arguments and retains its original budget. Status now exposes exact-task p
 completion without keeping the task active. The explicit `ralph` skill candidate uses these tools;
 it refuses a manual-loop fallback if they are unavailable. Its source is retained outside automatic
 skill discovery. This advances preparation and presentation; the skill, general project executor,
-and scoped native connection have not been installed or live-verified together.
+and scoped native connection required a separate live test.
 
 The project backend now consumes the confirmed goal, units and original checks instead of the fixed
 demonstration specification. It uses a separate candidate checkout and a required host commit path,
 and verifies actual retained bytes after each checkpoint. Offline integration covers two different
 jobs, real Git commits and output execution, acceptance repair, independent review repair, and release
 of the completed task. A private native project connection and staged explicit command are prepared
-for a bounded live test. This remains a candidate: the native model calls, project command discovery,
-production provisioning, GUI surfaces and other vendors still require their respective evidence.
+for a bounded live test. The authorized Windows CLI test subsequently discovered the explicit command,
+read the project README, proposed three units and ten checks, and accepted one native confirmation.
+A malformed check-name proposal was rejected before that confirmation and corrected by the initiating
+agent. The worker launcher then failed before model execution: ignoring user configuration while adding
+only a disabled MCP entry creates an entry with no valid transport. All six work attempts were consumed
+by that same startup error. No unit completed, no check or review ran, and neither source copy changed.
+All worker and controller processes drained. Another native task reported no active Ralph job and
+completed ordinary file editing after the fast failure; this does not supply a during-work witness.
+The three unchanged temporary project files were removed, and only the two approved trust entries
+remain. Native sandbox setup, credentials and unrelated settings stayed unchanged.
+
+The corrected worker command uses an empty MCP table. Native configuration failure before model start
+now interrupts after its first launch instead of repeatedly consuming attempts; failed candidate output
+checks remain repairable. A separate read-only native startup diagnostic completed without tools or
+edits and drained its process tree. The original failed run and its six-attempt limit were preserved.
+Full project-job completion still needs a fresh native run. Production provisioning, GUI surfaces and
+other vendors still require their own evidence.
 
 ## Remediation checklist
 

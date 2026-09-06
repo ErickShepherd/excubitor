@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import sys
 import threading
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -383,10 +384,63 @@ def test_native_transport_narrows_children_and_validates_actual_review(project, 
     assert passed
     argv, cwd, options = calls[-1]
     assert "--ignore-user-config" in argv and "--ephemeral" in argv
-    assert 'approval_policy="never"' in argv and "mcp_servers.node_repl.enabled=false" in argv
+    assert 'approval_policy="never"' in argv
+    overrides = tomllib.loads("\n".join(argv[index + 1] for index, value in enumerate(argv) if value == "-c"))
+    assert overrides["mcp_servers"] == {}
     assert argv[argv.index("--sandbox") + 1] == "read-only" and cwd == candidate
     assert options["stdin"] == b"independent" and options["timeout"] <= 180
     schema.write_text("{}")
     with pytest.raises(RunError, match="schema"):
         driver.review(run, "independent", threading.Event())
     assert len(calls) == 2
+
+
+def test_native_configuration_failure_interrupts_without_repeated_attempts(project, tmp_path):
+    _, candidate, reader, store, binding, planner, retain = project
+    output = tmp_path / "native-output"
+    output.mkdir()
+    schema = store.directory / "review-schema.json"
+    schema.write_text(json.dumps(REVIEW_SCHEMA))
+    driver = CodexProjectRuntime(
+        Path(sys.executable), candidate, output, schema, environment=dict(os.environ), admit=lambda: None
+    )
+    contract, oracles = planner(
+        binding,
+        {
+            "goal": "work",
+            "units": ["unit"],
+            "checks": [{"name": "check", "runner": "program", "stdin": "", "stdout": "expected"}],
+        },
+    )
+    for oracle in oracles:
+        oracle.save(store)
+    run = store.start(contract, "fixture")
+    before = reader.collect()
+
+    class Tree:
+        calls = 0
+
+        def run(self, *args, **kwargs):
+            self.calls += 1
+            return result(
+                stderr=b"Error loading config.toml: invalid transport\nin `mcp_servers.node_repl`\n\n",
+                code=1,
+            )
+
+    tree = Tree()
+    driver.tree = tree
+    backend = ProjectBackend(store, binding, reader, driver, admit=lambda run: None, retain=retain)
+    with pytest.raises(RunError, match="native configuration failed before model start"):
+        Supervisor(store, backend).drive(run.id)
+    stopped = store.get(run.id)
+    assert stopped.state == "interrupted" and stopped.attempts == 1 and tree.calls == 1
+    assert stopped.contract == contract and stopped.completed_units == 0 and not stopped.reviewed
+    assert reader.collect() == before
+    evidence = json.loads((output / "execution-0001.json").read_text())
+    assert evidence["drained"] and evidence["execution"]["exit_code"] == 1
+    with pytest.raises(RunError, match="native configuration failed before model start"):
+        driver.review(run, "review", threading.Event())
+    # A candidate program can print the same text. Its failed acceptance check
+    # must remain an ordinary check result, not a native startup diagnosis.
+    check = driver.verify(run, oracles[0], threading.Event())
+    assert check.execution.exit_code == 1 and check.drained
