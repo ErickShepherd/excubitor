@@ -295,6 +295,29 @@ drained, and removal of the one owned canary restored the completed clean candid
 stream omitted the rejected patch target; the router error is preserved separately. This supplies
 observed shell/patch boundary evidence, not admission of every tool, path or host surface.
 
+## Isolated Linux worker preparation, 2026-09-06
+
+The owner selected an isolated Linux worker for Claude, separate from recovery environments.
+The private preparation uses a dedicated QEMU VM and verified Ubuntu image on D:, with no host
+filesystem sharing. Existing WSL distributions, shared WSL configuration, Docker configuration and
+native Claude settings were not changed. The VM's control keys and disk images have host-only access.
+
+The Linux process runner places its fixed launcher into a root-owned cgroup before dropping to the
+worker account or executing the requested program. Nine actual Linux tests passed, including detached
+children with closed pipes, cancellation, output flooding, process and memory caps, and denied writes
+to control files. The kernel reports the group empty before successful drainage. This runner supplies
+process containment; a separately admitted sandbox and outer lifetime owner remain required. Killing
+the Linux controller alone does not destroy its cgroup. It is not connected to live Ralph activation.
+
+Separate real Bubblewrap canaries passed writable-candidate and read-only-review modes, with control
+files, Windows paths and network access unavailable. Ubuntu first denied namespace setup; an explicit
+application profile was provisioned only inside the new VM, retaining its general namespace restriction.
+Host comparison verified the tested source bytes. The Windows VM owner also drained at its original
+ten-minute diagnostic limit. These results do not prove complete Claude tool coverage or controller
+crash recovery. Claude Code's Linux build matching the existing Windows version was checksum-verified
+and its version/help commands ran; the new guest is not authenticated. Native Claude job completion,
+the reusable launcher and GUI integration remain open.
+
 ## Remediation checklist
 
 - [x] Record the owner-agreed Ralph-only product scope and default completion behavior; remove the

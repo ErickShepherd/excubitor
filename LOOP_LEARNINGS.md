@@ -885,3 +885,24 @@ Append-only observations from vendor-agnostic enforcement iterations.
   Antigravity documentation differs between its Windows AppContainer feature claim and its dedicated
   sandbox platform table. These are integration gaps to verify, not permission to weaken the boundary
   or present the successful Codex CLI demonstration as cross-vendor or GUI support.
+
+### Isolated Linux worker preparation, 2026-09-06
+
+- The owner chose a Linux worker separate from recovery environments. A new QEMU VM keeps its
+  disks and task data on D: without changing WSL or Docker. A D: WSL distribution alone would not
+  address the existing shared swap default. Root-owned Linux authority and host-only Windows
+  permissions protect the new VM's control keys and disks; no host directories are shared.
+- Nine live cgroup tests passed, including detached children that close their pipes, actual memory
+  and process caps, output limits, cancellation and permission denials. The fixed bootstrap joins
+  the cgroup before executing untrusted code and drops to a separate UID with no_new_privs.
+  Killing the controller alone is insufficient: admission still needs the enclosing VM lifetime
+  and crash reconciliation. Do not reuse this component as an unisolated Linux model launcher.
+- The first Bubblewrap canary failed before workload execution under Ubuntu's namespace policy.
+  A profile limited to the packaged launcher was added inside the disposable VM; the general
+  namespace restriction remained enabled. Writable and read-only canaries then passed with no
+  control-file, host-path or network access. Tested guest source hashes matched the host source.
+- Hardware-accelerated VM startup worked. Initial seed/media and command issues, a stalled full
+  download, guest DNS failure and the ten-minute VM stop remain recorded in private evidence.
+  Verified byte-range download and a temporary SSH setup tunnel resolved transfer/setup problems.
+  The restricted execution session has no general egress; authentication and provider-only traffic
+  still require their own checked path. Claude version/help success is not a completed Claude job.
