@@ -254,8 +254,10 @@ identity. Direct tool calls supplied a task ID and progress token without the ac
 needed by the approval parser; all were rejected. The final state comparison caught native automatic
 project-trust writes in each formerly fresh isolated profile. Those failed packets and trust entries
 remain for review. Earlier phase-success flags describe only RPC completion. The new preflight refusal
-is tested offline; the changed driver has not been rerun against a newly approved native fixture.
-An identity report explicitly leaves
+is tested offline. After separate owner approval to reuse one exact isolated profile, the corrected
+native run passed. All identity checks passed, both process trees drained, and native configuration
+matched the preimage after each lifetime and at final inspection. No credentials were saved. Direct
+tool contexts continued to fail the approval parser. The identity report explicitly leaves
 `ralph_reconnect_verified` false. It does not prove native confirmation, autonomous continuation,
 protected-store recovery, GUI support, or authentic identity on an arbitrary client connection.
 

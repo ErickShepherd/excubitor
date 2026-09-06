@@ -655,3 +655,16 @@ Append-only observations from vendor-agnostic enforcement iterations.
   conversation record. Following its private-retention instruction, the whole exploratory probe and
   its tests remain in private task storage. The broker and its policy are unchanged. Repository docs
   retain the findings; the native named-job probe and admission-parser regression remain code candidates.
+
+### Approved isolated native reconnect check, 2026-09-06
+
+- The owner approved reuse of one exact disposable profile and project for the no-model protocol
+  check. No authorization was inferred from the automatically created trust entry itself.
+- The corrected probe passed on the native Windows CLI: the original task, session, and project
+  survived app-server process loss and resumption; a second task in the same project remained distinct.
+  Native configuration stayed byte-identical after each lifetime and at final inspection. Both process
+  trees drained, with nine and ten observed processes respectively, and neither timed out.
+- Direct MCP calls still lacked the required turn context and were rejected by the approval parser.
+  There were no saved credentials, model turns, permanent tool registrations, hooks, or sandbox setup.
+  The result proves protocol identity persistence with unchanged approved fixture settings. It does
+  not establish protected Ralph resumption, elevated-worker isolation, GUI support, or another vendor.

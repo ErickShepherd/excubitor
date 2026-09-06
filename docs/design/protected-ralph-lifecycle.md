@@ -239,8 +239,13 @@ the probe used the native history-injection API with clearly labelled, non-autho
 This verifies protocol persistence, not owner confirmation, protected Ralph reconnection, or GUI support.
 The final state comparison failed because Codex automatically saved project trust in each isolated
 fixture home. Those entries and failed reports remain for review. The probe now refuses fresh trust
-and compares config after each native lifetime; this correction is verified offline only. No model
-turn or saved tool registration was involved, and the owner's normal native home was not used.
+and compares config after each native lifetime. After the owner approved reuse of one exact isolated
+profile, the corrected native run passed: task and project identity survived restart, the unrelated
+task stayed distinct, both process trees drained, and native config remained byte-identical after
+each lifetime and at final inspection. All three incomplete tool contexts were still rejected.
+No credentials, model turn, saved tool registration, or sandbox provisioning was involved, and the
+owner's normal native home was not used. This result closes the approved protocol check; protected
+Ralph reconnect and elevated-worker isolation remain unverified.
 
 The atomic creation mechanism follows Microsoft's
 [job-list attribute guidance](https://devblogs.microsoft.com/oldnewthing/20230209-00/?p=107812).

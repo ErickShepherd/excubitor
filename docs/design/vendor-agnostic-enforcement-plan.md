@@ -180,8 +180,11 @@ Elevated-mode isolation remains unverified. A native app-server experiment prese
 identity through server loss and resumption, but direct MCP calls lacked the required approval context
 and were correctly rejected. Its final config comparison failed: Codex automatically trusted the
 disposable project in each isolated test home. Those entries remain for review; the corrected probe
-refuses fresh enrollment and has only offline preflight coverage. Protected same-task Ralph reconnect,
-GUI behavior, and other vendors still require direct verification. The full replacement remains unfinished.
+refuses fresh enrollment. The owner subsequently approved reuse of one exact isolated profile. That
+native run passed identity preservation and task separation, drained both process trees, and retained
+identical native configuration without saved credentials. Incomplete tool contexts were still rejected.
+Protected same-task Ralph reconnect, elevated-worker isolation, GUI behavior, and other vendors still
+require direct verification. The full replacement remains unfinished.
 
 ## Remediation checklist
 
