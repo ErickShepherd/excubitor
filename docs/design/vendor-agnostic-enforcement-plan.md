@@ -251,6 +251,23 @@ edits and drained its process tree. The original failed run and its six-attempt 
 Full project-job completion still needs a fresh native run. Production provisioning, GUI surfaces and
 other vendors still require their own evidence.
 
+The subsequently authorized fresh run progressed automatically through both implementation units,
+with a real native worker and retained commit for each. Its next four worker turns failed with native
+model-service capacity errors, exhausting the original six-attempt limit before host acceptance or
+independent review. Two failures occurred before model output, and two after read-only tool activity.
+The clean isolated partial branch, original base and unchanged checks remain preserved; all six worker
+trees drained and the exact controller job was absent. A separate native task completed ordinary file
+editing while the first worker was running. The earlier exhausted run stayed byte-identical. The three
+temporary project files were removed after the native sessions exited, with only the two approved
+trust entries added and unrelated settings unchanged. This establishes native unit progression and
+ordinary-task exclusion during productive work, while full project-job completion remains unverified.
+
+Model availability failures need their own bounded wait-and-retry handling instead of immediate
+code-repair retries. Any such change must preserve the original deadline and attempt cap, cancellation,
+partial work and model selection; it must not reset a run or create a replacement agreement. Native
+status also needs to expose the concrete failure reason, beyond its current state and attempt count.
+These are follow-up findings from the fresh test, not implemented capabilities.
+
 ## Remediation checklist
 
 - [x] Record the owner-agreed Ralph-only product scope and default completion behavior; remove the

@@ -821,3 +821,22 @@ Append-only observations from vendor-agnostic enforcement iterations.
   the fast failure; it cannot establish isolation during running work. The owned temporary project
   registration and skill were removed after the disposable sessions exited. Only the two authorized
   project trust additions remain; sandbox credentials and unrelated settings were preserved.
+
+### Fresh native project test, 2026-09-06
+
+- A new authorized packet and confirmation preserved the previous exhausted run. The corrected
+  launcher completed two real native implementation turns and retained both commits automatically.
+  A separate native task reported no active Ralph job and completed ordinary file editing while
+  the first worker was running. This closes that specific during-work observation.
+- Four subsequent native turns failed with the model service's capacity error. Two failed before
+  output, and two after reading context. Immediate retries consumed the remaining attempts before
+  host acceptance or separate review. The worker's local test summary cannot replace those missing
+  gates. The run remained blocked at six attempts, with its clean partial branch and checks retained.
+- Native service availability and candidate-code failure need different recovery handling. Bounded
+  waiting must preserve the original deadline, attempt cap, cancellation and configured model. A
+  failure reason should also be available in native status. Neither improvement was implemented by
+  this test; no model fallback, reset or automatic replacement job was used to evade the exhausted cap.
+- Independent inspection verified two retained unit commits, the unchanged base and agreement, all
+  six worker trees drained, the exact controller job absent, and the prior failed run byte-identical.
+  The temporary project files were removed after clean session exit. Only the two authorized native
+  trust additions remain. Full project-backend completion, GUI and other vendors remain unverified.
