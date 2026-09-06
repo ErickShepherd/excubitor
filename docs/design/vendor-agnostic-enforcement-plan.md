@@ -189,15 +189,34 @@ disposable project in each isolated test home. Those entries remain for review; 
 refuses fresh enrollment. The owner subsequently approved reuse of one exact isolated profile. That
 native run passed identity preservation and task separation, drained both process trees, and retained
 identical native configuration without saved credentials. Incomplete tool contexts were still rejected.
-Protected same-task Ralph reconnect, full native-tool admission, GUI behavior, and other vendors still
-require direct verification. The full replacement remains unfinished.
+Those experiments left protected same-task Ralph reconnect, full native-tool admission, GUI behavior,
+and other vendors needing direct verification. The full replacement remains unfinished.
 
 The native supervised CLI candidate now connects its Start action's reconnect path to that watchdog,
 retaining the original agreement and oracle bytes across separate connection logs. Windows component
 tests passed through real connection-process death, including a retained kernel handle, without new
 approval or reset limits. Closed connections cannot restart, and ended threads no longer look attached.
-The new native rehearsal and disposable project are prepared; actual native task resumption remains
-pending its exact project-trust and storage authority. No replacement registration or promotion occurred.
+After explicit project-trust and storage approval, the native rehearsal passed on Windows with Codex
+CLI 0.153.4. One native confirmation started the job. The test server and watchdog exited after the
+first model worker drained with a disclosed fixture child alive. The driver reopened the original
+native task, whose authentic turn envelope matched the accepted binding. Start reconnected without
+another job confirmation or a reset attempt budget. The replacement recorded the old exact job absent
+before proceeding. Both units completed in four of six attempts within the unchanged deadline.
+
+The original checks caught the deliberate arithmetic bug; automatic repair, all four checks, and a
+separate reviewer then passed. The clean committed branch retained its original base. Independent
+inspection confirmed unchanged contract/check bytes and complete process drainage. Another native
+task in the same project remained inactive during the run. The finished task also became inactive,
+and ordinary native editing worked without starting Ralph. Native config, setup, and credential
+fingerprints matched the sealed baseline at the first independent check. The post-exit comparison
+found one new unrelated project trust entry, which the owner confirmed was separate concurrent work.
+That comparison failure and its snapshots remain intact; no baseline or settings were replaced.
+Sandbox setup and credentials remained unchanged.
+
+This is a bounded native recovery result. The driver reopened the task; automatic reopening, recovery
+during a model turn, and app-closed continuation were not tested. The everyday native launcher, full
+tool admission, GUI surfaces, other vendors, and representative workflow comparisons remain open.
+No replacement registration, saved tool allowance, hook, merge, push, or promotion occurred.
 
 ## Remediation checklist
 
@@ -225,6 +244,10 @@ pending its exact project-trust and storage authority. No replacement registrati
 - [x] Demonstrate the shared supervisor with real bounded native CLI workers, a failed unchanged check,
   automatic repair, independent review, and a clean committed branch. This completes the disposable
   Windows CLI example; native activation, mode admission, GUI integration, and crash recovery remain open.
+- [x] Demonstrate the approved Windows CLI connection-loss rehearsal with authentic same-task native
+  resumption, one original confirmation, unchanged limits/checks, automatic repair, independent review,
+  complete process drainage, and ordinary-task exclusion. The test driver reopens the task; automatic
+  reopening, mid-worker crashes, production admission, and other native surfaces remain open.
 - [ ] Compare workflow variants on representative tasks with fixed acceptance checks, permissions,
   model versions, and budgets. Record all attempts, failures, interventions, setup effort, quality, and
   resource use. Keep safety protections fixed and select the simplest adequately performing defaults.

@@ -208,9 +208,10 @@ deliberate arithmetic fault, which must fail the original checks and be repaired
 The packet retains raw native confirmation messages, separate controller outputs, watchdog receipts,
 the crash archive, and the final candidate report. A handled native denial stops the experiment.
 
-This fixture exercises native CLI confirmation and bounded controller recovery. It does not certify
-all native writable tools, production owner authentication, GUI behavior, app-exit survival, another
-vendor, or recovery after losing the watchdog. Production adapters do not import this apparatus.
+The original controller-loss fixture exercises native CLI confirmation and bounded controller recovery.
+The later connection-loss result is recorded below. Neither certifies all native writable tools,
+production owner authentication, GUI behavior, app-exit survival, or another vendor. Production adapters
+do not import this apparatus.
 
 The first connected run completed its work, checks, and review in four attempts. Its final reporter
 failed when a Git launcher timed out but left a child holding captured pipes. Preserve that failed
@@ -235,10 +236,38 @@ It tests loss with a live fixture child after a native worker has drained, not d
 
 The new wiring passed Windows component tests with real process death, both absent and retained jobs,
 unchanged authority, other-task exclusion, and no replacement confirmation. A real test server also
-exited only its first lifetime and accepted a later connection. These tests use fixture identity and
-approval; the complete native task-resumption rehearsal is prepared but has not run. Production
-adapters remain unchanged. Fresh native project trust and selected-home storage need explicit scope;
-an old disposable fixture's trust does not carry across a move to another drive.
+exited only its first lifetime and accepted a later connection. Those component tests use fixture
+identity and approval. The separately approved native rehearsal subsequently passed on Windows with
+Codex CLI 0.153.4. The interactive CLI supplied the original task's actual turn envelope after native
+resumption. There was one accepted job form, one retained contract, and no replacement confirmation.
+The replacement watchdog recorded the old kernel job absent before launching another controller.
+
+The original job completed both units in four of its six attempts and before its unchanged deadline.
+The injected arithmetic bug failed two original checks, then a fresh worker repaired it. All four
+checks and a separate native reviewer passed. The committed isolated branch was clean and its base
+unchanged. Thirteen recorded worker/check/reviewer executions drained; independent host inspection
+also confirmed both exact controller jobs absent. Another native task in the same project was inactive
+while Ralph ran. After completion the original task reported inactive, and ordinary native file editing
+worked in the separate task. The temporary edit was inspected and removed without changing the result.
+
+Native enrollment added only the one explicitly approved disposable project trust entry. Configuration,
+sandbox setup, and credential fingerprints matched the sealed baseline at the first independent check.
+The final post-exit comparison caught one additional unrelated project trust entry, which the owner
+confirmed came from separate concurrent work. The raw comparison failure and both snapshots remain;
+the baseline was not replaced and no settings were restored. Sandbox setup and credentials stayed
+unchanged. No credential was copied, no permanent tool allowance or MCP registration was saved, and
+no hook was added.
+The launcher initially used an exec-only flag at the interactive CLI root, then quoted a simple dotted
+configuration key incorrectly. Both attempts stopped at argument/configuration parsing before Ralph
+activation; their evidence was preserved. Supported process-only overrides corrected the private scripts.
+These were launcher errors, not native permission denials. Native job limits were never reset.
+
+This demonstrates reconnection after the test server and watchdog exit with a live fixture descendant
+after model work has drained. The test driver explicitly reopened the original native task. Automatic
+reopening, a crash during model work, work while the app is closed, production launch UX, all-tool
+admission, GUI behavior, and other vendors remain unverified. Production adapters remain unchanged.
+Fresh native project trust and selected-home storage need explicit scope; an old disposable fixture's
+trust does not carry across a move to another drive. All raw evidence remains in private task storage.
 
 ## Native process-job access and task persistence
 

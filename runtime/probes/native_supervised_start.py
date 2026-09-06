@@ -3,8 +3,8 @@
 Prepare an already trusted fixture, then serve via process-only MCP overrides.
 No hooks or app registrations are installed. A new native connection can reconnect
 the same accepted job through the shared watchdog, after exact old-worker drainage.
-Forced controller death is injected once. Native task resumption with this wiring
-still needs a live witness. This is not production or GUI admission.
+Forced controller death is injected once. The approved Windows CLI connection-loss
+rehearsal passed with native task resumption. This is not production or GUI admission.
 """
 
 from __future__ import annotations

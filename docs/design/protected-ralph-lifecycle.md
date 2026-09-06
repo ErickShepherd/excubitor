@@ -177,8 +177,8 @@ Current official references describe capabilities, not support certification:
 - [Claude Code hooks](https://code.claude.com/docs/en/hooks): elicitation hooks can automatically answer
   a form and modify its result, so that host needs a separate approval-path assessment.
 
-The next native integration must complete mode admission, verify recovery after losing the watchdog,
-and provide the production in-app launcher. The native CLI demonstration
+The next native integration must complete mode admission and provide the production in-app launcher.
+The bounded native watchdog-loss rehearsal is recorded below. The native CLI demonstration
 uses a trusted test parent, not a registered owner-facing activation endpoint. GUI behavior and other
 vendors still require their own adapters and evidence. Replacement registration and trust remain separate.
 
@@ -230,10 +230,28 @@ drift stops preparation or dispatch and prevents a passing final report.
 Windows component tests exercise this connection path through real owner-process loss with and
 without a retained job handle. The next action completes the original fixture within its unchanged
 attempt budget and without replanning, while another task remains inactive. Those identities and
-approvals are fixtures. A new native CLI rehearsal is prepared to lose the test connection after a
-real worker has drained, with a disclosed fixture child still alive, and resume the exact native task.
-That live rehearsal has not run; neither the component tests nor its prepared scripts close native
-reconnection, all-tool admission, GUI, or cross-vendor support.
+approvals are fixtures. A separately approved native CLI rehearsal subsequently lost the test connection
+after a real worker drained, with a disclosed fixture child still alive, and resumed the exact native
+task. Actual interactive turn metadata matched the original contract on both connections. The second
+Start reconnected with the consumed attempt preserved and no replacement plan or confirmation. The
+watchdog established the old exact kernel job absent before launching its replacement.
+
+The job completed in four of six attempts before the unchanged deadline, repaired an injected failure
+against the original checks, passed all four checks and independent review, and retained a clean
+committed isolated branch. Independent inspection confirmed unchanged agreement/check bytes, an
+unchanged base, both controller jobs absent, and all thirteen recorded executions drained. A separate
+native task in the same project remained inactive while Ralph ran; the completed task became inactive,
+and ordinary native editing still worked. Native protected fingerprints matched the sealed baseline
+at the first independent check after the approved project trust addition. A post-exit comparison then
+found one unrelated project trust entry, confirmed by the owner as separate concurrent work. Its raw
+comparison failure and original baseline are preserved; no settings were restored. Sandbox setup and
+credentials remained unchanged. There was no saved tool allowance, permanent MCP registration, hook,
+or sandbox provisioning.
+
+This closes that bounded Windows CLI reconnection witness. The test driver explicitly reopened the
+original task; it did not prove automatic reopening, recovery during a model turn, or work while the
+app is closed. Production launch UX, complete native-tool admission, GUI, and cross-vendor support
+remain open. Raw native metadata, transcripts, and reports stay in private task storage.
 
 Live Windows component tests cover owner death immediately after process creation, watchdog death
 with and without a retained host job handle, repeated watchdog deaths exhausting the shared restart
@@ -274,9 +292,10 @@ profile, the corrected native run passed: task and project identity survived res
 task stayed distinct, both process trees drained, and native config remained byte-identical after
 each lifetime and at final inspection. All three incomplete tool contexts were still rejected.
 No credentials, model turn, saved tool registration, or sandbox provisioning was involved, and the
-owner's normal native home was not used. This result closes the approved protocol check; protected
-Ralph reconnect remains unverified. The later elevated access result above supplies only the tested
-shell boundary; it does not enlarge this identity experiment's scope.
+owner's normal native home was not used. That result closed the approved protocol check and left
+protected Ralph reconnect unverified at that point. The subsequent interactive rehearsal has its own
+evidence and scope. The elevated access result supplies only the tested shell boundary; neither later
+result enlarges this identity experiment's scope.
 
 The atomic creation mechanism follows Microsoft's
 [job-list attribute guidance](https://devblogs.microsoft.com/oldnewthing/20230209-00/?p=107812).

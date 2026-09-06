@@ -715,3 +715,36 @@ Append-only observations from vendor-agnostic enforcement iterations.
   still alive. It exits only its own test server, then requires exact native task resumption. The live
   rehearsal remains pending; project trust from an old location cannot authorize a relocated fixture.
   No native application, native trust change, or production installation ran while preparing it.
+
+### Approved native connection-loss rehearsal, 2026-09-06
+
+- The owner approved one new disposable project trust entry and the existing native profile's runtime
+  storage. The native trust-delta check accepted exactly that entry. Config, sandbox setup, and
+  credential fingerprints then matched the sealed baseline. No credential copying or provisioning ran.
+- Installed interactive CLI help differs from exec help: the config-isolation flag used by exec is
+  not accepted at the interactive root. Quoting a simple dotted-key segment also made the override
+  target a different invalid server. Both launch errors preceded activation and were preserved.
+  Supported process-only feature/server overrides fixed the private launchers without changing native
+  permissions or saved settings. Windows PTY submission used LF in a separate write after typing.
+- The native job was confirmed once. After the first worker drained, the disclosed test connection
+  and its watchdog exited with a live fixture descendant. Resuming the original interactive CLI task
+  supplied the same authentic task binding; Start reconnected with the consumed attempt intact and no
+  new confirmation. The watchdog recorded the exact old kernel job absent before replacement launch.
+- Four of the original six attempts completed both units. Two unchanged checks caught the injected
+  arithmetic fault, then automatic repair, all four checks, and independent review passed. Independent
+  inspection confirmed original contract and oracle bytes, a clean committed isolated branch and its
+  unchanged base, all thirteen recorded executions drained, and both exact controller jobs absent.
+- Another native task in the same project remained inactive while Ralph ran. The original task became
+  inactive after completion. Ordinary native file creation worked without Ralph activation; its bytes
+  were independently inspected and the exact test file removed. No saved tool allowance, registration,
+  hook, merge, or publication occurred. Private raw evidence and initial launcher failures are retained.
+- The test driver explicitly reopened the original task. This proves the bounded Windows CLI
+  reconnection path, not automatic reopening, a crash during a model turn, app-closed continuation,
+  production launch UX, full native-tool admission, GUI surfaces, or other vendors.
+- The first independent check matched all native fingerprints. After the native sessions exited, the
+  final whole-profile comparison caught one unrelated project trust addition. The owner confirmed it
+  came from separate concurrent work. Preserve that raw comparison failure and both snapshots instead
+  of silently changing the baseline. Sandbox setup and credential fingerprints stayed unchanged, and
+  the retained candidate still matched after ordinary-file cleanup. No settings restoration or extra
+  native run followed the difference. Two model-task rollouts were archived; the trust-only task had
+  no matching saved rollout in the dated directory, so its captured native UI remains the evidence.
