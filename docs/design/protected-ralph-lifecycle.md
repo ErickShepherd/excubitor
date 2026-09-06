@@ -19,6 +19,35 @@ auto-discovered skill location and has not been installed. The Codex invocation 
 The shared proposal path is component-tested; a production backend, project-scoped connection, native
 command discovery, and general-purpose verifier admission still need integration and native evidence.
 
+The project-execution candidate now connects confirmed proposals to `ProjectBackend` and the
+`CodexProjectRuntime` transport. Work and review prompts are built from the stored agreement and
+original checks, with no arithmetic specification or injected demonstration fault. The initiating
+project and worker checkout must be separate, non-overlapping directories. The host supplies native
+admission and its authorized commit path; a worker cannot select either. Changed files, additions,
+and deletions pass through that commit path before independent inspection of the actual result.
+
+The backend excludes runtime configuration and nested Git metadata from this first candidate mode,
+preserves the host-selected Git marker, and checks the supported file and size bounds before commit.
+Commit refusal preserves partial work without claiming completion. Checks and a fresh review run
+against the retained candidate; neither callback success nor a worker's test summary certifies bytes.
+The existing small-tree Git restrictions and input/output verifier format still apply.
+
+The CLI transport starts fresh bounded native invocations for work and review, preserves the host's
+selected model, and explicitly selects workspace-write or read-only execution as appropriate.
+Integration switches narrow the child configuration; they are not proof of native mode admission.
+The host must supply a reviewed environment and storage locations. This code does not install a
+project connection, provision the Windows sandbox, or enroll a repository in a commit broker.
+
+Offline integration tests run two different proposed jobs through real disposable Git repositories,
+actual program output checks, a failed check, repair, a separate review rejection, and inactive
+completion. Native model calls and review decisions in those tests are fixtures. The private native
+rehearsal now connects the actual proposal action to this backend and stages a project-scoped command
+and MCP connection for separate authorization. Production provisioning, native command discovery,
+general repository support, and GUI/other-vendor admission are not established by these tests.
+
+The transport follows the documented [non-interactive CLI](https://learn.chatgpt.com/docs/non-interactive-mode).
+Its live behavior must still be tested on the selected installation and permissions.
+
 ## Preparing a normal job
 
 The coding agent proposes the goal, units, and concrete input/output cases from the owner's request.

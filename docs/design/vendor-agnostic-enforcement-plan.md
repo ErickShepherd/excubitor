@@ -228,6 +228,14 @@ it refuses a manual-loop fallback if they are unavailable. Its source is retaine
 skill discovery. This advances preparation and presentation; the skill, general project executor,
 and scoped native connection have not been installed or live-verified together.
 
+The project backend now consumes the confirmed goal, units and original checks instead of the fixed
+demonstration specification. It uses a separate candidate checkout and a required host commit path,
+and verifies actual retained bytes after each checkpoint. Offline integration covers two different
+jobs, real Git commits and output execution, acceptance repair, independent review repair, and release
+of the completed task. A private native project connection and staged explicit command are prepared
+for a bounded live test. This remains a candidate: the native model calls, project command discovery,
+production provisioning, GUI surfaces and other vendors still require their respective evidence.
+
 ## Remediation checklist
 
 - [x] Record the owner-agreed Ralph-only product scope and default completion behavior; remove the
@@ -262,6 +270,10 @@ and scoped native connection have not been installed or live-verified together.
   result history, and explicit command skill candidate. Verify draft mutation, authority injection,
   admission refusal, replay, cancellation, and unchanged recovery limits in component tests. Native
   command discovery, general project execution, and scoped installation remain open.
+- [x] Connect confirmed jobs to a project backend with a separate candidate checkout, required host
+  admission and commit path, and native worker/check/reviewer transport. Exercise actual Git and
+  program output on two different proposals with acceptance and review repair. Native calls in those
+  tests are fixtures; the staged project command and live launch still need separate verification.
 - [ ] Compare workflow variants on representative tasks with fixed acceptance checks, permissions,
   model versions, and budgets. Record all attempts, failures, interventions, setup effort, quality, and
   resource use. Keep safety protections fixed and select the simplest adequately performing defaults.

@@ -773,3 +773,33 @@ Append-only observations from vendor-agnostic enforcement iterations.
 - Final focused verification passed 124 tests and nine subtests, including the prior native-action,
   approval, lifecycle, supervisor, and connection-process regressions. No native app was launched for
   this change; the fixture transport tests do not broaden the previously observed native support.
+
+### Project execution candidate, 2026-09-06
+
+- The fixed demonstration backend embedded its own specification, filenames and fault injection.
+  The new project backend instead reads the actual agreed goal, units and original checks for each
+  worker and review. The launching project and worker checkout must not overlap. A host admission
+  callback and an authorized commit path are required; neither comes from the proposed job.
+- Checkpoints compare actual bytes with the committed tree before requesting retention. They send
+  only changed paths, including additions and deletions, because an exact-path broker can reject a
+  request containing unchanged files. Unchanged candidates need no empty commit. Callback success
+  cannot certify a dirty or uncommitted candidate; independent Git inspection still decides that.
+- Runtime configuration, nested Git metadata, redirected Git markers, and unsupported tree sizes
+  are refused before retention. Commit refusal preserves partial work without claiming completion.
+  Native subprocesses use the selected model, bounded process supervision and explicit child-only
+  permission settings. Those settings narrow execution but do not prove all-tool native admission.
+- Offline integration exercised two different proposed tasks with real disposable Git commits and
+  actual program output. Each repaired a failed original check and a separate review rejection before
+  completion. The initial test helper reversed cancellation and drainage fields; correcting its
+  fixture values resolved those failures. The native transport was never launched by those tests.
+- The private live-test adapter now composes native proposal confirmation, the watchdog, the project
+  backend and independent inspection. Its scoped MCP connection and explicit skill are staged for a
+  new disposable launch project with a separate candidate. Live registration, two exact native trust
+  entries and existing-profile runtime storage still require the prepared test's owner authorization.
+  The old fixed-plan and fault-injection experiments remain unchanged.
+- Final verification passed 148 tests and nine subtests, including the previous proposal, approval,
+  lifecycle, candidate, supervisor and connection-process cases. Formatting, lint, whitespace and
+  the private-path/leak check passed. The native launch itself remains pending, not implicitly green.
+- The commit broker refused an unapproved dummy email address in the new Git test fixture. The
+  candidate and read-only diagnostic remain private. The fixture now uses the repository's existing
+  approved test identity; no broker rule or enrollment was changed.
