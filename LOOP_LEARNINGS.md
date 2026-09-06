@@ -944,3 +944,14 @@ Append-only observations from vendor-agnostic enforcement iterations.
   full event framing and error flag. The new classifier interrupts after retaining evidence rather
   than consuming repeated work attempts. A browser-code login requires interactive stdin; the user
   helper passes that input directly to Claude and does not save it or ask for it in chat.
+
+- A stricter Windows-executable canary subsequently reached the inherited WSL binary loader even
+  though `/init` was hidden. It failed inside the loader before completing its harmless command;
+  treating path hiding as proven interop isolation would have overstated the earlier evidence.
+- Linux binary-format handlers inherit from parent user namespaces until the child initializes its
+  own table. A separate canary creates an empty private table, unmounts it and drops all capabilities
+  before the worker starts. Native Windows execution then returns an executable-format error, and
+  ordinary WSL Windows execution remains successful. An initial bootstrap lacked the required private
+  namespace capabilities and failed before dispatch. The corrected bootstrap is root only inside its
+  new user namespace, mapped to the unprivileged outer worker; no global registration changes occur.
+  Incorporate this tested boundary into the real Claude executor before admitting model tools.

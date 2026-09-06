@@ -344,7 +344,7 @@ Ubuntu's existing system disk is on C:. No distro package installation, global W
 recovery-distribution startup was performed.
 
 Actual WSL canaries passed writable-candidate/read-only-review boundaries and denied host paths,
-control files, Windows interop and network access. A separate test killed the diagnostic controller
+control files and network access. A separate test killed the diagnostic controller
 while a detached child was running; the owning transient systemd service removed the entire cgroup,
 and no delayed write appeared. This is a bounded process-lifetime result, not complete job recovery.
 Claude startup with the actual reviewer flags reached the expected missing-authentication result and
@@ -358,6 +358,14 @@ their absence. A native authentication failure can carry a success subtype while
 true; the adapter recognizes the actual error envelope and interrupts for sign-in instead of spending
 the remaining attempts. An interactive sign-in helper is prepared. Authentication, provider access,
 native model tool denial and complete Claude job execution remain open.
+
+A later test with a real Windows executable found that hiding `/init` does not remove the inherited
+WSL binary loader. The loader started but failed before the harmless Windows command completed;
+that failure is not an adequate isolation boundary. A separate corrected canary initializes an empty
+binary-format table inside a fresh private user namespace, hides the table and drops every capability
+before executing the worker. The real Windows executable then fails with an executable-format error,
+while ordinary WSL Windows execution still succeeds. This namespace-local correction must be included
+and tested in the eventual Claude executor; the earlier startup diagnostic alone does not prove it.
 
 - [x] Record the owner-agreed Ralph-only product scope and default completion behavior; remove the
   repository instruction that routes ordinary roadmap work through Ralph. This is a documentation change.
