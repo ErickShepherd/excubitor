@@ -33,10 +33,15 @@ including other tasks in the same repository. The default result is reviewed, ve
 on an isolated branch; automatic merging is optional and authorized before the run starts. Publishing
 and deployment have separate permissions. Work units advance automatically without repeated approval.
 
-This lifecycle is not yet verified in the current development implementation. The unwanted Codex
-user-scope registration was removed on 2026-09-05, and ordinary-work checks passed after reopening
-the app. The current adapter still requires correction before any replacement is installed. The older
-activation and installation examples below describe prior behavior, not proof of Ralph-only support.
+The development candidate has completed a real Codex CLI job from one native confirmation through
+two implementation units, ten frozen acceptance checks and a fresh review. It retained a clean isolated
+branch, drained its workers and became inactive. Ordinary native edits succeeded in another task during
+the run and in the initiating task afterward. This is a bounded Windows CLI demonstration, not a ready
+cross-vendor installer or GUI support. The unwanted user-scope registration remains removed.
+
+The legacy `install` command now refuses new registrations because its hooks also affect ordinary tasks.
+Read-only `install --dry-run`, diagnostics and uninstall remain available for existing installations.
+The older activation and installation examples below describe prior behavior, not Ralph-only setup.
 Use the [current remediation plan](docs/design/vendor-agnostic-enforcement-plan.md) for the agreed scope,
 current evidence, and remaining work. Do not use legacy examples to install broad enforcement as a fix.
 

@@ -271,6 +271,23 @@ No model switching, reset or replacement agreement is part of retry handling. Co
 these behaviors; a fresh native project run is still needed. The launch skill also explains valid check
 names and omits redundant work units for verification and review already performed by the host.
 
+The next fresh Codex CLI job completed both implementation units, all ten original output checks and
+a fresh independent review in two of six attempts. Native skill discovery and the first proposal worked
+without rejected check names or a redundant verification unit. Independent inspection matched the
+accepted native form, frozen checks, retained clean isolated candidate, original base and process
+drainage. Ordinary editing succeeded in another task during work and in the initiating task after
+completion. The exhausted earlier runs stayed byte-identical. The three unchanged temporary project
+files were removed after session exit; unrelated settings, sandbox setup and credentials were preserved.
+No service-capacity failure occurred in this successful run, so live recovery from that failure remains
+unverified. The retry behavior has component coverage. This completes the bounded project-backend CLI
+demonstration; production provisioning, full tool admission, GUI and other vendors remain open.
+
+The legacy install CLI now refuses new hook registrations in both user and project scopes. Those hooks
+can enforce restrictions on ordinary tasks and must not stand in for the unfinished Ralph-only installer.
+Read-only legacy previews and existing-installation diagnostics and removal remain available. The
+transaction library is retained for maintenance and isolated regression tests. Nothing is newly
+registered on the owner's machine by this correction.
+
 ## Remediation checklist
 
 - [x] Record the owner-agreed Ralph-only product scope and default completion behavior; remove the

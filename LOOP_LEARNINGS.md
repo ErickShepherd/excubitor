@@ -852,3 +852,22 @@ Append-only observations from vendor-agnostic enforcement iterations.
 - Native status now explains capacity failures, including blocked jobs. The launch skill describes
   accepted check names and avoids redundant work units for checks and review that the host already owns.
   Component results do not establish native recovery from a real service outage or full project completion.
+
+### Completed project-backend CLI run and legacy installation correction, 2026-09-06
+
+- The next fresh run completed two implementation units, ten original checks and an independent review
+  in two attempts. Both units were committed automatically. Actual native editing worked concurrently
+  in another task and after completion in the initiating task. Independent inspection confirmed the
+  agreement, checks, clean isolated candidate, preserved base, drained workers and inactive run.
+- No capacity failure occurred. This proves normal project completion, not native recovery from a
+  real capacity outage. Earlier exhausted packets remain unchanged. The three owned project files
+  were removed after native session exit, preserving the two authorized trust additions and other settings.
+- The first independent inspector treated reviewer commentary as JSON. Its failure is preserved;
+  inspection now separately requires a completed native turn and validates the final structured report.
+- The old installation CLI still offered always-active hooks, including user scope by default. New
+  legacy registrations now fail without writing in either scope; previews, diagnostics and removal
+  remain. The isolated transaction library is retained while the scoped Ralph installer is unfinished.
+- A pre-existing Windows test fixture used text-mode CRLF while testing the documented canonical-JSON
+  byte round trip. The fixture now writes canonical LF bytes explicitly; the equality assertion and
+  transaction behavior are unchanged. Arbitrarily formatted settings retain their parsed values during
+  legacy uninstall; only rollback promises verbatim restoration regardless of original formatting.

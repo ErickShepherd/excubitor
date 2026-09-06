@@ -1,14 +1,8 @@
-"""``excubitor install`` — plan or apply an Excubitor install for a runtime integration.
+"""Read-only previews of the legacy hook installer during Ralph-only remediation.
 
-``--dry-run`` computes and prints the exact plan while writing nothing (C2.3). Without it, the plan is
-applied transactionally (C2.5): the neutral policy is validated first (an unknown version stops), then
-the artifacts are staged atomically, the exact-tuple hooks registered, and a hash-bound receipt
-committed — any failure rolls back the exact prior state. Installation is reported as *not protected
-yet*: only a real harmless-denial host probe (``excubitor doctor --probe``) earns that.
-
-``--runtime auto`` acts only on *detected* runtimes; an explicit ``--runtime`` acts even when the
-runtime's control dir is absent (it would be created). Claude Code and Codex have installable adapter
-profiles, but neither is reported as supported enforcement without a real-host denial witness.
+Legacy hooks can affect ordinary tasks in either scope. This command cannot install
+them as a substitute for the unfinished explicit-job installer. The transaction
+library remains available for isolated tests and existing-installation maintenance.
 """
 from __future__ import annotations
 
@@ -19,7 +13,7 @@ from pathlib import Path
 from excubitor import config
 from excubitor.installers import plan as plan_mod
 from excubitor.installers import runtime as rt
-from excubitor.installers import transaction, validate
+from excubitor.installers import validate
 
 __all__ = ["register", "run"]
 
@@ -29,12 +23,13 @@ _SUPPORTED = ["claude-code", "codex"]
 def register(subparsers: "argparse._SubParsersAction") -> None:
     parser = subparsers.add_parser(
         "install",
-        help="plan (--dry-run) or apply an Excubitor install into a coding-agent runtime",
-        description="Plan or apply an Excubitor install transactionally.",
+        help="inspect a legacy install plan (--dry-run); new registrations are unavailable",
+        description=("Preview the legacy hook layout without writing. New registrations are disabled "
+                     "until the explicit-job Ralph installer is ready; ordinary tasks must stay unaffected."),
     )
     parser.add_argument(
         "--runtime", default="auto",
-        help="runtime to install into: 'auto' (detected only) or one of: " + ", ".join(_SUPPORTED),
+        help="legacy runtime layout to inspect: 'auto' (detected only) or one of: " + ", ".join(_SUPPORTED),
     )
     parser.add_argument("--scope", choices=[s.value for s in rt.Scope], default=rt.Scope.USER.value)
     parser.add_argument("--home", type=Path, default=None,
@@ -44,7 +39,7 @@ def register(subparsers: "argparse._SubParsersAction") -> None:
     parser.add_argument("--dry-run", action="store_true",
                         help="print the exact plan and write nothing")
     parser.add_argument("--allow-downgrade", action="store_true",
-                        help="allow installing over a receipt from a newer Excubitor (default: refuse)")
+                        help="legacy compatibility option; cannot enable registration writes")
     parser.set_defaults(_handler=run)
 
 
@@ -56,6 +51,15 @@ def _selected_profiles(runtime: str, targets: "list[rt.RuntimeTarget]") -> "list
 
 def run(args: argparse.Namespace) -> int:
     """Handle ``excubitor install``. Returns a process exit code."""
+    if not args.dry_run:
+        print(
+            "excubitor install: the legacy hooks also enforce rules on ordinary tasks, so new "
+            "registrations are disabled in this Ralph-only development branch. No settings were "
+            "changed. The explicit-job installer is not ready. Use --dry-run only to inspect the "
+            "old layout; status, doctor and uninstall remain available for existing installations.",
+            file=sys.stderr,
+        )
+        return 2
     scope = rt.Scope(args.scope)
     home = args.home if args.home is not None else Path.home()
     project_root = args.project_root if args.project_root is not None else Path.cwd()
@@ -102,26 +106,6 @@ def run(args: argparse.Namespace) -> int:
             print(f"excubitor install: {exc}", file=sys.stderr)
             exit_code = 1
             continue
-        if args.dry_run:
-            sys.stdout.write(plan_mod.render_plan(plan))
-            continue
-        try:
-            result = transaction.apply_install(
-                profile, target, plan, allow_downgrade=args.allow_downgrade
-            )
-        except (ValueError, transaction.TransactionError) as exc:
-            print(f"excubitor install: {exc}", file=sys.stderr)
-            exit_code = 1
-            continue
-        status = "changed" if result.changed else "already current"
-        print(f"installed {target.runtime}/{target.scope.value}: {status} "
-              f"({', '.join(result.messages)})")
-        if plan.trust_handoff:
-            print("  NEEDS TRUST — the installer did not and cannot approve its own unmanaged hook:")
-            for index, step in enumerate(plan.trust_handoff, 1):
-                print(f"    {index}. {step}")
-            print("  NOT protected — trust review and a real-host denial witness are still required.")
-        else:
-            print("  NOT protected — `excubitor doctor --probe` can run a hook diagnostic, but "
-                  "there is no real-host witness and the installation remains needs-probe.")
+        print("Legacy hook preview only: this layout affects ordinary tasks and cannot be applied here.")
+        sys.stdout.write(plan_mod.render_plan(plan))
     return exit_code

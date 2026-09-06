@@ -31,9 +31,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog=_PROG,
         description=(
-            "Installable, model-blind safety policy for coding-agent runtimes. "
-            "Codex TUI enforcement is live-verified on Windows for Bash and apply_patch; status "
-            "reports the remaining host and tool surfaces separately."
+            "Excubitor is being updated for explicitly started, unattended Ralph jobs. "
+            "Ordinary development needs no Ralph activation. The scoped native launcher is a "
+            "development candidate; legacy install previews, diagnostics and removal are available."
         ),
     )
     parser.add_argument(

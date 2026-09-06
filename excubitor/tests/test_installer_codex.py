@@ -176,20 +176,23 @@ def test_codex_registration_executes_from_non_ascii_and_spaced_targets(
     assert json.loads(result.stdout)["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
-def test_cli_install_and_doctor_surface_codex_trust_gate(
+def test_legacy_preview_and_existing_installation_doctor_surface_codex_trust_gate(
     tmp_path: Path, monkeypatch, capsys
 ) -> None:
     home = tmp_path / "home"
     home.mkdir()
     monkeypatch.setenv("EXCUBITOR_STATE_HOME", str(tmp_path / "state"))
 
-    assert cli_main(["install", "--runtime", "codex", "--home", str(home)]) == 0
+    assert cli_main(["install", "--runtime", "codex", "--home", str(home), "--dry-run"]) == 0
     output = capsys.readouterr().out
-    assert "installed codex/user" in output
-    assert "NEEDS TRUST" in output
+    assert "Legacy hook preview only" in output
     assert "/hooks" in output
     assert str(home / ".codex" / "hooks.json") in output
-    assert "NOT protected" in output
+    assert not (home / ".codex").exists()
+
+    # Existing-installation diagnostics still work. This is an isolated legacy
+    # transaction fixture, not permission for the CLI to add new registrations.
+    tx.apply_install(rt.CODEX, rt.CODEX.target(rt.Scope.USER, home, None))
 
     report = doctor_mod.run_doctor("codex", "user", do_probe=False)
     assert report["registrations"]["missing"] == []
