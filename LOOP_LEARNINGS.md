@@ -683,3 +683,18 @@ Append-only observations from vendor-agnostic enforcement iterations.
 - The exact existing-sandbox test is prepared in private task storage. No new Windows account,
   firewall configuration, credential copy, or native installation was performed. Native approval
   context and full protected reconnect remain open; synthetic identities are not a substitute.
+
+### Approved existing elevated sandbox access check, 2026-09-06
+
+- The owner authorized a narrow native-runtime storage exception for one prepared check against the
+  existing Windows sandbox. Its worker used a different Windows account and was denied query,
+  termination, assignment, DACL, and owner access to the host-owned named job. The absent-object
+  control returned a distinct absence error. The unelevated mode remains excluded.
+- Ordinary project writing succeeded and the external acceptance file retained its exact bytes.
+  The actual worker appeared in the runner's containment job; all eight observed processes drained
+  within the limit. Native configuration, setup-marker, and sandbox credential fingerprints matched
+  before, after, and at independent reinspection. No explicit setup or credential copy was needed.
+- The named access target and actual containment job are separate kernel objects. This result proves
+  the tested access denials and containment observation, not native forced-owner-death recovery,
+  protected Ralph reconnection, GUI entry points, other writable tools, or cross-vendor support.
+  Reports and test artifacts remain in private task storage; production adapters remain unchanged.

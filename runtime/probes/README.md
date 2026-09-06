@@ -236,13 +236,23 @@ unelevated mode. The later token diagnostic confirmed the worker and host share 
 and medium integrity level; it also observed the exact worker in the host's process job. This rules
 out a simple integrity-label separation at the existing levels. Token identifiers stay in private reports.
 
-An explicit `--existing-elevated-home ABSOLUTE_HOME` option prepares reuse of an already provisioned
-native sandbox. It is not yet live-verified. The read-only prerequisite refuses missing/unsupported
+An explicit `--existing-elevated-home ABSOLUTE_HOME` option reuses an already provisioned
+native sandbox. The read-only prerequisite refuses missing/unsupported
 setup and retains only hashes of native config, setup-marker, and sandbox credential bytes. Those
 hashes must match after execution, and the real worker must be observed in the host's kernel job.
 Offline tests cover refusal without setup and detection of changed protected files. No credential
 content is copied, and no explicit setup or repair command is issued. Existing files do not establish
 native readiness; stop on any native setup/elevation request or denial rather than approving or retrying it.
+
+The separately authorized existing-home check passed on Windows with Codex CLI 0.153.4. The native
+worker used a different Windows account and was denied all five requested kinds of job access,
+including query access. The missing-object control returned absence instead of access denial.
+Ordinary project writing succeeded; the attempted external acceptance overwrite failed and its bytes
+stayed unchanged. The worker appeared in the actual containment job, and all eight observed processes
+drained within the limit. Native config, setup-marker, and credential fingerprints matched before,
+after, and at independent reinspection. The named access target and the containment job are separate
+objects. This tests the target's access boundary and worker containment; it does not demonstrate
+native worker behavior through forced owner death or protected Ralph reconnection.
 
 This option can make Codex write native runtime files in the selected existing home. It requires
 storage authority for that location; it cannot satisfy a different-drive-only rule by itself.
@@ -278,10 +288,12 @@ tool contexts continued to fail the approval parser. The identity report explici
 `ralph_reconnect_verified` false. It does not prove native confirmation, autonomous continuation,
 protected-store recovery, GUI support, or authentic identity on an arbitrary client connection.
 
-The access probe creates a fresh native home and temporary directory inside the output folder. The
+The access probe's default mode creates a fresh native home inside the output folder; its explicit
+existing-home mode uses the approved native installation and its existing sandbox credentials. The
 reconnect probe now requires a pre-existing, separately approved fixture home and uses a fresh output
-and temporary directory. Both set native state locations only in child environments, use no
-credentials, and install no hooks. Their reports stay private because they contain local paths and native metadata.
+and temporary directory. Both set native state locations only in child environments, make no model
+calls or credential copies, and install no hooks. Reports stay private because they contain local paths
+and native metadata.
 All child processes are bounded by the Windows tree runner. Native app-server startup can make
 unauthenticated background catalog requests; this is not a claim of a network-isolated host process.
 New native setup, registration, and trust still need their own authority.

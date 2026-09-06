@@ -176,14 +176,20 @@ The native action can reuse the original accepted job through an adapter's recon
 These are component results. A subsequent actual native sandbox test rejected the unelevated Windows
 mode: workers could open query handles to host-owned jobs despite denied mutation access. That mode
 was already excluded from the approval parser; regression coverage now preserves the exclusion.
-Elevated-mode isolation remains unverified. A native app-server experiment preserved a seeded task's
-identity through server loss and resumption, but direct MCP calls lacked the required approval context
+The separately approved existing elevated sandbox check subsequently denied all five requested kinds
+of access, including query handles, using a different native worker account. Ordinary project writes
+succeeded, the external acceptance file stayed unchanged, and all eight observed processes drained.
+The worker appeared in its actual containment job; the named access target was a separate object.
+Native configuration, setup-marker, and credential fingerprints remained unchanged at independent
+inspection. This verifies the tested Windows CLI shell boundary, not native forced-owner-death recovery
+or all writable tools. A native app-server experiment preserved a seeded task's identity through server
+loss and resumption, but direct MCP calls lacked the required approval context
 and were correctly rejected. Its final config comparison failed: Codex automatically trusted the
 disposable project in each isolated test home. Those entries remain for review; the corrected probe
 refuses fresh enrollment. The owner subsequently approved reuse of one exact isolated profile. That
 native run passed identity preservation and task separation, drained both process trees, and retained
 identical native configuration without saved credentials. Incomplete tool contexts were still rejected.
-Protected same-task Ralph reconnect, elevated-worker isolation, GUI behavior, and other vendors still
+Protected same-task Ralph reconnect, full native-tool admission, GUI behavior, and other vendors still
 require direct verification. The full replacement remains unfinished.
 
 ## Remediation checklist

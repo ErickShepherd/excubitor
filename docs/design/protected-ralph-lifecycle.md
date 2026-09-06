@@ -227,16 +227,24 @@ since failed the named-job isolation probe: it denied termination, assignment, p
 and external oracle changes, but allowed a query handle. Such a handle can keep the job alive after
 its host closes its own handle. The probe opened and closed it; it did not demonstrate a malicious
 native worker retaining it through host death. This mode remains excluded by the metadata parser.
-The elevated sandbox still requires a separate access-denial witness; neither its name nor the
-unelevated mode's successful filesystem denials prove that boundary. Every native tool needs admission.
+The separately authorized existing elevated sandbox check now supplies a native access-denial witness
+on Windows with Codex CLI 0.153.4. Its worker used a different Windows account and could not open the
+named target for query, termination, assignment, DACL, or owner access. Ordinary project writing
+succeeded, the external acceptance bytes stayed unchanged, and the exact worker was observed in its
+containment job. All eight observed processes drained within the bound, with native config, setup,
+and credential fingerprints unchanged at final independent inspection. The access target and the
+containment job are separate objects; this is not a native forced-owner-death demonstration.
+Every other native tool and permission configuration still needs admission.
 Production adapters still do not import these components.
 
 The native token diagnostic confirmed that the unelevated worker shares both the host's Windows
 account and its medium integrity level, and that this exact worker appears in the host job. Windows
 integrity checks distinguish lower-level callers, so changing the job's label at the existing level
 would not separate these two tokens. The candidate therefore retains its elevated-only admission
-requirement. Reuse of an existing elevated sandbox has a prepared prerequisite and fingerprint check;
-it has not been executed, and native runtime writes require authority for the selected home location.
+requirement. Reuse of the existing elevated sandbox passed its prerequisite and fingerprint checks
+under the owner's narrow authorization for native runtime storage in that home. It did not require
+an explicit setup command, native configuration edit, or credential copy. This storage exception is
+specific to the approved check; future native runtime writes still need authority for their location.
 
 The native app-server preserved a seeded test task's identity across forced server termination and
 `thread/resume`, while another task in the same project received a different identity. Direct MCP
@@ -252,7 +260,8 @@ task stayed distinct, both process trees drained, and native config remained byt
 each lifetime and at final inspection. All three incomplete tool contexts were still rejected.
 No credentials, model turn, saved tool registration, or sandbox provisioning was involved, and the
 owner's normal native home was not used. This result closes the approved protocol check; protected
-Ralph reconnect and elevated-worker isolation remain unverified.
+Ralph reconnect remains unverified. The later elevated access result above supplies only the tested
+shell boundary; it does not enlarge this identity experiment's scope.
 
 The atomic creation mechanism follows Microsoft's
 [job-list attribute guidance](https://devblogs.microsoft.com/oldnewthing/20230209-00/?p=107812).
