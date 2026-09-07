@@ -31,8 +31,15 @@ def test_batch_validates_all_paths_before_writing(runtime):
     (runtime.project / "other.py").write_text("other")
     runtime.editable = frozenset({"code.py", "other.py"})
     with pytest.raises(RunError):
-        runtime.apply({"files": [{"path": "code.py", "content": "changed"},
-                                  {"path": "../agreement.json", "content": "forged"}], "command": []})
+        runtime.apply(
+            {
+                "files": [
+                    {"path": "code.py", "content": "changed"},
+                    {"path": "../agreement.json", "content": "forged"},
+                ],
+                "command": [],
+            }
+        )
     assert (runtime.project / "code.py").read_text() == "original"
 
 
@@ -44,13 +51,17 @@ def test_bad_command_does_not_partially_apply(runtime):
 
 def test_valid_edit_and_literal_command(runtime):
     import sys
+
     command = [sys.executable, "-B", "-c", "print('a; b')"]
-    assert runtime.apply({"files": [{"path": "code.py", "content": "fixed\n"}], "command": command}) == tuple(command)
+    assert runtime.apply({"files": [{"path": "code.py", "content": "fixed\n"}], "command": command}) == tuple(
+        command
+    )
     assert runtime.snapshot() == {"code.py": "fixed\n"}
 
 
 def test_shared_file_rejected(runtime):
     import os
+
     os.link(runtime.project / "code.py", runtime.project.parent / "alias.py")
     with pytest.raises(RunError, match="unshared"):
         runtime.apply({"files": [{"path": "code.py", "content": "bad"}], "command": []})
@@ -59,5 +70,11 @@ def test_shared_file_rejected(runtime):
 
 def test_baseline_cannot_be_implicitly_admitted(tmp_path):
     with pytest.raises(RunError, match="explicit"):
-        WindowsDevelopmentExecutor(Path("unused"), tmp_path, tmp_path,
-                                   codex_home=tmp_path, environment={}, baseline="credential-isolated")
+        WindowsDevelopmentExecutor(
+            Path("unused"),
+            tmp_path,
+            tmp_path,
+            codex_home=tmp_path,
+            environment={},
+            baseline="credential-isolated",
+        )

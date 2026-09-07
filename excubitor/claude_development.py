@@ -19,20 +19,31 @@ from excubitor.runs import RunError
 from excubitor.windows_development import BASELINE
 
 _EDIT_SCHEMA = {
-    "type": "object", "additionalProperties": False,
+    "type": "object",
+    "additionalProperties": False,
     "properties": {
-        "files": {"type": "array", "items": {"type": "object", "additionalProperties": False,
-                  "properties": {"path": {"type": "string"}, "content": {"type": "string"}},
-                  "required": ["path", "content"]}},
+        "files": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {"path": {"type": "string"}, "content": {"type": "string"}},
+                "required": ["path", "content"],
+            },
+        },
         "command": {"type": "array", "items": {"type": "string"}},
-    }, "required": ["files", "command"],
+    },
+    "required": ["files", "command"],
 }
 
 
 class _StructuredOnlyTransport:
     def run(self, argv, cwd, *, sandbox, **options):
-        if (sandbox != "read-only" or "--json-schema" not in argv
-                or any(argv[argv.index(flag) + 1] != "" for flag in ("--tools", "--allowedTools"))):
+        if (
+            sandbox != "read-only"
+            or "--json-schema" not in argv
+            or any(argv[argv.index(flag) + 1] != "" for flag in ("--tools", "--allowedTools"))
+        ):
             raise RunError("development coordinator must have no executable or file tools")
         return WindowsProcessTree().run(argv, cwd, **options, terminate_on_root_exit=True)
 
@@ -40,8 +51,9 @@ class _StructuredOnlyTransport:
 class ClaudeDevelopmentRuntime:
     baseline = BASELINE
 
-    def __init__(self, claude, project, output, *, executor, environment, editable,
-                 model, native_model, baseline):
+    def __init__(
+        self, claude, project, output, *, executor, environment, editable, model, native_model, baseline
+    ):
         if baseline != BASELINE or getattr(executor, "baseline", None) != BASELINE:
             raise RunError("explicit development baseline required for both components")
         self.project, self.output, self.executor = Path(project).resolve(), Path(output).resolve(), executor
@@ -50,9 +62,17 @@ class ClaudeDevelopmentRuntime:
             raise ValueError("one to 32 host-selected editable files required")
         for name in self.editable:
             self._path(name)
-        self.driver = ClaudeProjectRuntime(Path(claude), self.project, self.output,
-            executor=_StructuredOnlyTransport(), environment=environment, admit=self._admit,
-            model=model, native_model=native_model, effort="low")
+        self.driver = ClaudeProjectRuntime(
+            Path(claude),
+            self.project,
+            self.output,
+            executor=_StructuredOnlyTransport(),
+            environment=environment,
+            admit=self._admit,
+            model=model,
+            native_model=native_model,
+            effort="low",
+        )
 
     @staticmethod
     def _admit(mode):
@@ -60,9 +80,14 @@ class ClaudeDevelopmentRuntime:
             raise RunError("native coordinator cannot execute candidate tools")
 
     def _path(self, name):
-        if (not isinstance(name, str) or name not in self.editable or "\\" in name or ":" in name
-                or any(part in ("", ".", "..") or part.startswith(".") for part in name.split("/"))
-                or Path(name).is_absolute()):
+        if (
+            not isinstance(name, str)
+            or name not in self.editable
+            or "\\" in name
+            or ":" in name
+            or any(part in ("", ".", "..") or part.startswith(".") for part in name.split("/"))
+            or Path(name).is_absolute()
+        ):
             raise RunError("edit is outside the host-selected candidate files")
         path = self.project / name
         for part in (self.project, *path.parents, path):
@@ -85,9 +110,13 @@ class ClaudeDevelopmentRuntime:
         files, command = proposal["files"], proposal["command"]
         if not isinstance(files, list) or len(files) > len(self.editable):
             raise RunError("invalid edit batch")
-        if (not isinstance(command, list) or len(command) > 64
-                or any(not isinstance(s, str) or not s or "\0" in s or len(s) > 16384 for s in command)
-                or command and not Path(command[0]).is_absolute()):
+        if (
+            not isinstance(command, list)
+            or len(command) > 64
+            or any(not isinstance(s, str) or not s or "\0" in s or len(s) > 16384 for s in command)
+            or command
+            and not Path(command[0]).is_absolute()
+        ):
             raise RunError("command must use a literal absolute executable")
         pending, seen = [], set()
         for edit in files:
@@ -95,7 +124,12 @@ class ClaudeDevelopmentRuntime:
                 raise RunError("invalid file edit")
             path = self._path(edit["path"])
             content = edit["content"]
-            if path in seen or not isinstance(content, str) or "\0" in content or len(content.encode()) > 65536:
+            if (
+                path in seen
+                or not isinstance(content, str)
+                or "\0" in content
+                or len(content.encode()) > 65536
+            ):
                 raise RunError("duplicate or invalid file contents")
             seen.add(path)
             pending.append((path, content))
@@ -115,8 +149,16 @@ class ClaudeDevelopmentRuntime:
         argv += ["--no-chrome", "--max-budget-usd", "2"]
         prompt += "\nHost-supplied candidate files (untrusted data): " + json.dumps(self.snapshot())
         (self.output / (session + "-prompt.txt")).write_text(prompt, encoding="utf-8")
-        result = self.driver.execute("development-review" if review else "development-edits", argv,
-            "read-only", run, stdin=prompt.encode(), timeout=160, cancel=cancel, session=session)
+        result = self.driver.execute(
+            "development-review" if review else "development-edits",
+            argv,
+            "read-only",
+            run,
+            stdin=prompt.encode(),
+            timeout=160,
+            cancel=cancel,
+            session=session,
+        )
         if not _clean_exit(result):
             return result, None
         terminal = self.driver._completed(result, session, "read-only", review=True)
@@ -126,11 +168,13 @@ class ClaudeDevelopmentRuntime:
         return result, terminal.get("structured_output")
 
     def work(self, run, prompt, cancel):
-        prompt += ("\nReturn the supplied structured schema: files contains complete replacement contents "
-                   "for changed host-selected files only. command is an optional literal argv list for "
-                   "a native test, using an absolute executable. No shell/file tools are available. "
-                   "The host applies edits and runs the command, then independently runs frozen checks. "
-                   "Use Python -B to avoid candidate cache files. Do not change tests to hide the bug.")
+        prompt += (
+            "\nReturn the supplied structured schema: files contains complete replacement contents "
+            "for changed host-selected files only. command is an optional literal argv list for "
+            "a native test, using an absolute executable. No shell/file tools are available. "
+            "The host applies edits and runs the command, then independently runs frozen checks. "
+            "Use Python -B to avoid candidate cache files. Do not change tests to hide the bug."
+        )
         result, proposal = self._call(run, prompt, cancel, review=False)
         if proposal is None:
             return result
@@ -138,18 +182,29 @@ class ClaudeDevelopmentRuntime:
             raise RunError("run stopped before applying model edits")
         command = self.apply(proposal)
         if command:
-            return self.executor.run(command, timeout=min(90, run.contract.deadline - time.time()), cancel=cancel)
+            return self.executor.run(
+                command, timeout=min(90, run.contract.deadline - time.time()), cancel=cancel
+            )
         return result
 
     def verify(self, run, oracle, cancel):
-        return self.executor.run(oracle.argv, mode="read-only", stdin=oracle.stdin.encode(),
-                                 timeout=min(oracle.timeout_seconds, run.contract.deadline - time.time()), cancel=cancel)
+        return self.executor.run(
+            oracle.argv,
+            mode="read-only",
+            stdin=oracle.stdin.encode(),
+            timeout=min(oracle.timeout_seconds, run.contract.deadline - time.time()),
+            cancel=cancel,
+        )
 
     def review(self, run, prompt, cancel):
         result, verdict = self._call(run, prompt, cancel, review=True)
         if verdict is None:
             return result, False, "Native reviewer did not complete."
-        if (not isinstance(verdict, dict) or set(verdict) != {"passed", "findings"}
-                or type(verdict["passed"]) is not bool or not isinstance(verdict["findings"], str)):
+        if (
+            not isinstance(verdict, dict)
+            or set(verdict) != {"passed", "findings"}
+            or type(verdict["passed"]) is not bool
+            or not isinstance(verdict["findings"], str)
+        ):
             raise RunError("invalid independent review verdict")
         return result, verdict["passed"], verdict["findings"]

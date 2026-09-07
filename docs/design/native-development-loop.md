@@ -49,6 +49,50 @@ repository and branch; it does not commit the development repository or install
 runtime integrations. Its work and review model is explicitly Fable 5.1, with
 three supervisor attempts and a twelve-minute run deadline.
 
+## Start, status, and stop from the CLI
+
+The existing CLI now exposes `ralph start`, `ralph status`, and `ralph stop`.
+Start is a foreground command: keep its terminal open until it returns. Another
+terminal can inspect or cancel the same run. Ctrl+C also requests cancellation;
+the supervisor records cancellation only after the active worker has drained.
+
+```text
+python -B -m excubitor.cli ralph start --job D:/jobs/statistics.json --root D:/runs/statistics --baseline native-development-v1
+python -B -m excubitor.cli ralph status --root D:/runs/statistics
+python -B -m excubitor.cli ralph stop --root D:/runs/statistics
+```
+
+The job is an owner-reviewed JSON object with exactly these fields:
+
+| Fields | Meaning |
+| --- | --- |
+| `origin`, `candidate`, `metadata`, `branch`, `git` | Existing absolute original/candidate/metadata/Git paths and the full isolated branch ref. The candidate must be clean, with external Git metadata and a separate `main` base branch. |
+| `claude`, `codex`, `codex_home`, `model` | Existing native executables/account state and the exact expected native Claude model. |
+| `editable` | List of existing candidate-relative UTF-8 files the job may edit. |
+| `goal`, `units` | Agreed work and its ordered, unique work units. |
+| `checks` | Output oracles with `name`, literal `argv`, `stdin` (currently empty), and expected `stdout`; optional `stderr`, `exit_code`, and `timeout_seconds`. |
+| `check_files` | Absolute external acceptance implementation files. Original bytes are fingerprinted and checked before each attempt. List all relevant files; dependencies are not discovered automatically. |
+| `max_attempts`, `time_limit_seconds` | Original attempt budget and elapsed-time limit, including retries. |
+| `retain_command` | Literal argv for the host's authorized committer. It receives JSON on stdin containing `candidate`, changed `paths`, and `run_id`. It must retain exactly that candidate through the appropriate broker and return zero only on success. |
+
+The host prepares the candidate and committer before starting. The CLI does not
+enroll repositories or replace an existing broker. Its run directory must be
+fresh and outside both workspaces. It saves the original job, acceptance
+definitions, run state, and native execution receipts there. Status reports
+progress and review state without starting another worker. A process crash leaves
+interrupted work for reconciliation; this foreground entry point does not add
+automatic crash recovery or a resume command.
+
+A native Fable 5.1 CLI rehearsal completed median and span implementations in two
+units, then retried after a deliberately unavailable test dependency. The test
+harness restored that dependency automatically after the first failed check;
+neither the frozen check nor the production loop contained fault-injection logic.
+The third attempt passed unchanged acceptance and a fresh review. There was one
+owner start and no intermediate owner intervention. A second native run was
+cancelled through `ralph stop`; its Claude process tree drained and status became
+cancelled in under one second. Regression checks passed: 101 tests, including
+two-unit retry, cancellation from another client, and changed-check rejection.
+
 ## Deliberate limits
 
 - Only existing, host-selected UTF-8 files are editable through the structured
@@ -67,11 +111,12 @@ three supervisor attempts and a twelve-minute run deadline.
   binary-output fidelity. Native startup consumes the same deadline as work.
 - Ordinary descendant shutdown was measured. No promise is made for arbitrary
   external services or brokers starting processes outside the observed job.
-- CLI fixture operation is established. In-window launch, packaging, installed
+- The prepared-job CLI is exercised with disposable repositories. In-window launch, packaging, installed
   runtime promotion, other vendor adapters and automatic outward finish actions
   remain outside this slice.
 
 The implementation is consolidated into the existing vendor-agnostic enforcement
 worktree alongside its earlier process/job fixes. Those pre-existing edits were
 preserved byte-for-byte. The task evidence directory retains source backups,
-native receipts and the committed demo before the redundant worktree is removed.
+native receipts and the committed demo. The redundant worktree was removed after
+that preservation and verification.
