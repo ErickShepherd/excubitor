@@ -15,10 +15,10 @@ from pathlib import Path
 
 from excubitor.acceptance import OutputOracle
 from excubitor.candidates import GitCandidateReader
-from excubitor.development_adapters import baseline_for, make_executor, make_runtime, normalize
+from excubitor.development_adapters import baseline_for, make_executor, make_runtime, normalize, preflight
 from excubitor.development_runtime import BASELINE, LOCAL_BASELINE
 from excubitor.development_runtime import clean_exit as _clean_exit
-from excubitor.processes import WindowsProcessTree
+from excubitor.host_processes import background_options, process_tree
 from excubitor.project_backend import ProjectBackend
 from excubitor.runs import Binding, Contract, RunError, RunStore
 from excubitor.supervisor import Supervisor
@@ -28,9 +28,11 @@ from excubitor.watchdog import ControllerWatchdog
 def register(subparsers):
     parser = subparsers.add_parser("ralph", help="start, inspect, or stop an agreed native job")
     actions = parser.add_subparsers(dest="action", required=True)
+    from excubitor.development_init import register as register_init
     from excubitor.development_setup import register as register_setup
 
     register_setup(actions)
+    register_init(actions)
     start = actions.add_parser("start", help="run a prepared job until completion or its agreed limit")
     source = start.add_mutually_exclusive_group(required=True)
     source.add_argument("--job", type=Path, help="owner-reviewed job JSON")
@@ -117,8 +119,9 @@ def _prepare(job, root, baseline):
     }
     if not isinstance(job, dict) or set(job) != required:
         raise RunError("job must contain exactly the documented fields")
-    if baseline != baseline_for(job) or os.name != "nt":
-        raise RunError("this entry point requires native Windows and the explicit development baseline")
+    preflight(job)
+    if baseline != baseline_for(job):
+        raise RunError("start requires the explicit baseline selected by the executor")
     if type(job["time_limit_seconds"]) is not int or not 1 <= job["time_limit_seconds"] <= 86400:
         raise RunError("job time limit must be between one second and one day")
     for key in ("origin", "candidate", "metadata", "git"):
@@ -238,7 +241,7 @@ def _attach(root):
         if not set(paths).issubset(runtime.editable):
             raise RunError("candidate changed files outside the agreed editable set")
         request = json.dumps({"candidate": str(candidate), "paths": paths, "run_id": current.id}).encode()
-        result = WindowsProcessTree().run(
+        result = process_tree().run(
             tuple(retain), root, env=env, stdin=request, timeout=60, terminate_on_root_exit=True
         )
         receipt = asdict(result)
@@ -298,7 +301,7 @@ def _background(root):
             stdout=out,
             stderr=err,
             close_fds=True,
-            creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
+            **background_options(),
         )
     print(json.dumps({"starting_in_background": True, "root": str(root)}))
     return 0
@@ -336,6 +339,7 @@ def _drive(root, store, run):
 
     watcher = threading.Thread(target=monitor, daemon=True)
     previous = signal.signal(signal.SIGINT, lambda *_: cancel.set())
+    previous_term = signal.signal(signal.SIGTERM, lambda *_: cancel.set()) if os.name == "posix" else None
     watcher.start()
     print(json.dumps({"started": True, "root": str(root), **_summary(run)}), flush=True)
     try:
@@ -346,3 +350,5 @@ def _drive(root, store, run):
         done.set()
         watcher.join()
         signal.signal(signal.SIGINT, previous)
+        if previous_term is not None:
+            signal.signal(signal.SIGTERM, previous_term)

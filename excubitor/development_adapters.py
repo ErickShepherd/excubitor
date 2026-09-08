@@ -6,6 +6,7 @@ model. A new adapter implements one interface here, not another loop controller.
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -13,7 +14,9 @@ from excubitor.claude_development import ClaudeStructuredModel
 from excubitor.codex_development import CodexStructuredModel
 from excubitor.command_model import CommandStructuredModel, literal_command
 from excubitor.development_runtime import BASELINE, LOCAL_BASELINE, DevelopmentRuntime
+from excubitor.host_processes import host_backend, process_tree
 from excubitor.http_model_client import validate_endpoint
+from excubitor.literal_command import reject_windows_batch
 from excubitor.local_development import LocalDevelopmentExecutor
 from excubitor.runs import RunError
 from excubitor.windows_development import WindowsDevelopmentExecutor
@@ -27,6 +30,8 @@ DESCRIPTORS = {
     "chat-completions": {"adapter", "endpoint", "api_key_env", "response_format", "model"},
     "codex-windows": {"adapter", "executable", "home"},
     "windows-process": {"adapter"},
+    "posix-process": {"adapter"},
+    "local-process": {"adapter"},
 }
 
 
@@ -58,7 +63,7 @@ def normalize(settings):
         allowed = (
             ("claude-cli", "codex-cli", "command-json", "chat-completions")
             if key == "llm"
-            else ("codex-windows", "windows-process")
+            else ("codex-windows", "windows-process", "posix-process", "local-process")
         )
         if adapter not in allowed or set(descriptor) != DESCRIPTORS[adapter]:
             raise RunError("unsupported " + key + " adapter or descriptor fields")
@@ -85,17 +90,49 @@ def normalize(settings):
             path = Path(value)
             if not path.is_absolute() or not (path.is_file() if field == "executable" else path.is_dir()):
                 raise RunError("refresh the existing absolute path: " + key + "." + field)
+            if field == "executable" and os.name == "posix" and not os.access(path, os.X_OK):
+                raise RunError("selected model executable does not have execute permission")
+            if field == "executable":
+                reject_windows_batch(path)
+    # Resolve the convenience selection before saving the agreement. Existing
+    # concrete descriptors never migrate on resume or fall back after refusal.
+    if settings["executor"]["adapter"] == "local-process":
+        settings["executor"] = {"adapter": host_backend()}
     return settings
 
 
 def baseline_for(settings):
-    return LOCAL_BASELINE if settings["executor"]["adapter"] == "windows-process" else BASELINE
+    return BASELINE if settings["executor"]["adapter"] == "codex-windows" else LOCAL_BASELINE
+
+
+def preflight(settings):
+    """Reject unavailable executor choices before planning or model dispatch."""
+    selected = normalize(settings)["executor"]["adapter"]
+    # Reject unsafe formats before planning creates files or calls a model.
+    # Full profile/check shape validation belongs to each entry point.
+    commands = [[settings["git"]]] if "git" in settings else []
+    if "retain_command" in settings:
+        commands.append(settings["retain_command"])
+    if isinstance(settings.get("checks"), list):
+        commands.extend(check.get("argv") for check in settings["checks"] if isinstance(check, dict))
+    for command in commands:
+        if isinstance(command, (list, tuple)) and command and isinstance(command[0], str):
+            reject_windows_batch(command[0])
+    actual = host_backend()
+    if selected == "codex-windows":
+        if actual != "windows-process":
+            raise RunError("codex-windows requires native Windows; select local-process explicitly")
+    else:
+        process_tree(selected)
 
 
 def make_executor(settings, project, output, *, environment, baseline):
+    preflight(settings)
     selected = normalize(settings)["executor"]
-    if selected["adapter"] == "windows-process":
-        return LocalDevelopmentExecutor(project, output, environment=environment, baseline=baseline)
+    if selected["adapter"] in ("windows-process", "posix-process"):
+        return LocalDevelopmentExecutor(
+            project, output, environment=environment, baseline=baseline, backend=selected["adapter"]
+        )
     return WindowsDevelopmentExecutor(
         selected["executable"],
         project,
@@ -107,6 +144,9 @@ def make_executor(settings, project, output, *, environment, baseline):
 
 
 def make_runtime(settings, project, output, *, executor, environment, baseline=BASELINE):
+    preflight(settings)
+    if baseline != baseline_for(normalize(settings)):
+        raise RunError("model runtime must use the baseline selected by the executor")
     selected = normalize(settings)["llm"]
     options = {"environment": environment, "model": selected["model"]}
     if selected["adapter"] == "claude-cli":

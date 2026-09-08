@@ -16,6 +16,7 @@ import time
 import uuid
 from ctypes import wintypes as w
 
+from excubitor.literal_command import reject_windows_batch
 from excubitor.runs import RunError
 
 
@@ -288,6 +289,7 @@ def create_process_in_job(
     PROC_THREAD_ATTRIBUTE_JOB_LIST closes the create-then-assign crash window.
     Only the three explicitly selected standard handles are inherited.
     """
+    reject_windows_batch(argv[0])
     kernel, security = api()
     if appcontainer_sid is not None and not isinstance(release_resources, list):
         raise RunError("sandbox desktop lifetime must be owned by the process controller")

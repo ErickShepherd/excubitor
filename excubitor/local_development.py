@@ -1,4 +1,4 @@
-"""Explicit trusted-project execution using Windows jobs, without a vendor runtime.
+"""Explicit trusted-project execution using the selected host process adapter.
 
 This is process lifetime management, NOT a filesystem or network sandbox. It is
 never selected as fallback for a denied or unavailable sandboxed executor.
@@ -12,18 +12,25 @@ from pathlib import Path
 
 from excubitor.command_model import literal_command, save_result
 from excubitor.development_runtime import LOCAL_BASELINE
-from excubitor.processes import WindowsProcessTree
+from excubitor.host_processes import process_tree
 from excubitor.runs import RunError
 
 
 class LocalDevelopmentExecutor:
     baseline = LOCAL_BASELINE
 
-    def __init__(self, project, output, *, environment, baseline):
+    def __init__(self, project, output, *, environment, baseline, backend=None):
         if baseline != LOCAL_BASELINE:
             raise RunError("local commands require explicit trusted-local-v1 selection")
         self.project, self.output = Path(project), Path(output)
-        if not self.project.is_dir() or not self.output.is_dir() or self.output.is_relative_to(self.project):
+        self.tree = process_tree(backend)
+        if (
+            not self.project.is_absolute()
+            or not self.output.is_absolute()
+            or not self.project.is_dir()
+            or not self.output.is_dir()
+            or self.output.resolve().is_relative_to(self.project.resolve())
+        ):
             raise RunError("existing candidate and external execution evidence directories required")
         allowed = {
             "SYSTEMROOT",
@@ -45,6 +52,13 @@ class LocalDevelopmentExecutor:
             "TMP",
             "TMPDIR",
             "PYTHONDONTWRITEBYTECODE",
+            "HOME",
+            "LANG",
+            "LC_ALL",
+            "LC_CTYPE",
+            "USER",
+            "LOGNAME",
+            "SHELL",
         }
         self.environment = {k: v for k, v in environment.items() if k.upper() in allowed}
 
@@ -59,7 +73,7 @@ class LocalDevelopmentExecutor:
         (packet / "request.json").write_text(
             json.dumps({"baseline": self.baseline, "purpose": mode, "argv": command}), encoding="utf-8"
         )
-        result = WindowsProcessTree().run(
+        result = self.tree.run(
             command,
             self.project,
             stdin=stdin,

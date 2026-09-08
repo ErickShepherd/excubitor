@@ -1,9 +1,12 @@
-"""Trusted Windows controller ownership and bounded recovery across reconnects.
+"""Trusted controller ownership and bounded recovery across reconnects.
 
 Every controller starts atomically inside a named, host-only Windows job. A
 replacement watchdog holds the same OS lock and reconciles that exact kernel
 object before resuming the original run. No timestamp or PID search grants idle
 authority. This is process supervision, not a sandbox or a global dispatcher.
+POSIX uses cooperative groups and inherited ownership channels while the outer
+watchdog lives. If that owner dies, an unfinished launch cannot prove drainage:
+reconnect refuses, without signaling saved PIDs or reusing Windows proofs.
 """
 
 from __future__ import annotations
@@ -17,7 +20,7 @@ import uuid
 from pathlib import Path
 from typing import Callable
 
-from excubitor.processes import WindowsProcessTree
+from excubitor.host_processes import host_backend, process_tree
 from excubitor.runs import Binding, Conflict, Run, RunError, RunStore
 from excubitor.supervisor import _exclusive
 from excubitor.windows_jobs import recover_job, valid_name
@@ -54,11 +57,16 @@ class ControllerWatchdog:
             for event in events:
                 if (
                     type(event["schema"]) is not int
-                    or event["schema"] != 2
+                    or event["schema"] != (2 if host_backend() == "windows-process" else 3)
                     or event["contract"] != run.contract.digest
                 ):
                     raise ValueError("missing named-job authority or mismatched contract")
-                valid_name(event["job"])
+                if event["schema"] == 2:
+                    valid_name(event["job"])
+                elif not isinstance(event["job"], str) or not re.fullmatch(
+                    r"posix-group-[0-9a-f]{32}", event["job"]
+                ):
+                    raise ValueError("invalid POSIX launch identity")
                 if type(event["launch"]) is not int:
                     raise ValueError("malformed launch count")
                 if event["event"] == "launched":
@@ -89,7 +97,8 @@ class ControllerWatchdog:
                     proof = event["kernel_evidence"]
                     if event["reconciled"]:
                         if (
-                            not isinstance(proof, dict)
+                            event["schema"] != 2
+                            or not isinstance(proof, dict)
                             or proof.get("job") != event["job"]
                             or type(proof.get("active")) is not int
                             or proof["active"] != 0
@@ -199,6 +208,12 @@ class ControllerWatchdog:
                 if receipt["event"] == "launched":
                     # Reconcile even if the inner controller recorded completion
                     # before its parent disappeared. The outer tree must drain.
+                    if receipt["schema"] == 3:
+                        raise RunError(
+                            "POSIX watchdog ownership was lost during a launch; drainage cannot be "
+                            "proven. Recovery is refused and original limits/evidence are preserved. "
+                            "No saved PID will be signaled."
+                        )
                     proof = recover_job(receipt["job"])
                     with _exclusive(directory / (run.id + ".lock")):
                         run = self.store.get(run_id)
@@ -215,23 +230,24 @@ class ControllerWatchdog:
                 remaining = run.contract.deadline - self.store.clock()
                 if remaining <= 0:
                     return self.store.begin_attempt(run)
+                windows = host_backend() == "windows-process"
                 launch = {
-                    "schema": 2,
+                    "schema": 2 if windows else 3,
                     "event": "launched",
                     "launch": index,
                     "contract": run.contract.digest,
-                    "job": "Global\\Excubitor.Run." + uuid.uuid4().hex,
+                    "job": ("Global\\Excubitor.Run." if windows else "posix-group-") + uuid.uuid4().hex,
                 }
                 _append(history, launch)
                 try:
-                    result = WindowsProcessTree().run(
+                    result = process_tree().run(
                         self.argv(run),
                         self.cwd,
                         timeout=min(remaining, 3600),
                         output_limit=2 * 1024 * 1024,
                         cancelled=cancel,
                         terminate_on_root_exit=True,
-                        job_name=launch["job"],
+                        **({"job_name": launch["job"]} if windows else {}),
                     )
                     if not result.drained:
                         raise RunError("controller process tree is not accounted for")

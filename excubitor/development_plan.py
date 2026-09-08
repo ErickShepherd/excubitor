@@ -11,10 +11,12 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from excubitor.acceptance import OutputOracle
-from excubitor.development_adapters import baseline_for, make_runtime, normalize
+from excubitor.development_adapters import baseline_for, make_runtime, normalize, preflight
 from excubitor.development_runtime import LOCAL_BASELINE
 from excubitor.development_runtime import clean_exit as _clean_exit
-from excubitor.processes import WindowsProcessTree
+from excubitor.git_retention import is_builtin_retention, prepare_git_policy
+from excubitor.host_processes import process_tree
+from excubitor.original_git import original_git_environment
 from excubitor.runs import RunError
 
 SCHEMA = {
@@ -36,6 +38,7 @@ SCHEMA = {
 def prepare(profile, project, root, goal):
     """Read-only planning plus a private clone; never starts implementation."""
     profile = normalize(profile)
+    preflight(profile)
     baseline = baseline_for(profile)
     required = {
         "git",
@@ -83,9 +86,9 @@ def prepare(profile, project, root, goal):
         PYTHONDONTWRITEBYTECODE="1",
     )
 
-    def git(cwd, *args):
-        result = WindowsProcessTree().run(
-            (profile["git"], *args), cwd, env=env, timeout=60, terminate_on_root_exit=True
+    def git(cwd, *args, environment=env):
+        result = process_tree().run(
+            (profile["git"], *args), cwd, env=environment, timeout=60, terminate_on_root_exit=True
         )
         if not _clean_exit(result):
             raise RunError(
@@ -93,9 +96,23 @@ def prepare(profile, project, root, goal):
             )
         return result.execution.stdout
 
-    if git(project, "status", "--porcelain=v1", "--untracked-files=all").strip():
+    original_env = original_git_environment()
+    original_env.update({key: env[key] for key in ("TEMP", "TMP", "TMPDIR", "PYTHONDONTWRITEBYTECODE")})
+
+    def original_git(*args):
+        return git(
+            project,
+            "--no-optional-locks",
+            "-c",
+            "core.fsmonitor=false",
+            *args,
+            environment=original_env,
+        )
+
+    status_args = ("status", "--porcelain=v1", "--untracked-files=all", "--ignore-submodules=none")
+    if original_git(*status_args).strip():
         raise RunError("planning currently requires a clean original; its uncommitted work was left intact")
-    original = git(project, "rev-parse", "HEAD").strip()
+    original = original_git("rev-parse", "HEAD").strip()
     # Local clone creates separate Git objects without changing the original repository.
     git(
         root,
@@ -110,6 +127,8 @@ def prepare(profile, project, root, goal):
     )
     git(candidate, "checkout", "-B", "main", original.decode())
     git(candidate, "checkout", "-b", "ralph/development")
+    if is_builtin_retention(profile["retain_command"], profile["git"], project):
+        prepare_git_policy(profile["git"], project, candidate)
     frozen = []
     for name in profile["check_files"]:
         relative = Path(name)
@@ -184,10 +203,7 @@ def prepare(profile, project, root, goal):
         or len(proposal["units"]) > unit_limit
     ):
         raise RunError("The selected model did not produce a valid plan within the configured budget")
-    if (
-        git(project, "rev-parse", "HEAD").strip() != original
-        or git(project, "status", "--porcelain=v1").strip()
-    ):
+    if original_git("rev-parse", "HEAD").strip() != original or original_git(*status_args).strip():
         raise RunError("the original changed during planning; review again before starting")
     job = {
         **profile,

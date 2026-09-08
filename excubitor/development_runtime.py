@@ -9,6 +9,7 @@ import uuid
 from pathlib import Path
 from typing import Protocol
 
+from excubitor.literal_command import reject_windows_batch
 from excubitor.model_response import InvalidModelResponse, failed_response
 from excubitor.runs import RunError
 
@@ -125,6 +126,8 @@ class DevelopmentRuntime:
             and not Path(command[0]).is_absolute()
         ):
             raise RunError("command must use a literal absolute executable")
+        if command:
+            reject_windows_batch(command[0])
         pending, seen = [], set()
         for edit in files:
             if not isinstance(edit, dict) or set(edit) != {"path", "content"}:

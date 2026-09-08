@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Literal
 
 from excubitor.acceptance import Execution
+from excubitor.literal_command import reject_windows_batch
 from excubitor.runs import RunError
 from excubitor.windows_jobs import create_job, create_process_in_job, valid_name
 
@@ -86,6 +87,7 @@ class WindowsProcessTree:
             )
         ):
             raise ValueError("invalid bounded process request")
+        reject_windows_batch(argv[0])
         if cancelled is not None and cancelled.is_set():
             return ProcessResult(Execution(None, b"", b"", 0), True, True, 0)
         if job_name is not None:

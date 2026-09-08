@@ -11,7 +11,7 @@ import pytest
 
 from excubitor import development_adapters as adapters
 from excubitor.codex_development import completed_proposal
-from excubitor.development_runtime import BASELINE, DevelopmentRuntime
+from excubitor.development_runtime import BASELINE, LOCAL_BASELINE, DevelopmentRuntime
 from excubitor.runs import RunError
 from excubitor.tests.test_project_backend import result
 
@@ -38,7 +38,7 @@ def test_selected_model_uses_shared_edit_check_review_and_separate_executor(kind
             }
 
     class Executor:
-        baseline = BASELINE
+        baseline = LOCAL_BASELINE
 
         def run(self, argv, **options):
             calls.append(("command", argv, options))
@@ -52,10 +52,12 @@ def test_selected_model_uses_shared_edit_check_review_and_separate_executor(kind
         selected["home"] = str(tmp_path)
     settings = {
         "llm": selected,
-        "executor": {"adapter": "codex-windows", "executable": sys.executable, "home": str(tmp_path)},
+        "executor": {"adapter": "local-process"},
         "editable": ["main.py"],
     }
-    runtime = adapters.make_runtime(settings, candidate, evidence, executor=Executor(), environment={})
+    runtime = adapters.make_runtime(
+        settings, candidate, evidence, executor=Executor(), environment={}, baseline=LOCAL_BASELINE
+    )
     assert type(runtime) is DevelopmentRuntime
     run = SimpleNamespace(contract=SimpleNamespace(deadline=time.time() + 60))
     cancel = threading.Event()

@@ -1,80 +1,22 @@
 # Start a bounded Ralph coding job
 
-Ralph takes an agreed goal, works on a separate checkout, runs your frozen checks,
-asks a fresh model call to review the result, and retains checked work through
-your authorized committer. One start advances through the agreed work without
-per-step restarts. It stops at checked completion, a concrete blocker, cancellation,
-or the original limits. A model saying “done” does not complete the job.
+Ralph works through an agreed goal on a separate checkout. The host runs your
+original checks, asks a fresh model call to review the candidate, and retains
+checked work on its own branch. One start advances all planned units. A model
+saying “done” never completes the job by itself.
 
-This launcher is a native Windows development candidate. You need Python with
-Excubitor importable, Git, a clean project with existing acceptance tests, and the
-model and executor you choose below. Run the commands from the Excubitor source
-checkout, or an environment where its package is installed. `python` means that
-environment's Python; use its full executable path if necessary.
+[Install the CLI](install.md) first. You need Git, a clean project with committed
+acceptance tests, and a working model client or HTTP endpoint. Choose a model your
+account or server actually provides. Setup and doctor make no model calls. Their
+read-only Git queries respect your normal Git configuration, including line-ending
+settings. Configured Git filters and helpers are trusted code and may run during
+these queries; optional index writes and filesystem-monitor helpers are disabled.
 
-The PowerShell examples use `D:/jobs` for private storage and
-`D:/Projects/my-project` for your project. Replace those example paths with your
-own. Create `D:/jobs` once if it does not exist. Each planning directory must be
-new and outside your original repository. No hook installation, global settings
-change, launch wrapper or loop environment variable is needed for these commands.
+## Create project settings
 
-## Create and fill in a profile
-
-Choose a model transport and a test executor separately:
-
-| Choice | What it uses |
-| --- | --- |
-| `claude-cli` | Your existing Claude executable and native login |
-| `codex-cli` | Your existing Codex executable, home directory and login |
-| `chat-completions` | A compatible HTTP endpoint, including a local server |
-| `command-json` | Your own trusted executable that exchanges JSON with Ralph |
-| `codex-windows` executor | Codex's Windows execution backend; requires `native-development-v1` at start |
-| `windows-process` executor | Trusted local Windows processes; requires `trusted-local-v1` at start |
-
-The trusted local executor manages process lifetimes and cancellation. It has
-**no filesystem or network sandbox**: commands run with your account's access.
-Choose it only for trusted local work. It is never selected automatically after
-a native executor refuses work. Model clients and custom bridges are trusted host
-integrations, too. This launcher does not establish credential isolation.
-
-For example, generate a Claude profile with the Codex Windows executor:
-
-```powershell
-python -B -m excubitor.cli ralph profile-template --llm claude-cli --executor codex-windows --output D:/jobs/project-profile.json
-```
-
-The command creates only that file and refuses to overwrite an existing file.
-It does not inspect or copy logins or keys. Edit the JSON and replace every
-`REPLACE` value. The template includes all required fields:
-
-- Set `git`, model/executor `executable`, and check-command executables to existing
-  absolute paths. Set `home` to your existing Codex home wherever present. Select
-  a model available to your account or server; the template deliberately does
-  not guess one. Optional `--model YOUR_MODEL_ID` fills the model field at creation.
-- Set `editable` to the existing source files Ralph may change, using forward
-  slashes relative to your project, such as `src/parser.py`. This development
-  adapter accepts one to 32 existing UTF-8 files, each at most 64 KiB. Hidden
-  paths, symlinks, reparse points and hard-linked editable files are rejected.
-- Set `check_files` to existing project-relative acceptance scripts and any local
-  helper/data files those scripts need. Each file must be UTF-8 and at most one
-  MiB. Planning copies them to external storage before implementation starts.
-- Set `checks` to literal argument arrays with exact expected stdout, stderr,
-  exit code and a timeout of one to 300 seconds. `{checks}` expands to the frozen
-  test directory; `{candidate}` expands to the separate checkout. Check commands
-  must test the candidate rather than importing code from the original project.
-  Empty `stdin` works with either executor; nonempty `stdin` requires trusted local
-  execution. Output is compared byte for byte, including newlines.
-- Set `max_attempts` and `time_limit_seconds`. The example allows eight attempts
-  and 30 minutes. Retries consume the same budget; resume does not refill it.
-- Set `retain_command` to your existing authorized committer's literal argument
-  array. It receives one JSON object on stdin with `candidate`, `paths`, and
-  `run_id`; it must commit only the admitted candidate paths and exit successfully
-  after retaining them. Ensure your broker admits the planned candidate. The
-  template does not enroll a checkout or provide a direct-Git bypass. A command
-  that merely exits zero does not prove work was committed.
-
-For a small Python project with `main.py` defining `add(a, b)`, an acceptance file
-at `tests/acceptance.py` could contain:
+Suppose your project has `main.py` and a committed `tests/acceptance.py`. This small
+acceptance script checks the candidate explicitly, keeping imports away from the
+original checkout:
 
 ```python
 import importlib.util
@@ -86,150 +28,155 @@ module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 assert module.add(2, 3) == 5
 assert module.add(-2, 2) == 0
-sys.stdout.buffer.write(b"ok\n")
 ```
 
-The generated check array already runs this layout using
-`{checks}/tests/acceptance.py` and passes `{candidate}`. Replace its Python path.
-Prepare and review acceptance tests before planning, retain them through your
-normal authorized workflow, and keep the original clean. For your actual job,
-write checks that prove its agreed behavior. Do not use this tiny example as
-evidence for unrelated work or change the frozen checks just to make a run pass.
+For your actual job, use tests that establish its agreed behavior. Tests should
+fail for the missing behavior and pass for correct behavior. Setup cannot decide
+what counts as success for you. Keep tests and the files they depend on outside
+the editable selection.
 
-## Check setup without a model call
+Create a jobs directory outside the project. The examples below use `/work/project`
+and `/work/jobs`; on Windows replace them with paths such as `C:/work/project` and
+`C:/work/jobs`. Use absolute paths for project, profile and job storage in these
+commands. Single-quoted JSON arguments work in PowerShell and POSIX shells.
 
-```powershell
-python -B -m excubitor.cli ralph doctor --profile D:/jobs/project-profile.json --project D:/Projects/my-project --root D:/jobs/my-fix
+```text
+excubitor ralph init --project /work/project --output /work/jobs/profile.json --llm claude-cli --model YOUR_MODEL --editable 'main.py' --check-file 'tests/acceptance.py' --check-argv '["python","-I","-B","{checks}/tests/acceptance.py","{candidate}"]'
 ```
 
-Doctor reports missing executables/model settings/key variables, dirty originals,
-invalid file paths, malformed checks and limits. It does not create the planning
-directory, edit the original, invoke a model, run a test, or call the committer.
-It uses read-only Git queries with index refresh writes disabled. Add `--json`
-for structured output; exit zero means local setup checks passed, exit one means
-fixes are needed. No key values are printed or copied.
+`init` finds Git, Python and the selected client on PATH and saves their absolute
+paths. Use `python3` in the check JSON when that is your installed Python command,
+or name the project environment's interpreter. Use `--executable` to select a
+client outside PATH. Windows batch wrappers (`.cmd` and `.bat`) are refused because
+they interpret shell syntax; select the native `.exe`, or use a command bridge
+with an explicit interpreter and script arguments. It does not overwrite a
+profile or modify the original.
 
-A passing doctor result does not verify authentication, model availability,
-endpoint compatibility, check behavior, bridge script arguments, executor access
-or broker authorization. It does not grant permission to start. Resolve reported
-problems without discarding dirty work. Then rerun it using a fresh planning path.
+Use repeated `--editable` and `--check-file` globs to select groups of tracked
+files, and repeated `--check-argv` arguments for multiple checks. Quote globs so
+Excubitor, rather than the shell, expands them. It previews concrete file lists in
+the profile. This bounded adapter accepts at most 32 existing editable UTF-8 files,
+64 KiB each. Frozen check files may be up to one MiB each. Redirected paths,
+hard-linked editable files and hidden editable paths are rejected. Candidate
+repositories currently exclude symlinks, submodules and generated/untracked files;
+run trusted checks with bytecode/cache output disabled or routed outside the
+candidate. These are current limits, not promises of arbitrary-repository support.
 
-## Plan, review once, and start
+Checks created by `init` use the real process exit code: zero passes, with bounded
+execution and output. Timing and ordinary test-runner output may vary. Legacy
+`profile-template` profiles can instead compare exact stdout/stderr bytes. Either
+mode is frozen into the agreement; an implementation cannot change the mode to
+make a failing run pass. Each check command must reference `{checks}`, the external
+frozen test copy, and must actually exercise `{candidate}`, the separate checkout.
+Argument arrays are literal; there is no shell expansion.
 
-```powershell
-python -B -m excubitor.cli ralph plan --project D:/Projects/my-project --profile D:/jobs/project-profile.json --root D:/jobs/my-fix --goal 'Make add return the sum for positive and negative integers.'
-Get-Content D:/jobs/my-fix/preview.txt
-Get-Content D:/jobs/my-fix/job.json
-```
+Defaults allow 12 attempts and one hour; use `--max-attempts`,
+`--time-limit-seconds` and `--check-timeout` to set your budget. Retries consume
+those same limits. Review the generated JSON before planning.
 
-Planning calls the selected model and prepares a separate candidate, frozen tests,
-and a proposed set of steps. It does not start implementation or alter the original
-checkout. Review the goal, work units, editable files, exact checks, selected model,
-executor, resource limits and committer. Keep a failed planning directory for
-diagnosis; use a new directory when preparing again. Do not hand-edit a prepared
-agreement: update the source profile or goal and create a new plan instead.
+Normal Git retention uses your configured author, signing and hook policy and
+commits only admitted candidate changes. It never merges or pushes. Existing hooks are trusted code; their side effects remain part of your Git policy. If your
+organization requires a separate committer, pass `--retain-command` as a literal
+JSON argument array. That command receives `candidate`, `paths` and `run_id` on
+stdin; the host subsequently verifies retained candidate state. A refusal stops
+retention; it never switches to ordinary Git as a fallback. No host-specific
+broker is required for ordinary third-party installation.
 
-After the owner has agreed to that plan, start with the baseline shown in its preview:
+## Choose another model
 
-```powershell
-python -B -m excubitor.cli ralph start --plan D:/jobs/my-fix --baseline native-development-v1 --background
-python -B -m excubitor.cli ralph status --root D:/jobs/my-fix/run
-```
+The loop and executor stay the same when you choose another transport:
 
-For a profile explicitly choosing `windows-process`, the complete start command is:
+| Model selection | Additional setup |
+| --- | --- |
+| `--llm claude-cli` | Existing Claude CLI and login; `--executable` if needed |
+| `--llm codex-cli` | Existing Codex CLI and login; optional `--codex-home` |
+| `--llm command-json` | `--model-command` with a trusted executable's literal JSON argv |
+| `--llm chat-completions` | Full `--endpoint` route and `--api-key-env` variable name |
 
-```powershell
-python -B -m excubitor.cli ralph start --plan D:/jobs/my-fix --baseline trusted-local-v1 --background
-```
+For HTTP, use the full compatible route such as
+`http://127.0.0.1:8000/v1/chat/completions`. Remote endpoints require HTTPS. URLs
+cannot contain credentials, query parameters or fragments. Keep keys in the
+launching environment; only their variable name belongs in a profile. For a local
+server without authentication, pass an empty `--api-key-env ''`. Select
+`--response-format json_object` if the server cannot accept JSON Schema requests.
+Doctor checks local setup; authentication and provider compatibility require a
+real call. No provider SDK is required by the HTTP bridge.
 
-Use the one command matching the reviewed executor. Omit `--background` to stay
-attached. Background launch prints a launch acknowledgement; inspect status for
-the actual outcome. Work remains in `D:/jobs/my-fix/candidate` on its isolated
-branch. Review it there when the run ends. Completion does not merge, push,
-publish, deploy, or delete the original or candidate.
-
-## Stop or reconnect
-
-```powershell
-python -B -m excubitor.cli ralph stop --root D:/jobs/my-fix/run
-python -B -m excubitor.cli ralph status --root D:/jobs/my-fix/run
-```
-
-Stop requests cancellation; wait for terminal status before treating processes
-as drained. A lost controller can be restarted automatically within the saved
-limits. If the watchdog or machine was lost, reconnect to the same agreement:
-
-```powershell
-python -B -m excubitor.cli ralph resume --root D:/jobs/my-fix/run --background
-```
-
-Resume preserves saved settings, frozen checks, attempts and deadline. It does
-not undo an explicit cancellation or extend an expired agreement. Look in the
-run directory for `controller-error.json`, `retain-result.json`, watchdog logs,
-and the `evidence` directory when a run is blocked. Preserve partial work and
-report the actual blocker; model prose and self-checked boxes cannot replace
-successful checks, review and retained candidate evidence.
-
-## Use a local or hosted HTTP model
-
-```powershell
-python -B -m excubitor.cli ralph profile-template --llm chat-completions --executor windows-process --output D:/jobs/http-profile.json
-```
-
-Fill the same source, checks, limits and committer fields. For a local compatible
-server, set `endpoint` to its full route, for example
-`http://127.0.0.1:8000/v1/chat/completions`, `model` to its loaded model ID,
-and `api_key_env` to `""` if that server needs no authentication. Remote endpoints
-require HTTPS. URLs cannot contain credentials, query parameters or fragments.
-
-For a hosted endpoint, `api_key_env` names an already provisioned environment
-variable, such as `RALPH_MODEL_API_KEY`; put the **variable name**, never its secret
-value, in the profile. The launching process must inherit that variable. Choose
-`response_format: "json_schema"` if supported, otherwise `"json_object"` for a
-compatible JSON-object server. The server must return one complete text response
-containing a JSON object, without tool calls or refusal. Availability and
-compatibility are established by an actual plan/run, not by doctor.
-
-Use doctor and plan with `--profile D:/jobs/http-profile.json` and a fresh root,
-then review and start with `--baseline trusted-local-v1` as above. Each call starts
-with the current prompt and schema; no provider SDK is needed by the built-in bridge.
-
-## Use your own model bridge
-
-```powershell
-python -B -m excubitor.cli ralph profile-template --llm command-json --executor windows-process --output D:/jobs/bridge-profile.json
-```
-
-Replace `llm.command` with an existing absolute executable and literal arguments,
-for example `["D:/Tools/Python/python.exe", "-I", "-B", "D:/Tools/my_model_bridge.py"]`.
-Use absolute script/config paths: each call runs in a fresh evidence directory.
-Ralph does not expand shell strings. Provision client credentials separately;
-do not place secrets in command arguments or the profile.
-
-Your trusted client reads one JSON request from stdin:
+A command bridge reads a fresh JSON request from stdin:
 
 ```json
-{"protocol":"excubitor.model.v1","id":"REQUEST_ID","model":"YOUR_MODEL_ID","prompt":"CURRENT_PROMPT","schema":{"type":"object"}}
+{"protocol":"excubitor.model.v1","id":"REQUEST_ID","model":"YOUR_MODEL","prompt":"CURRENT_PROMPT","schema":{"type":"object"}}
 ```
 
-It starts a fresh model conversation using the supplied prompt and schema, then
-writes exactly one response object to stdout and exits zero:
+It returns one JSON object and exits zero:
 
 ```json
-{"protocol":"excubitor.model.v1","id":"REQUEST_ID","model":"YOUR_MODEL_ID","output":{"goal":"Example plan","units":["Example work unit"]}}
+{"protocol":"excubitor.model.v1","id":"REQUEST_ID","model":"YOUR_MODEL","output":{"goal":"Example plan","units":["Example work unit"]}}
 ```
 
-Echo the request's protocol, ID and model exactly. `output` must be the JSON object
-for the **supplied** schema; the plan example above is not a valid work or review
-response. Send diagnostics to stderr and do not print credentials. The host bounds
-call duration, output and process lifetime, rejects mismatched/incomplete responses,
-and independently checks candidate results. A custom client controls a model
-transport, not the loop's completion decision. Fill the remaining profile fields,
-run doctor, prepare a fresh plan, review it, and start with the chosen executor's
-baseline. Legacy Claude profiles and prepared `start --job` workflows still work.
+Echo protocol, ID and model exactly. `output` must satisfy the supplied schema;
+the example is a plan response, not a work or review response. Send diagnostics
+to stderr, keep credentials out of arguments/output, and use absolute script
+paths because each call runs from a fresh evidence directory. The host validates
+the response and owns completion. Malformed work/review replies can be retried
+within the original limits; identity mismatch and host refusal remain errors.
 
-Malformed work or review replies receive bounded feedback and another fresh call
-within the original attempt and time limits. Identity mismatches and host refusals
-remain errors. A saved stop request is observed before recovery starts. Stopping
-the local HTTP client drains its process; it cannot prove that a remote provider
-has stopped inference.
+## Check, plan and start
+
+```text
+excubitor ralph doctor --profile /work/jobs/profile.json --project /work/project --root /work/jobs/my-fix
+excubitor ralph plan --profile /work/jobs/profile.json --project /work/project --root /work/jobs/my-fix --goal 'Make add return the sum for positive and negative integers.'
+```
+
+Read `preview.txt` and `job.json` in the planning directory. They record the
+original goal, proposed units, selected files/checks/model/executor, limits and
+committer. Planning calls a model and prepares a candidate and frozen tests, but
+does not start implementation. Preserve a failed planning directory and use a
+fresh directory for a revised plan. Do not hand-edit a saved agreement.
+
+Once you agree to the plan:
+
+```text
+excubitor ralph start --plan /work/jobs/my-fix --baseline trusted-local-v1 --background
+excubitor ralph status --root /work/jobs/my-fix/run
+```
+
+Omit `--background` to remain attached. Background output acknowledges launch;
+status reports actual progress and completion. Work remains in
+`/work/jobs/my-fix/candidate` for review. A completed job has passed frozen checks,
+fresh review and retained-candidate verification. It does not publish anything.
+
+`init` selects the host's trusted local processes. Advanced `profile-template`
+profiles may select `windows-process`, `posix-process` or the Windows-only
+`codex-windows` executor explicitly. The latter requires
+`--baseline native-development-v1`; it is never a fallback for a refused local
+or native command. Use the baseline in the reviewed preview.
+
+## Stop and recover
+
+```text
+excubitor ralph stop --root /work/jobs/my-fix/run
+excubitor ralph status --root /work/jobs/my-fix/run
+excubitor ralph resume --root /work/jobs/my-fix/run --background
+```
+
+Stop requests cancellation; wait for terminal status before treating workers as
+drained. Resume reconnects to the same settings, attempts and deadline. It cannot
+undo explicit cancellation or extend a limit. A model ending its reply does not
+stop pending units. The controller carries original goals, current code and
+compact failed-check/review feedback into fresh calls.
+
+Trusted local execution has no filesystem, network or credential sandbox. Windows
+uses Job Objects for process-tree lifetime. Linux and macOS use cooperative
+process groups with a guardian; a process deliberately escaping its group is
+outside that trusted contract. A surviving POSIX watchdog can recover from an
+inner controller crash after group cleanup. If the POSIX outer watchdog is lost
+with a pending launch, resume refuses uncertain ownership; a PID disappearing
+is not proof that all old work stopped. Preserve that job and its evidence for
+manual inspection. Windows retains its separately tested named-job recovery.
+Stopping a local HTTP client cannot prove a remote server stopped inference.
+
+Look in the run directory for controller errors, retention results, watchdog logs
+and evidence. A successful test fixture or model reply cannot stand in for native
+platform evidence. The current evidence matrix and remaining validation limits
+are recorded in [portability validation](portability-validation.md).

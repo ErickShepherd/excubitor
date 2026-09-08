@@ -10,8 +10,10 @@ from pathlib import Path
 
 from excubitor.acceptance import OutputOracle
 from excubitor.command_model import literal_command
-from excubitor.development_adapters import baseline_for, normalize
+from excubitor.development_adapters import baseline_for, normalize, preflight
 from excubitor.development_runtime import LOCAL_BASELINE
+from excubitor.literal_command import BatchCommandError
+from excubitor.original_git import original_git_environment
 from excubitor.runs import RunError
 
 PROFILE_FIELDS = {
@@ -26,7 +28,7 @@ PROFILE_FIELDS = {
     "retain_command",
 }
 MODELS = ("claude-cli", "codex-cli", "command-json", "chat-completions")
-EXECUTORS = ("codex-windows", "windows-process")
+EXECUTORS = ("local-process", "codex-windows", "windows-process", "posix-process")
 
 
 def register(actions):
@@ -45,13 +47,15 @@ def register(actions):
 
 
 def example_profile(llm, executor, model):
+    prefix = "C:/REPLACE/" if os.name == "nt" else "/REPLACE/"
+    suffix = ".exe" if os.name == "nt" else ""
     selected = {"adapter": llm, "model": model}
     if llm in ("claude-cli", "codex-cli"):
-        selected["executable"] = "D:/REPLACE/" + ("claude.exe" if llm == "claude-cli" else "codex.exe")
+        selected["executable"] = prefix + ("claude" if llm == "claude-cli" else "codex") + suffix
         if llm == "codex-cli":
-            selected["home"] = "D:/REPLACE/existing-codex-home"
+            selected["home"] = prefix + "existing-codex-home"
     elif llm == "command-json":
-        selected["command"] = ["D:/REPLACE/python.exe", "-I", "-B", "D:/REPLACE/model_bridge.py"]
+        selected["command"] = [prefix + "python" + suffix, "-I", "-B", prefix + "model_bridge.py"]
     else:
         selected.update(
             endpoint="https://REPLACE.example/v1/chat/completions",
@@ -60,16 +64,22 @@ def example_profile(llm, executor, model):
         )
     execution = {"adapter": executor}
     if executor == "codex-windows":
-        execution.update(executable="D:/REPLACE/codex.exe", home="D:/REPLACE/existing-codex-home")
+        execution.update(executable=prefix + "codex" + suffix, home=prefix + "existing-codex-home")
     return {
-        "git": "D:/REPLACE/git.exe",
+        "git": prefix + "git" + suffix,
         "llm": selected,
         "executor": execution,
         "editable": ["main.py"],
         "checks": [
             {
                 "name": "agreed behavior",
-                "argv": ["D:/REPLACE/python.exe", "-I", "-B", "{checks}/tests/acceptance.py", "{candidate}"],
+                "argv": [
+                    prefix + "python" + suffix,
+                    "-I",
+                    "-B",
+                    "{checks}/tests/acceptance.py",
+                    "{candidate}",
+                ],
                 "stdin": "",
                 "stdout": "ok\n",
                 "stderr": "",
@@ -80,7 +90,7 @@ def example_profile(llm, executor, model):
         "check_files": ["tests/acceptance.py"],
         "max_attempts": 8,
         "time_limit_seconds": 1800,
-        "retain_command": ["D:/REPLACE/authorized-committer.exe"],
+        "retain_command": [prefix + "authorized-committer" + suffix],
     }
 
 
@@ -96,7 +106,7 @@ def _template(args):
     print(
         "Created profile example. Replace every REPLACE value and review files, checks, limits and committer."
     )
-    if args.executor == "windows-process":
+    if args.executor in ("windows-process", "posix-process", "local-process"):
         print("Selected trusted-local-v1: local process management; no filesystem or network sandbox.")
     return 0
 
@@ -143,12 +153,13 @@ def inspect(profile, project, root):
         ],
     )
     report = {"ok": False, "baseline": None, "errors": errors, "warnings": warnings}
-    if os.name != "nt":
-        errors.append("This development launcher currently requires native Windows.")
     if _placeholders(profile):
         errors.append("Replace all REPLACE placeholders in the profile.")
     try:
         profile = normalize(profile)
+    except BatchCommandError as error:
+        errors.append(str(error))
+        return report
     except (RunError, ValueError, TypeError, OSError):
         errors.append(
             "Invalid model/executor settings: check descriptor fields, explicit model, "
@@ -156,6 +167,10 @@ def inspect(profile, project, root):
         )
         return report
     report["baseline"] = baseline_for(profile)
+    try:
+        preflight(profile)
+    except RunError as error:
+        errors.append(str(error))
     if report["baseline"] == LOCAL_BASELINE:
         warnings.append(
             "trusted-local-v1 manages process lifetimes, with no filesystem or network sandbox. "
@@ -175,6 +190,8 @@ def inspect(profile, project, root):
     for label, command in (("git", [profile["git"]]), ("retain_command", profile["retain_command"])):
         try:
             literal_command(command)
+        except BatchCommandError as error:
+            errors.append(label + " must use literal argv. " + str(error))
         except (RunError, ValueError, TypeError, OSError):
             errors.append(label + " must select an existing absolute executable and literal arguments.")
     project, root = Path(project), Path(root)
@@ -230,16 +247,17 @@ def inspect(profile, project, root):
                 if oracle.name in seen or (oracle.stdin and report["baseline"] != LOCAL_BASELINE):
                     raise ValueError("duplicate check or unsupported stdin")
                 seen.add(oracle.name)
+            except BatchCommandError as error:
+                errors.append(f"checks[{index}]: " + str(error))
             except (RunError, ValueError, TypeError, AttributeError, OSError):
                 errors.append(
                     f"checks[{index}] has invalid fields, executable, expected output, timeout, "
                     "duplicate name or stdin unsupported by the selected executor."
                 )
-    # Git status disables index refresh writes. Ignore inherited Git redirects/config
-    # so the inspected repository is the explicitly selected original.
+    # Preserve ordinary cleanliness semantics, while disabling index refresh
+    # writes and inherited repository redirects.
     if not any(e.startswith("git must") for e in errors):
-        env = {k: v for k, v in os.environ.items() if not k.upper().startswith("GIT_")}
-        env.update(GIT_OPTIONAL_LOCKS="0", GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull)
+        env = original_git_environment()
         try:
 
             def git(*args):

@@ -24,8 +24,13 @@ class OutputOracle:
     stderr: str = ""
     exit_code: int = 0
     timeout_seconds: int = 30
+    mode: str = "exact-output"
 
     def __post_init__(self):
+        if self.mode not in ("exact-output", "exit-code"):
+            raise ValueError("acceptance mode must be exact-output or exit-code")
+        if self.mode == "exit-code" and (self.stdout or self.stderr):
+            raise ValueError("exit-code checks cannot also specify expected output")
         if not isinstance(self.name, str) or not self.name.strip() or len(self.name) > 200:
             raise ValueError("acceptance check needs a bounded name")
         if not isinstance(self.argv, tuple) or not 1 <= len(self.argv) <= 64:
@@ -45,7 +50,12 @@ class OutputOracle:
 
     @property
     def payload(self) -> bytes:
-        return json.dumps(asdict(self), sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+        fields = asdict(self)
+        # Old agreements are byte-addressed: adding a default field must not
+        # change their bytes, fingerprint, or ability to resume.
+        if self.mode == "exact-output":
+            del fields["mode"]
+        return json.dumps(fields, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
 
     @property
     def check(self) -> Check:
@@ -54,6 +64,11 @@ class OutputOracle:
     @property
     def description(self) -> str:
         # Escaping keeps terminal control characters out of the owner's preview.
+        if self.mode == "exit-code":
+            return (
+                f"{json.dumps(self.name)}: command {json.dumps(self.argv)}; input {json.dumps(self.stdin)}; "
+                f"expect exit {self.exit_code}; output is diagnostic only; timeout {self.timeout_seconds}s"
+            )
         return (
             f"{json.dumps(self.name)}: command {json.dumps(self.argv)}; input {json.dumps(self.stdin)}; "
             f"expect exit {self.exit_code}, stdout {json.dumps(self.stdout)}, "
@@ -116,9 +131,9 @@ def record_output(store: RunStore, run: Run, candidate: Candidate, check: Check,
         type(execution.exit_code) is int
         and execution.exit_code == oracle.exit_code
         and type(execution.stdout) is bytes
-        and execution.stdout == oracle.stdout.encode("utf-8")
+        and (oracle.mode == "exit-code" or execution.stdout == oracle.stdout.encode("utf-8"))
         and type(execution.stderr) is bytes
-        and execution.stderr == oracle.stderr.encode("utf-8")
+        and (oracle.mode == "exit-code" or execution.stderr == oracle.stderr.encode("utf-8"))
         and type(execution.elapsed_seconds) in (float, int)
         and 0 <= execution.elapsed_seconds <= oracle.timeout_seconds
         and execution.timed_out is False

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 import uuid
 from dataclasses import asdict, replace
@@ -10,7 +11,8 @@ from pathlib import Path
 
 from excubitor.codex_project import _capacity_failure
 from excubitor.development_runtime import clean_exit
-from excubitor.processes import WindowsProcessTree
+from excubitor.host_processes import process_tree
+from excubitor.literal_command import reject_windows_batch
 from excubitor.runs import RunError
 
 
@@ -45,6 +47,7 @@ def completed_proposal(stdout):
 
 class CodexStructuredModel:
     def __init__(self, executable, project, output, *, environment, model, home):
+        reject_windows_batch(executable)
         self.executable, self.project, self.output = map(Path, (executable, project, output))
         self.model = model
         self.environment = dict(environment)
@@ -76,7 +79,6 @@ class CodexStructuredModel:
         ):
             argv.extend(("--disable", feature))
         options = {
-            "windows.sandbox": "elevated",
             "web_search": "disabled",
             "approval_policy": "never",
             "mcp_servers": {},
@@ -84,6 +86,8 @@ class CodexStructuredModel:
             "model": self.model,
             "model_reasoning_effort": "low",
         }
+        if os.name == "nt":
+            options["windows.sandbox"] = "elevated"
         for key, value in options.items():
             argv.extend(("-c", key + "=" + json.dumps(value)))
         return (*argv, "--output-schema", str(schema), "-")
@@ -105,7 +109,7 @@ class CodexStructuredModel:
         (call / "request.json").write_text(
             json.dumps({"adapter": "codex-cli", "model": self.model, "argv": argv}), encoding="utf-8"
         )
-        result = WindowsProcessTree().run(
+        result = process_tree().run(
             argv,
             self.project,
             env=self.environment,

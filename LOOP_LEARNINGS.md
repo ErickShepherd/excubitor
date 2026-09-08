@@ -1069,3 +1069,44 @@ treated as host refusals, and a fast recovery could finish before the stop monit
 noticed a saved request. Retry only narrowly classified response-shape failures
 with durable host feedback; preserve fatal identity and scope checks. Check a
 saved cancellation synchronously before entering the watchdog.
+
+
+## 2026-09-08 portable completion cycle
+
+Keep loop state, frozen checks, review and retry limits shared; isolate only process
+lifetime and provider protocols. An OS convenience selector must resolve before
+saving the agreement, so reconnect cannot silently choose a new backend.
+
+Windows batch launchers can interpret metacharacters despite literal argument arrays.
+Independent native review reproduced this; reject implicit batch execution at setup,
+preflight, model and process boundaries, including path aliases. Explicitly chosen
+shell interpreters remain trusted commands. POSIX shebang scripts remain supported.
+
+POSIX group cleanup can anchor its identity with a living unreaped guardian and
+inheritance channels, but that does not create hostile-process containment or safe
+recovery after outer-owner loss. Refuse uncertain reconnect rather than kill a saved
+PID. Independently exercise nested groups during controller death.
+
+Git clone does not preserve local author, signing or hook policy. The ordinary
+retainer needs an intentional commit-policy copy into isolated metadata, exact file
+admission, actual-byte comparison and post-commit verification. Preserve hook refusal;
+never switch to another committer. Existing hook code is trusted and can have its own
+side effects. Current exact-byte candidates intentionally reject filter transformations.
+
+Linux tests on a Windows-mounted filesystem can fail executable-mode checks for the
+filesystem rather than product behavior. Keep the checks strict and use a native
+filesystem fixture. A WSL mount may not persist across independent exec invocations;
+mount, verify the filesystem, run and unmount inside one shell. Keep failed receipts.
+
+Separate standard package installation from legacy agent-hook registration. The
+legacy broad-registration refusal predates this cycle; packaging tests must preserve
+that refusal, while the portable launcher is exercised from a fresh installed wheel.
+
+A clean original must be inspected under its ordinary Git configuration. Suppressing
+system/global line-ending settings can falsely report unchanged CRLF files as dirty;
+Git stat caching can hide the bug unless a regression forces content reinspection.
+Preserve original-read configuration while removing repository redirection and
+disabling optional index writes/fsmonitor. Keep candidate exact-byte checks isolated.
+Read-only Git queries may still invoke trusted configured filters and helpers.
+
+Publication admission also checks fixture identities. Synthetic email addresses are not automatically approved public identities. Use the existing approved public fixture identity, keep author-copy assertions meaningful, preserve refusal evidence and recheck the source against unchanged policy before resubmitting the broker request.

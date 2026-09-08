@@ -268,10 +268,9 @@ def test_duplicate_checks_and_native_stdin_are_rejected(configured):
     assert any("checks[0]" in e for e in setup.inspect(profile, project, root)["errors"])
 
 
-@pytest.mark.skipif(os.name != "nt", reason="native Windows launcher")
 @pytest.mark.parametrize("llm", setup.MODELS)
 @pytest.mark.parametrize("executor", setup.EXECUTORS)
-def test_completed_templates_pass_local_preflight(configured, llm, executor):
+def test_completed_templates_preflight_the_actual_host(configured, llm, executor):
     settings, project, root = configured
     profile = setup.example_profile(llm, executor, "selected-model")
     for key in ("git", "checks", "retain_command"):
@@ -286,5 +285,12 @@ def test_completed_templates_pass_local_preflight(configured, llm, executor):
     if llm == "chat-completions":
         profile["llm"].update(endpoint="http://127.0.0.1:8000/v1/chat/completions", api_key_env="")
     report = setup.inspect(profile, project, root)
-    assert report["ok"], report
+    available = (
+        executor in ("local-process", "windows-process", "codex-windows")
+        if os.name == "nt"
+        else executor in ("local-process", "posix-process")
+    )
+    assert report["ok"] == available, report
+    if not available:
+        assert any("unavailable" in error or "requires native Windows" in error for error in report["errors"])
     assert not root.exists()

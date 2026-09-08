@@ -1,3 +1,8 @@
+Current follow-on: the portable Ralph cycle is tracked in
+[PORTABLE_COMPLETION.md](PORTABLE_COMPLETION.md), with current installation and
+native evidence boundaries in [portability validation](docs/portability-validation.md).
+The completed Windows cycle below remains prior evidence, not a cross-platform claim.
+
 # Ralph completion cycle
 
 Excubitor should make it easy to launch a persistent coding loop with a selected

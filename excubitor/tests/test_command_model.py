@@ -16,8 +16,6 @@ from excubitor.development_runtime import BASELINE, LOCAL_BASELINE
 from excubitor.local_development import LocalDevelopmentExecutor
 from excubitor.runs import RunError
 
-pytestmark = pytest.mark.skipif(os.name != "nt", reason="native Windows process transport")
-
 
 def run():
     return SimpleNamespace(contract=SimpleNamespace(deadline=time.time() + 30))
@@ -139,7 +137,7 @@ def test_http_adapter_uses_same_runtime_with_fresh_messages(endpoint, tmp_path):
             "response_format": "json_schema",
             "model": "local-model",
         },
-        "executor": {"adapter": "windows-process"},
+        "executor": {"adapter": "local-process"},
         "editable": ["main.py"],
     }
     executor = LocalDevelopmentExecutor(

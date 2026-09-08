@@ -11,10 +11,9 @@ import hashlib
 import json
 import os
 import stat
-import subprocess
 from pathlib import Path
 
-from excubitor.processes import WindowsProcessTree
+from excubitor.host_processes import process_tree
 from excubitor.runs import Candidate, RunError
 
 
@@ -79,32 +78,23 @@ class GitCandidateReader:
             "--work-tree=" + str(self.project),
             *args,
         )
-        if os.name == "nt":
-            # A Windows Git launcher can leave its child holding captured pipes
-            # after subprocess.run kills only the launcher on timeout. Contain
-            # the complete tree, and never inherit the native MCP transport stdin.
-            result = (
-                WindowsProcessTree()
-                .run(
-                    argv,
-                    self.metadata,
-                    env=env,
-                    timeout=15,
-                    output_limit=16 * 1024 * 1024,
-                )
-                .execution
-            )
-            failed = result.exit_code != 0 or result.timed_out or result.output_limited
-        else:
-            result = subprocess.run(
-                argv,
-                cwd=self.metadata,
-                env=env,
-                stdin=subprocess.DEVNULL,
-                capture_output=True,
-                timeout=15,
-            )
-            failed = result.returncode != 0
+        result = process_tree().run(
+            argv,
+            self.metadata,
+            env=env,
+            timeout=15,
+            output_limit=16 * 1024 * 1024,
+            terminate_on_root_exit=True,
+        )
+        execution = result.execution
+        failed = (
+            execution.exit_code != 0
+            or execution.timed_out
+            or execution.output_limited
+            or result.cancelled
+            or not result.drained
+        )
+        result = execution
         if failed:
             raise RunError("trusted Git candidate inspection failed")
         if len(result.stdout) > 16 * 1024 * 1024:

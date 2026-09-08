@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 import uuid
 from dataclasses import asdict
 from pathlib import Path
 
 from excubitor.development_runtime import clean_exit
+from excubitor.host_processes import process_tree
+from excubitor.literal_command import reject_windows_batch
 from excubitor.model_response import failed_response
-from excubitor.processes import WindowsProcessTree
 from excubitor.runs import RunError
 
 PROTOCOL = "excubitor.model.v1"
@@ -23,8 +25,11 @@ def literal_command(value):
         or any(not isinstance(s, str) or not s or "\0" in s or len(s) > 16384 for s in value)
         or not Path(value[0]).is_absolute()
         or not Path(value[0]).is_file()
+        or os.name == "posix"
+        and not os.access(value[0], os.X_OK)
     ):
         raise RunError("select an existing absolute executable and bounded literal arguments")
+    reject_windows_batch(value[0])
     return tuple(value)
 
 
@@ -63,7 +68,7 @@ class CommandStructuredModel:
         }
         payload = json.dumps(request).encode()
         (packet / "request.json").write_bytes(payload)
-        result = WindowsProcessTree().run(
+        result = process_tree().run(
             self.command,
             packet,
             stdin=payload,
@@ -81,9 +86,8 @@ class CommandStructuredModel:
         except (ValueError, UnicodeError):
             message = "Return one complete JSON response matching the supplied schema."
             return failed_response(result, message), None
-        if (
-            not isinstance(response, dict)
-            or any(response.get(key) != request[key] for key in ("protocol", "id", "model"))
+        if not isinstance(response, dict) or any(
+            response.get(key) != request[key] for key in ("protocol", "id", "model")
         ):
             raise RunError("model bridge returned an invalid response: request identity does not match")
         if set(response) != {"protocol", "id", "model", "output"} or not isinstance(response["output"], dict):

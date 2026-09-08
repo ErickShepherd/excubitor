@@ -17,48 +17,30 @@ Excubitor breaks it into manageable steps, carries progress and feedback into fr
 and keeps going until verification and review pass or an agreed limit or concrete blocker is reached.
 A model finishing its answer does not finish the job. Existing guards support this workflow.
 
-The legacy guard foundation is stdlib-only Python hooks + [Agent Skills](https://code.claude.com/docs/en/skills)-format capability
-packets, each mechanism pinned by executed regressions and shipped with the design rationale that
-produced it. Built for and battle-tested
-with Claude Code; **all four guards now share a model-blind policy core** (`excubitor/core/`) — the
-shipped hooks are thin Claude Code adapters over it, and a second, non-Claude-Code adapter drives the
-*same* core with an equivalence test to prove it ([`SPEC.md`](SPEC.md)), so its portability to any
-runtime that can intercept tool calls is demonstrated, not just asserted. Claude Code has the only
-available adapter and installer foundation today, but no runtime is yet claimed as verified supported
-enforcement: that label still requires a released-package, real-host denial witness.
+## Install and start
 
-## Run an explicit Ralph job
+Excubitor requires Python 3.11+ and Git. Install the reviewed wheel into an isolated
+CLI environment with `pipx install /path/to/excubitor-VERSION-py3-none-any.whl`, or
+use the [virtual-environment instructions](docs/install.md). This development
+workflow has not been published as a new release; a package with the same name
+from an index is not evidence that it contains these changes.
 
-The agreed target is explicitly started, unattended Ralph runs. Ordinary development stays unaffected,
-including other tasks in the same repository. The default result is reviewed, verified work committed
-on an isolated branch; automatic merging is optional and authorized before the run starts. Publishing
-and deployment have separate permissions. Work units advance automatically without repeated approval.
+Use the [Ralph quickstart](docs/ralph-quickstart.md) to create project settings,
+check them without a model call, prepare a plan, then start it once. Source-file
+selection, acceptance checks, resource limits and the permitted committer are
+reviewable before work begins. The result stays on a separate candidate branch.
+Completion does not merge, push, publish or delete either checkout.
 
-The Windows launcher supports Claude CLI, Codex CLI, a generic JSON command bridge, and compatible
-Chat Completions endpoints. Model and command execution are selected separately. The vendor-independent
-Windows process executor is an explicit option for trusted local projects; the existing Codex-backed
-executor remains available. These execution modes have different isolation guarantees.
+Claude CLI, Codex CLI, a generic JSON command bridge and compatible Chat Completions
+endpoints share the same loop. Model transport and command execution are selected
+separately. The trusted-local executor is intended for trusted projects; it has no
+filesystem, network or credential sandbox. Native execution and recovery evidence
+is recorded separately for each operating system in the quickstart.
 
-The loop saves the original agreement and acceptance checks, advances all units automatically, and
-keeps failed-check and review feedback across controller loss. Model calls start with fresh input
-built from current code and compact handoff facts. It records outcomes and timing rather than
-assuming every model degrades after the same number of turns.
-
-Native Claude and Codex workflows, cancellation and recovery have been exercised on disposable
-Windows projects. The generic model bridge and vendor-independent executor also completed a real
-Claude coding job. HTTP protocol tests use a local server fixture; arbitrary hosted/local models,
-Linux launcher integration and installed GUI shortcuts are not yet verified.
-
-Follow the [Ralph quickstart](docs/ralph-quickstart.md), or start with
-`python -B -m excubitor.cli ralph --help`. Use `profile-template` to create reusable settings,
-`doctor` to check them without calling a model, `plan` to prepare the work, and `start --background`
-to run the reviewed plan. `status`, `stop`, and `resume` address the same durable run.
-
-The legacy `install` command now refuses new registrations because its hooks also affect ordinary tasks.
-Read-only `install --dry-run`, diagnostics and uninstall remain available for existing installations.
-The older activation and installation examples below describe prior behavior, not Ralph-only setup.
-Use the [current remediation plan](docs/design/vendor-agnostic-enforcement-plan.md) for the agreed scope,
-current evidence, and remaining work. Do not use legacy examples to install broad enforcement as a fix.
+Installing this CLI does not register hooks, edit model-client settings or activate
+a run. Ordinary development remains ordinary. The older hooks and skills remain
+available as a [separate legacy integration](docs/legacy-guard-installation.md),
+with different scope and limitations; they are not prerequisites for the launcher.
 
 ## 60-second crash test
 
@@ -158,42 +140,6 @@ scripts/install.sh         # symlink skills+hooks into ~/.claude, register the h
 scripts/install_settings.py # tested exact-tuple settings.json registration (used by install.sh)
 scripts/demo.sh            # 60-second zero-install crash test (drives the real guard)
 ```
-
-## Install
-
-Requires Python 3.11+ and `git`. For Claude Code:
-
-```bash
-git clone https://github.com/ErickShepherd/excubitor.git && cd excubitor
-scripts/install.sh          # symlinks skills/* and hooks/* into ~/.claude, and idempotently
-                            # registers the four guards in ~/.claude/settings.json
-```
-
-Or register the hooks by hand in `~/.claude/settings.json`:
-
-```json
-{
-  "hooks": {
-    "PreToolUse": [
-      {"matcher": "Edit|Write|NotebookEdit",
-       "hooks": [{"type": "command", "command": "python3 ~/.claude/hooks/guard-default-branch.py", "timeout": 10}]},
-      {"matcher": "Bash",
-       "hooks": [{"type": "command", "command": "python3 ~/.claude/hooks/guard-loop-vc.py", "timeout": 10}]},
-      {"matcher": "*",
-       "hooks": [{"type": "command", "command": "python3 ~/.claude/hooks/guard-one-unit.py", "timeout": 10}]},
-      {"matcher": "Bash|Edit|Write|NotebookEdit",
-       "hooks": [{"type": "command", "command": "python3 ~/.claude/hooks/guard-self-integrity.py", "timeout": 10}]}
-    ]
-  }
-}
-```
-
-All four guards are **opt-in or inert by default**: `guard-loop-vc.py` and
-`guard-self-integrity.py` do nothing unless `CLAUDE_LOOP_GUARD` is set in the loop's environment;
-`guard-one-unit.py` does nothing unless a loop driver arms `ONE_UNIT_CAP_SCOPE` +
-`ONE_UNIT_CAP_BASELINE`; `guard-default-branch.py` can be disabled per-repo with a
-`.claude/allow-default-branch` marker file or globally with `CLAUDE_ALLOW_DEFAULT_BRANCH=1`.
-Interactive work is unaffected until you explicitly say "I'm looping."
 
 ## Tests
 

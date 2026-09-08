@@ -8,7 +8,8 @@ from pathlib import Path
 
 from excubitor.claude_project import ClaudeProjectRuntime, _clean_exit
 from excubitor.development_runtime import DevelopmentRuntime
-from excubitor.processes import WindowsProcessTree
+from excubitor.host_processes import process_tree
+from excubitor.literal_command import reject_windows_batch
 from excubitor.runs import RunError
 
 
@@ -20,11 +21,12 @@ class _StructuredOnlyTransport:
             or any(argv[argv.index(flag) + 1] != "" for flag in ("--tools", "--allowedTools"))
         ):
             raise RunError("development coordinator must have no executable or file tools")
-        return WindowsProcessTree().run(argv, cwd, **options, terminate_on_root_exit=True)
+        return process_tree().run(argv, cwd, **options, terminate_on_root_exit=True)
 
 
 class ClaudeStructuredModel:
     def __init__(self, executable, project, output, *, environment, model, native_model):
+        reject_windows_batch(executable)
         self.output = Path(output)
         environment = dict(environment)
         environment.update(
