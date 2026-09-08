@@ -51,7 +51,11 @@ def prepare(profile, project, root, goal):
         "time_limit_seconds",
         "retain_command",
     }
-    if set(profile) != required or not isinstance(goal, str) or not 1 <= len(goal) <= 4096:
+    if (
+        set(profile) not in (required, required | {"max_subagents"})
+        or not isinstance(goal, str)
+        or not 1 <= len(goal) <= 4096
+    ):
         raise RunError("use the documented reusable profile and a bounded plain-language goal")
     for key in ("git",):
         path = Path(profile[key])
@@ -250,6 +254,9 @@ def prepare(profile, project, root, goal):
             ),
             "Editable files: " + ", ".join(profile["editable"]),
             f"Limits: {profile['max_attempts']} attempts, {profile['time_limit_seconds']} seconds.",
+            f"Helpers: {profile.get('max_subagents', 0)} per work attempt; "
+            f"at most {profile.get('max_subagents', 0) + 2 if profile.get('max_subagents', 0) else 1} "
+            "model calls per work attempt, sharing the original deadline. One parent applies edits.",
             "Acceptance: " + "; ".join(check["name"] for check in oracles),
             "Completion: checked, independently reviewed work retained on an isolated branch.",
             "",

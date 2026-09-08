@@ -12,6 +12,7 @@ from pathlib import Path
 
 from excubitor.acceptance import OutputOracle
 from excubitor.command_model import literal_command
+from excubitor.development_helpers import subagent_limit
 from excubitor.development_setup import MODELS, _project_file
 from excubitor.git_retention import builtin_command
 from excubitor.http_model_client import validate_endpoint
@@ -44,6 +45,9 @@ def register(actions):
     )
     parser.add_argument("--check-timeout", type=int, default=60)
     parser.add_argument("--max-attempts", type=int, default=12)
+    parser.add_argument(
+        "--max-subagents", type=int, default=2, help="helpers per work attempt, 0 disables (0–4)"
+    )
     parser.add_argument("--time-limit-seconds", type=int, default=3600)
     parser.add_argument("--retain-command", help="optional authorized committer argv as a literal JSON array")
     parser.set_defaults(_handler=_init)
@@ -129,6 +133,7 @@ def select(project, tracked, patterns, *, editable):
 
 
 def create_profile(args):
+    max_subagents = subagent_limit(getattr(args, "max_subagents", 2))
     project = args.project.resolve(strict=True)
     output = args.output.absolute()
     if output.resolve().is_relative_to(project):
@@ -180,6 +185,7 @@ def create_profile(args):
         "checks": checks,
         "check_files": frozen,
         "max_attempts": args.max_attempts,
+        "max_subagents": max_subagents,
         "time_limit_seconds": args.time_limit_seconds,
         "retain_command": retain,
     }

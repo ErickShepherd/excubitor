@@ -46,6 +46,7 @@ def test_setup_is_concrete_create_only_and_does_not_touch_original(repository, t
     assert profile["editable"] == ["main.py"]
     assert profile["check_files"] == ["tests/acceptance.py"]
     assert profile["executor"] == {"adapter": "local-process"}
+    assert profile["max_subagents"] == 2
     assert profile["checks"][0]["mode"] == "exit-code"
     assert profile["checks"][0]["argv"][0] == sys.executable
     assert "git_retention.py" in profile["retain_command"][3]
@@ -73,6 +74,8 @@ def test_shell_strings_are_not_parsed_and_metacharacters_remain_literal():
         {"check_file": ["missing/*.py"]},
         {"check_argv": ['["python", "-m", "pytest"]']},
         {"max_attempts": 0},
+        {"max_subagents": True},
+        {"max_subagents": 5},
         {"time_limit_seconds": 86401},
         {"model": " "},
     ],
@@ -85,7 +88,9 @@ def test_invalid_selection_fails_before_writing(repository, tmp_path, changes): 
 
 
 def test_http_setup_keeps_secret_separate_and_rejects_credentials_in_environment_name(
-    repository, tmp_path, monkeypatch  # noqa: F811
+    repository,  # noqa: F811 - imported fixture
+    tmp_path,
+    monkeypatch,  # noqa: F811
 ):
     _, origin, _, _, _, _, _, _, _ = repository
     monkeypatch.setenv("PROVIDER_KEY", "fixture-secret-must-never-be-saved")

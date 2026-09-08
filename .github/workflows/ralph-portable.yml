@@ -36,6 +36,7 @@ jobs:
           excubitor/tests/test_processes.py
           excubitor/tests/test_watchdog.py
           excubitor/tests/test_development_adapters.py
+          excubitor/tests/test_development_helpers.py
           excubitor/tests/test_development_setup.py
           excubitor/tests/test_original_git_config.py
           excubitor/tests/test_portable_onboarding.py

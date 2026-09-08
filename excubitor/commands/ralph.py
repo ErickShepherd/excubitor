@@ -117,7 +117,7 @@ def _prepare(job, root, baseline):
         "time_limit_seconds",
         "retain_command",
     }
-    if not isinstance(job, dict) or set(job) != required:
+    if not isinstance(job, dict) or set(job) not in (required, required | {"max_subagents"}):
         raise RunError("job must contain exactly the documented fields")
     preflight(job)
     if baseline != baseline_for(job):

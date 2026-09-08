@@ -13,6 +13,7 @@ from pathlib import Path
 from excubitor.claude_development import ClaudeStructuredModel
 from excubitor.codex_development import CodexStructuredModel
 from excubitor.command_model import CommandStructuredModel, literal_command
+from excubitor.development_helpers import subagent_limit
 from excubitor.development_runtime import BASELINE, LOCAL_BASELINE, DevelopmentRuntime
 from excubitor.host_processes import host_backend, process_tree
 from excubitor.http_model_client import validate_endpoint
@@ -40,6 +41,7 @@ def normalize(settings):
     if not isinstance(settings, dict):
         raise RunError("settings must be a JSON object")
     settings = dict(settings)
+    subagent_limit(settings.get("max_subagents", 0))
     if LEGACY_FIELDS <= settings.keys() and not ADAPTER_FIELDS & settings.keys():
         settings["llm"] = {
             "adapter": "claude-cli",
@@ -143,11 +145,7 @@ def make_executor(settings, project, output, *, environment, baseline):
     )
 
 
-def make_runtime(settings, project, output, *, executor, environment, baseline=BASELINE):
-    preflight(settings)
-    if baseline != baseline_for(normalize(settings)):
-        raise RunError("model runtime must use the baseline selected by the executor")
-    selected = normalize(settings)["llm"]
+def _make_model(selected, project, output, environment):
     options = {"environment": environment, "model": selected["model"]}
     if selected["adapter"] == "claude-cli":
         adapter = ClaudeStructuredModel(
@@ -173,6 +171,25 @@ def make_runtime(settings, project, output, *, executor, environment, baseline=B
         if selected["api_key_env"]:
             command += ("--api-key-env", selected["api_key_env"])
         adapter = CommandStructuredModel(command, output, **options)
+    return adapter
+
+
+def make_runtime(settings, project, output, *, executor, environment, baseline=BASELINE):
+    preflight(settings)
+    if baseline != baseline_for(normalize(settings)):
+        raise RunError("model runtime must use the baseline selected by the executor")
+    selected = normalize(settings)["llm"]
+
+    def fresh_model():
+        return _make_model(selected, project, output, environment)
+
     return DevelopmentRuntime(
-        project, output, model=adapter, executor=executor, editable=settings["editable"], baseline=baseline
+        project,
+        output,
+        model=fresh_model(),
+        executor=executor,
+        editable=settings["editable"],
+        baseline=baseline,
+        max_subagents=settings.get("max_subagents", 0),
+        helper_model_factory=fresh_model,
     )

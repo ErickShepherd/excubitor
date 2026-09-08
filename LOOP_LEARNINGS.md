@@ -1110,3 +1110,10 @@ disabling optional index writes/fsmonitor. Keep candidate exact-byte checks isol
 Read-only Git queries may still invoke trusted configured filters and helpers.
 
 Publication admission also checks fixture identities. Synthetic email addresses are not automatically approved public identities. Use the existing approved public fixture identity, keep author-copy assertions meaningful, preserve refusal evidence and recheck the source against unchanged policy before resubmitting the broker request.
+
+Ralph helper delegation belongs in the shared host, with fresh bounded proposal
+calls and one final writer. Enabling arbitrary native agent tools would expand the
+existing proposal-only contract. Freeze the helper cap in the saved agreement,
+validate disjoint scopes and all child output, join drained children before parent
+consolidation, and treat unknown drainage as interruption. Preserve original
+deadlines and attempt limits; compare candidate bytes rather than normalized text.

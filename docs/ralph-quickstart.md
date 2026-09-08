@@ -82,6 +82,33 @@ stdin; the host subsequently verifies retained candidate state. A refusal stops
 retention; it never switches to ordinary Git as a fallback. No host-specific
 broker is required for ordinary third-party installation.
 
+## Use bounded sub-agents
+
+New profiles allow up to two helpers per work attempt. Set `--max-subagents 0`
+during `init` to disable helpers, or choose a limit from zero through four. The
+profile and proposed plan show this limit before starting. Existing saved jobs
+and profiles without this setting keep helpers disabled; resuming cannot increase
+an agreed limit.
+
+The main worker decides whether an independent subtask would benefit from a fresh
+helper. Simple work can proceed in one model call. For delegation, it assigns
+bounded, non-overlapping editable-file scopes. Ralph runs the helpers concurrently
+through the selected model adapter, then gives their proposals to one fresh main
+worker to combine. Helpers return analysis and suggested file contents; they do
+not receive command, recursive delegation or commit authority. Only the host
+applies the main worker's final proposal.
+
+A delegating attempt uses at most the helper limit plus two model calls: the
+initial request, the helpers and the final combination. Those calls share the
+original deadline, and failed helper work consumes the same work-attempt budget.
+Helpers can therefore increase model usage; they never replenish the job's limits.
+Failure or cancellation stops sibling calls and requires their processes to finish
+before another writer runs. Unexpected candidate changes stop the run.
+
+Frozen checks, fresh final review and the chosen retainer remain required.
+Helper agreement is not acceptance evidence. This mechanism is shared across the
+model adapters; it does not enable unrestricted provider-native agent tools.
+
 ## Choose another model
 
 The loop and executor stay the same when you choose another transport:

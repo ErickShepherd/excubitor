@@ -11,6 +11,7 @@ from pathlib import Path
 from excubitor.acceptance import OutputOracle
 from excubitor.command_model import literal_command
 from excubitor.development_adapters import baseline_for, normalize, preflight
+from excubitor.development_helpers import subagent_limit
 from excubitor.development_runtime import LOCAL_BASELINE
 from excubitor.literal_command import BatchCommandError
 from excubitor.original_git import original_git_environment
@@ -24,6 +25,7 @@ PROFILE_FIELDS = {
     "checks",
     "check_files",
     "max_attempts",
+    "max_subagents",
     "time_limit_seconds",
     "retain_command",
 }
@@ -89,6 +91,7 @@ def example_profile(llm, executor, model):
         ],
         "check_files": ["tests/acceptance.py"],
         "max_attempts": 8,
+        "max_subagents": 2,
         "time_limit_seconds": 1800,
         "retain_command": [prefix + "authorized-committer" + suffix],
     }
@@ -155,6 +158,12 @@ def inspect(profile, project, root):
     report = {"ok": False, "baseline": None, "errors": errors, "warnings": warnings}
     if _placeholders(profile):
         errors.append("Replace all REPLACE placeholders in the profile.")
+    if isinstance(profile, dict):
+        try:
+            subagent_limit(profile.get("max_subagents", 0))
+        except RunError as error:
+            errors.append(str(error))
+            return report
     try:
         profile = normalize(profile)
     except BatchCommandError as error:
@@ -176,9 +185,15 @@ def inspect(profile, project, root):
             "trusted-local-v1 manages process lifetimes, with no filesystem or network sandbox. "
             "It must be explicitly selected and is never a fallback after a native denial."
         )
-    if set(profile) != PROFILE_FIELDS:
+    if set(profile) not in (PROFILE_FIELDS, PROFILE_FIELDS - {"max_subagents"}):
         errors.append("Use the complete reusable profile fields; job/plan fields do not belong in a profile.")
         return report
+    limit = profile.get("max_subagents", 0)
+    warnings.append(
+        f"Frozen helper limit: {limit}. Each work attempt uses at most "
+        f"{limit + 2 if limit else 1} model calls; helpers only propose, and one parent writes. "
+        "All calls share the original deadline; verification and review remain separate."
+    )
     llm = profile["llm"]
     if llm["adapter"] == "chat-completions" and llm["api_key_env"]:
         name = llm["api_key_env"]

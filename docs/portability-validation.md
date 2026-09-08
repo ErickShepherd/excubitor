@@ -14,7 +14,7 @@ Native support claims remain limited to the evidence below.
 | Independent review | Reproduced and cleared Windows batch argument injection and clean-original Git configuration rejection; verified installed workflows, unchanged original index bytes, frozen-setting tamper refusal, exact retained bytes and nested Linux controller-crash cleanup |
 | Hosted CI | Dedicated Windows/Linux/macOS workflow defined; no hosted run is claimed for this unpublished candidate |
 
-The independently reviewed standard wheel contains the same 71 Python source files
+The independently reviewed standard wheel contains the same 72 Python source files
 as the checkout. The reviewer forced malformed model output and a negative review
 in separate installed Windows and Linux jobs. Both completed in four work attempts
 and two review calls, preserving their original limits and original project files.
@@ -48,7 +48,26 @@ those counts. Both final installed review fixtures used unchanged CRLF originals
 with Git line-ending normalization; original source and index bytes stayed intact.
 All changed Python files passed Ruff. A subsequent test-only fixture identity
 alignment passed 24 focused tests without changing the runtime or installed wheel;
-the candidate then passed the unchanged publication policy.
+the candidate then passed the unchanged local commit-broker policy. Local retention
+does not establish publication clearance.
+
+The subsequent bounded-helper review exercised five installed workflows on each
+of Windows and Linux: concurrent helpers with rejected-review repair, invalid
+recursive output with sibling cleanup, explicit cancellation, legacy jobs with
+helpers disabled, and refusal before dispatch when the helper limit is exceeded.
+All ten passed. Eight controlled adapter fault probes separately covered missing
+drainage proof, raw line-ending mutation, provider capacity and recursive output.
+A Windows physical-file alias probe refused overlapping scopes before dispatch.
+The first Linux cancellation canary fired before the stop request existed; its
+failure and timestamps are preserved. A fresh test with a longer delay declared
+before launch passed. No runtime checks were weakened.
+The final combined Windows helper regression passed 496 tests and nine subtests,
+with four POSIX-only skips. All changed Python files passed Ruff.
+A subsequent installed Windows Claude job completed with one validated helper,
+frozen checks, fresh review and retained changes. Its requested two-helper
+demonstration assertion failed: the planner split the goal into three work units
+and used only one helper. That live receipt establishes delegation, while the
+separate deterministic installed fixtures establish concurrent two-helper behavior.
 
 Current bounded scope: up to 32 existing editable UTF-8 files, 64 KiB each;
 no symlinks, submodules or generated/untracked candidate artifacts. Acceptance

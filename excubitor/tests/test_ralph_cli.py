@@ -153,7 +153,7 @@ def test_changed_acceptance_file_is_rejected_before_a_worker(prepared, monkeypat
         backend.admit(run)
 
 
-@pytest.mark.parametrize("change", ["budget", "model", "executor"])
+@pytest.mark.parametrize("change", ["budget", "model", "executor", "subagents"])
 def test_resume_rejects_changed_saved_settings(prepared, monkeypatch, change):
     args, _, _, job = prepared
     monkeypatch.setattr(ralph, "make_runtime", lambda *a, **k: SimpleNamespace(editable={"main.py"}))
@@ -164,11 +164,34 @@ def test_resume_rejects_changed_saved_settings(prepared, monkeypatch, change):
         changed["max_attempts"] = 100
     elif change == "model":
         changed["llm"]["model"] = "another-model"
+    elif change == "subagents":
+        changed["max_subagents"] = 4
     else:
         changed["executor"]["adapter"] = "another-executor"
     path.write_text(json.dumps(changed), encoding="utf-8")
     with pytest.raises(ralph.RunError, match="saved job settings changed"):
         ralph._resume(args)
+
+
+@pytest.mark.parametrize("limit", [None, 0, 2, 4])
+def test_saved_helper_limit_is_frozen_and_old_jobs_are_not_rewritten(prepared, monkeypatch, limit):
+    args, _, _, job = prepared
+    if limit is not None:
+        job["max_subagents"] = limit
+    observed = []
+
+    def runtime(settings, *args, **kwargs):
+        observed.append(settings.get("max_subagents", 0))
+        return SimpleNamespace(editable={"main.py"})
+
+    monkeypatch.setattr(ralph, "make_runtime", runtime)
+    ralph._prepare(job, args.root, BASELINE)
+    path = args.root / "job.json"
+    before = path.read_bytes()
+    assert ("max_subagents" in json.loads(before)) == (limit is not None)
+    ralph._attach(args.root)
+    assert path.read_bytes() == before
+    assert observed == [limit or 0, limit or 0]
 
 
 def test_failed_runtime_attachment_is_recorded_as_interrupted(prepared, monkeypatch):
