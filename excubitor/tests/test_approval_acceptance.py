@@ -19,7 +19,10 @@ class TestApprovalAcceptance(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
-        self.root = Path(temporary.name)
+        # macOS exposes its temporary directory through /var, a system symlink to
+        # /private/var. Resolve that fixture root so these approval tests do not
+        # accidentally exercise the separate symlink-rejection contract.
+        self.root = Path(temporary.name).resolve()
         self.project = self.root / "project"
         self.project.mkdir()
         self.binding = Binding("codex-cli", "native-task", str(self.project))

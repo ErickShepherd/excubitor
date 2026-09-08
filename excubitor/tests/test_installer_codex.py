@@ -295,7 +295,9 @@ def test_observed_host_witness_is_receipt_bound_and_invalidated_by_registration_
     )
 
     settings = json.loads(target.settings_path.read_text(encoding="utf-8"))
-    settings["hooks"]["PreToolUse"][0]["hooks"][0]["commandWindows"] += " # drift"
+    handler = settings["hooks"]["PreToolUse"][0]["hooks"][0]
+    command_field = "commandWindows" if os.name == "nt" else "command"
+    handler[command_field] += " # drift"
     target.settings_path.write_text(json.dumps(settings, indent=2) + "\n", encoding="utf-8")
 
     drifted = status_mod.gather_status()["installations"][0]
