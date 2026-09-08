@@ -7,7 +7,9 @@ a real repository byte-for-byte untouched.
 from __future__ import annotations
 
 import hashlib
+import os
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -96,6 +98,41 @@ def test_context_manager_cleans_up() -> None:
         root = sb.root
         assert root.exists()
     assert not root.exists()
+
+
+def _exc_info(error: BaseException):
+    try:
+        raise error
+    except type(error):
+        return sys.exc_info()
+
+
+def test_cleanup_tolerates_a_descendant_that_disappears_during_removal(monkeypatch, tmp_path) -> None:
+    root = tmp_path / "sandbox"
+    root.mkdir()
+    sb = probe.ProbeSandbox(root=root, repo=root / "repo", marker=root / "marker")
+
+    def disappearing_rmtree(path, *, onerror):
+        onerror(os.unlink, str(root / "repo" / ".git" / "objects" / "maintenance.lock"),
+                _exc_info(FileNotFoundError("maintenance.lock")))
+        root.rmdir()
+
+    monkeypatch.setattr(probe.shutil, "rmtree", disappearing_rmtree)
+    sb.cleanup()
+    assert not root.exists()
+
+
+def test_cleanup_rejects_errors_other_than_a_disappearing_entry(monkeypatch, tmp_path) -> None:
+    root = tmp_path / "sandbox"
+    root.mkdir()
+    sb = probe.ProbeSandbox(root=root, repo=root / "repo", marker=root / "marker")
+
+    def failing_rmtree(path, *, onerror):
+        onerror(os.unlink, str(root / "still-present"), _exc_info(PermissionError("not removable")))
+
+    monkeypatch.setattr(probe.shutil, "rmtree", failing_rmtree)
+    with pytest.raises(PermissionError, match="not removable"):
+        sb.cleanup()
 
 
 # --- hook-subprocess probe (end-to-end against the real guard script) ------------------------------

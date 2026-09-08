@@ -53,6 +53,7 @@ __all__ = [
 #: The opt-out marker relpath the probe's default-branch policy is armed with (matches the neutral
 #: default). It is never present in the sandbox, so the probe's repo stays protected.
 PROBE_OPT_OUT_RELPATH = ".excubitor/allow-default-branch"
+_DISPOSABLE_GIT_CONFIG = ("-c", "gc.auto=0", "-c", "maintenance.auto=false")
 
 
 @dataclass
@@ -78,6 +79,10 @@ class ProbeSandbox:
             # Git can mark loose objects read-only on Windows. They belong exclusively to this
             # freshly-created sandbox, so make that one path removable and retry the same operation.
             exc = exc_info[1]
+            # Git maintenance may remove a loose-object lock after rmtree has enumerated it. Python
+            # 3.13 ignores this descendant race; reproduce that idempotent behavior on supported 3.11.
+            if isinstance(exc, FileNotFoundError):
+                return
             try:
                 owned = os.path.commonpath((root, os.path.abspath(path))) == root
             except ValueError:
@@ -115,9 +120,10 @@ def create_sandbox(parent: "str | Path | None" = None) -> ProbeSandbox:
     repo = root / "repo"
     repo.mkdir()
     try:
-        subprocess.run(["git", "init", "-b", "main", str(repo)], check=True, capture_output=True)
+        subprocess.run(["git", *_DISPOSABLE_GIT_CONFIG, "init", "-b", "main", str(repo)],
+                       check=True, capture_output=True)
         subprocess.run(
-            ["git", "-C", str(repo), "-c", "user.email=probe@localhost",
+            ["git", *_DISPOSABLE_GIT_CONFIG, "-C", str(repo), "-c", "user.email=probe@localhost",
              "-c", "user.name=excubitor-probe", "commit", "--allow-empty", "-m", "probe base"],
             check=True, capture_output=True,
         )
