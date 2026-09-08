@@ -67,8 +67,8 @@ _BUILTIN: list[tuple[str, "re.Pattern[str]"]] = [
     ("google-api-key", re.compile(r"\bAIza[0-9A-Za-z_-]{35}\b")),
     ("slack-webhook", re.compile(r"https://hooks\.slack\.com/services/[A-Za-z0-9/]+")),
     ("jwt", re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b")),
-    # credentials embedded in a URL: scheme://user:password@host  (skip the common empty-password and
-    # placeholder cases to stay high-confidence)
+    # Detect nonempty usernames and passwords embedded in a URL authority.
+    # Synthetic fixtures and templates are deliberately detectable too.
     ("url-credentials", re.compile(r"\b[a-zA-Z][a-zA-Z0-9+.-]*://[^\s:/@]+:[^\s:/@]+@[^\s/]+")),
 ]
 

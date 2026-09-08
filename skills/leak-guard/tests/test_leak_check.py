@@ -66,9 +66,8 @@ class TestBuiltinDetection(unittest.TestCase):
     def test_detects_aws_and_github_and_url_creds(self):
         # Construct an explicitly synthetic connection string; the scanner still
         # receives complete URL credentials and must detect them.
-        database_url = "postgres://{}:{}@{}/{}".format(
-            "test-user", "test-password", "db.example", "test-db"
-        )
+        userinfo = "{}:{}".format("test-user", "test-password")
+        database_url = f"postgres://{userinfo}@db.example/test-db"
         f = _file(self.dir, "conf.txt",
                   f"key={AWS_KEY}\n"
                   "tok=ghp_" + "A" * 36 + "\n"
