@@ -395,15 +395,29 @@ Supervisor(store, Host()).drive({run.id!r})
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
+        startup_timeout = 20
+        early_exit = None
         try:
-            deadline = time.monotonic() + 5
+            # Wait for the test owner to reach the intentional crash point. The
+            # controller's frozen run clock is separate from this fixture readiness
+            # budget on a loaded hosted Windows worker.
+            deadline = time.monotonic() + startup_timeout
             while not (store.directory / "crashed").exists() and time.monotonic() < deadline:
+                if process.poll() is not None:
+                    early_exit = process.returncode
+                    break
                 time.sleep(0.02)
-            assert (store.directory / "crashed").exists()
         finally:
             if process.poll() is None:
                 process.kill()
-            process.communicate(timeout=5)
+            _, stderr = process.communicate(timeout=5)
+        if not (store.directory / "crashed").exists():
+            if early_exit is not None:
+                pytest.fail(
+                    "watchdog owner exited before publishing the crash marker "
+                    f"(exit {early_exit}); stderr: {stderr.decode('utf-8', 'replace')}"
+                )
+            pytest.fail(f"watchdog owner did not publish the crash marker within {startup_timeout} seconds")
     final = watchdog.drive(run.id, run.contract.binding)
     saved = (store.directory / "crashed").read_text()
     recovered = json.loads((store.directory / "recovered").read_text())
