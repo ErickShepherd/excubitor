@@ -66,7 +66,10 @@ class _RepoCase(unittest.TestCase):
     def setUp(self) -> None:
         self.d = tempfile.mkdtemp(prefix="frozenrun-")
         self.addCleanup(shutil.rmtree, self.d, ignore_errors=True)
-        self.system_true = _system_true()
+        # The broad Windows legacy-oracle matrix remains experimental. Preserve
+        # its existing literal fixture there; only POSIX probes the actual
+        # regular system executable for the positive macOS case.
+        self.system_true = _system_true() if os.name != "nt" else "/bin/true"
         # an OUTSIDE-repo, user-writable directory for the writable-executable refusal case
         self.ext = tempfile.mkdtemp(prefix="frozenrun-ext-")
         self.addCleanup(shutil.rmtree, self.ext, ignore_errors=True)
@@ -413,7 +416,7 @@ class TestBasePinRequiresPushProtectedAnchor(unittest.TestCase):
     def setUp(self) -> None:
         self.d = tempfile.mkdtemp(prefix="frozenrun-basepin-")
         self.addCleanup(shutil.rmtree, self.d, ignore_errors=True)
-        self.system_true = _system_true()
+        self.system_true = _system_true() if os.name != "nt" else "/bin/true"
 
         def g(*args: str) -> str:
             return subprocess.run(["git", "-C", self.d, *args],
@@ -444,7 +447,7 @@ class TestBasePinRequiresPushProtectedAnchor(unittest.TestCase):
         # With origin/HEAD mirroring the base, --base main resolves to the remote-tracking anchor → the
         # baseline-authored vacuous oracle passes (authorship residual), proving the anchor path works.
         self._add_origin()
-        p = _run(self.d, "main", "/bin/true PLAN.md")
+        p = _run(self.d, "main", f"{self.system_true} PLAN.md")
         self.assertEqual(p.returncode, GREEN, f"stdout={p.stdout} stderr={p.stderr}")
 
     def test_loop_moved_local_main_no_longer_forges(self):
