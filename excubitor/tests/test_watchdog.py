@@ -51,8 +51,10 @@ class Host:
     def admit(self, run): pass
     def result(self): return ProcessResult(Execution(0,b'ok\\n',b'',.01),False,True,1)
     def work(self, run, unit, feedback, cancel):
-        (project / 'controller-pid').write_text(str(os.getpid()))
         with (project / 'attempts').open('a') as stream: stream.write(str(run.attempts)+'\\n')
+        # Publish readiness only after this attempt record is closed. Tests that
+        # kill the controller at the marker may then require the full history.
+        (project / 'controller-pid').write_text(str(os.getpid()))
         if mode == 'always' or (run.attempts == 1 and mode in ('crash','torn')):
             child = ("from pathlib import Path; import time; time.sleep(.6); Path("
                      +repr(str(project/'orphan'))+").write_text('bad')")
