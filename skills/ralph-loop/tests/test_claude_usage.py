@@ -3,7 +3,7 @@
 
 Pins the documented contract: malformed credentials degrade to the friendly RuntimeError (never an
 undocumented AttributeError/JSONDecodeError), and no token content ever appears in a failure message.
-Network is never touched here — every case fails before the HTTP request, in credential loading.
+Network is never touched here — transport failures are mocked at `urlopen` or its response reader.
 
 Stdlib unittest only. Run:
   python3 skills/ralph-loop/tests/test_claude_usage.py
@@ -13,8 +13,10 @@ from __future__ import annotations
 import json
 import sys
 import tempfile
+import traceback
 import unittest
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import claude_usage as cu  # noqa: E402
@@ -40,16 +42,33 @@ class TestCredentialDegradation(unittest.TestCase):
             cu.get_usage(str(Path(tempfile.gettempdir()) / "definitely-not-here.json"))
 
     def test_no_token_leaks_in_failure_message(self):
-        # a well-formed creds file whose token is present but the endpoint is unreachable: the token
-        # must never appear in the raised message. Force an unreachable host via a bogus creds token and
-        # a get_usage call — but to stay offline, assert only the credential-load messages here.
+        # A well-formed credential file reaches urlopen. Model lower layers that include request
+        # material in their text; neither the RuntimeError nor its rendered traceback may repeat it.
         secret = "sk-" + "SUPERSECRETTOKENVALUE" + "-do-not-leak"
         creds = self._creds(json.dumps({"claudeAiOauth": {"accessToken": secret}}))
-        # _load_token succeeds; the network call will fail — capture whatever message surfaces.
-        try:
-            cu.get_usage(creds, timeout=0.001)
-        except RuntimeError as e:
-            self.assertNotIn(secret, str(e))
+        failures = (
+            ("urlopen timeout", "urlopen", TimeoutError(f"Bearer {secret} timed out"),
+             "usage request timed out"),
+            ("urlopen URL error", "urlopen", cu.urllib.error.URLError(f"Bearer {secret} failed"),
+             "could not reach usage endpoint"),
+            ("read timeout", "read", TimeoutError(f"Bearer {secret} timed out"),
+             "usage request timed out"),
+            ("read URL error", "read", cu.urllib.error.URLError(f"Bearer {secret} failed"),
+             "could not reach usage endpoint"),
+        )
+        for label, stage, failure, expected in failures:
+            with self.subTest(label=label):
+                if stage == "urlopen":
+                    transport = patch.object(cu.urllib.request, "urlopen", side_effect=failure)
+                else:
+                    response = MagicMock()
+                    response.__enter__.return_value.read.side_effect = failure
+                    transport = patch.object(cu.urllib.request, "urlopen", return_value=response)
+                with transport as urlopen, self.assertRaisesRegex(RuntimeError, expected) as raised:
+                    cu.get_usage(creds)
+                urlopen.assert_called_once()
+                self.assertNotIn(secret, str(raised.exception))
+                self.assertNotIn(secret, "".join(traceback.format_exception(raised.exception)))
         # a no-token creds file raises the "no access token" RuntimeError (real coverage; nothing to leak).
         with self.assertRaises(RuntimeError):
             cu.get_usage(self._creds(json.dumps({"claudeAiOauth": {}})))
