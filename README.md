@@ -25,6 +25,10 @@ use the [virtual-environment instructions](docs/install.md). This development
 workflow has not been published as a new release; a package with the same name
 from an index is not evidence that it contains these changes.
 
+The [ralph-loop skill](skills/ralph-loop/SKILL.md) lets a coding assistant prepare,
+launch and monitor the same job through terminal tools. It reuses agreed scope and
+limits, and asks for any missing authorization before launch.
+
 Use the [Ralph quickstart](docs/ralph-quickstart.md) to create project settings,
 check them without a model call, prepare a plan, then start it once. Source-file
 selection, acceptance checks, resource limits and the permitted committer are

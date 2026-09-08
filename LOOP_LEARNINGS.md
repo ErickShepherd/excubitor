@@ -1119,3 +1119,5 @@ consolidation, and treat unknown drainage as interruption. Preserve original
 deadlines and attempt limits; compare candidate bytes rather than normalized text.
 
 Publication checks must retain deliberate secret-detection fixtures while using portable paths and synthetic local identities. Branding regeneration accepts a separately supplied font; keeping that build input outside the public tree does not change the rendered pixels. Code-test results, binary inspection, exact content classification and publication permission remain separate evidence.
+
+A launcher skill coordinates one durable job; it must not wrap the controller in another repeated loop. Reuse agreed scope and budgets, inspect the generated plan before launch, and monitor the actual run path. Legacy skill recipes and aliases must be updated together so they cannot reintroduce session environment flags, self-certified completion or a second writer.
