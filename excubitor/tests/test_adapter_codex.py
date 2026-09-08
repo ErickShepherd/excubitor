@@ -85,6 +85,10 @@ class TestCodexGoldenFixtures(unittest.TestCase):
         cases = json.loads(_FIXTURES.read_text(encoding="utf-8"))
         for source_case in cases:
             with self.subTest(case=source_case["name"]), tempfile.TemporaryDirectory() as repo:
+                # macOS publishes its temporary directory via /var, a system link to
+                # /private/var. Give both fixture inputs and expected control paths
+                # the canonical spelling without changing adapter authority rules.
+                repo = str(Path(repo).resolve())
                 case = _replace_repo(copy.deepcopy(source_case), repo)
                 assert isinstance(case, dict)
                 _repo(repo, str(case["repo_branch"]))

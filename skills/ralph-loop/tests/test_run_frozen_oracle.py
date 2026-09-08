@@ -36,6 +36,20 @@ USAGE = 2
 ANCHOR = "PLAN.md"
 
 
+def _system_true() -> str:
+    """Return a concrete system ``true`` that satisfies the oracle's file rule.
+
+    Keep the non-Python vacuous-command coverage while checking the hosted
+    platform's actual regular-file spelling instead of assuming that macOS
+    exposes ``/bin/true`` as one. A missing candidate fails this fixture; it
+    never skips the coverage or weakens executable trust.
+    """
+    for candidate in ("/bin/true", "/usr/bin/true"):
+        if os.path.isfile(os.path.realpath(candidate)):
+            return candidate
+    raise RuntimeError("no regular system true executable is available for the frozen-oracle fixture")
+
+
 def _run(repo: str, base: str, verified_by: str, timeout: str | None = None,
          anchor: str | None = ANCHOR, env: dict | None = None) -> subprocess.CompletedProcess:
     cmd = [sys.executable, str(SCRIPT), "--repo", repo, "--base", base, "--verified-by", verified_by]
@@ -52,6 +66,7 @@ class _RepoCase(unittest.TestCase):
     def setUp(self) -> None:
         self.d = tempfile.mkdtemp(prefix="frozenrun-")
         self.addCleanup(shutil.rmtree, self.d, ignore_errors=True)
+        self.system_true = _system_true()
         # an OUTSIDE-repo, user-writable directory for the writable-executable refusal case
         self.ext = tempfile.mkdtemp(prefix="frozenrun-ext-")
         self.addCleanup(shutil.rmtree, self.ext, ignore_errors=True)
@@ -105,7 +120,7 @@ class _RepoCase(unittest.TestCase):
             "verify: python3 tests/witness_ok.py ; python3 tests/witness_fail.py\n"
             "verify: no-such-interpreter tests/orphan.py\n"
             "verify: echo done\n"
-            "verify: /bin/true tests/witness_ok.py\n"
+            f"verify: {self.system_true} tests/witness_ok.py\n"
             "verify: .venv/bin/python tests/witness_ok.py\n"
             "verify: tests/runner.sh\n"
             "verify: python3 -m pytest tests/witness_ok.py\n"
@@ -384,7 +399,7 @@ class TestPermitBinding(_RepoCase):
         # tests/witness_ok.py` in the base-tree anchor is a vacuous oracle the DoD author owns
         # (same class as `verified-by: true` in the telos ledger — see KNOWN-BYPASSES.md). If this
         # test starts refusing, the boundary strengthened and the docs must be rewritten.
-        p = _run(self.d, "main", "/bin/true tests/witness_ok.py")
+        p = _run(self.d, "main", f"{self.system_true} tests/witness_ok.py")
         self.assertEqual(p.returncode, GREEN, f"stdout={p.stdout} stderr={p.stderr}")
 
 
@@ -398,6 +413,7 @@ class TestBasePinRequiresPushProtectedAnchor(unittest.TestCase):
     def setUp(self) -> None:
         self.d = tempfile.mkdtemp(prefix="frozenrun-basepin-")
         self.addCleanup(shutil.rmtree, self.d, ignore_errors=True)
+        self.system_true = _system_true()
 
         def g(*args: str) -> str:
             return subprocess.run(["git", "-C", self.d, *args],
@@ -407,7 +423,7 @@ class TestBasePinRequiresPushProtectedAnchor(unittest.TestCase):
         g("init", "-b", "main")
         g("config", "user.email", "t@t.t")
         g("config", "user.name", "t")
-        Path(self.d, "PLAN.md").write_text("verify: /bin/true PLAN.md\n")
+        Path(self.d, "PLAN.md").write_text(f"verify: {self.system_true} PLAN.md\n")
         g("add", "-A")
         g("commit", "-m", "base")
         self.base_sha = g("rev-parse", "HEAD")
@@ -420,7 +436,7 @@ class TestBasePinRequiresPushProtectedAnchor(unittest.TestCase):
     def test_local_only_default_fail_denies(self):
         # No origin/HEAD: the default is backed only by a loop-movable local ref → REFUSED, never a
         # permit over an unprovable baseline.
-        p = _run(self.d, "main", "/bin/true PLAN.md")
+        p = _run(self.d, "main", f"{self.system_true} PLAN.md")
         self.assertEqual(p.returncode, REFUSED, f"stdout={p.stdout} stderr={p.stderr}")
         self.assertIn("remote-tracking anchor", p.stderr)
 

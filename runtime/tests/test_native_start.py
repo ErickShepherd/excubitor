@@ -18,7 +18,10 @@ class TestNativeStartRecord(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
-        self.root = Path(temporary.name)
+        # macOS exposes this temporary root via /var, a system link to
+        # /private/var. Resolve the fixture so RunStore's link-rejection
+        # contract remains exercised only by its dedicated tests.
+        self.root = Path(temporary.name).resolve()
         self.project = self.root / "project"
         self.project.mkdir()
         self.store = RunStore(self.root / "authority", create=True)
