@@ -122,7 +122,7 @@ class TestBashDenials(unittest.TestCase):
         "python3 -c 'open(\"x\")' /r/.claude/settings.local.json",
         "tee /repo/.claude/allow-default-branch < /dev/null",
         "chmod -x /any/hooks/guard-self-integrity.py",
-        f"rm {PACKAGE_ROOT / 'adapters' / 'claude_code.py'}",     # shared deny renderer
+        f"rm {(PACKAGE_ROOT / 'adapters' / 'claude_code.py').as_posix()}",  # Bash path form
     ]
 
     # Ordinary loop work must stay unblocked — the seatbelt is wearable.

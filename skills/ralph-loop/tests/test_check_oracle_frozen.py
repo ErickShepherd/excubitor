@@ -157,12 +157,12 @@ class TestCheckOracleFrozen(unittest.TestCase):
     # --- bypass regressions: the candidate must normalize to git's repo-relative diff space ---
     def test_frozen_absolute_path_untouched(self):
         self._commit("feature.py", "x = 6\n")
-        self.assertEqual(_run(self.d, "main", f"python3 {self.d}/tests/test_oracle.py"), 0)
+        self.assertEqual(_run(self.d, "main", f"python3 {Path(self.d).as_posix()}/tests/test_oracle.py"), 0)
 
     def test_not_frozen_absolute_path_edited(self):
         # absolute-path verified-by must NOT defeat the check when the oracle is tampered
         self._commit("tests/test_oracle.py", "def test_ok():\n    assert True  # weakened\n")
-        self.assertEqual(_run(self.d, "main", f"python3 {self.d}/tests/test_oracle.py"), 1)
+        self.assertEqual(_run(self.d, "main", f"python3 {Path(self.d).as_posix()}/tests/test_oracle.py"), 1)
 
     def test_not_frozen_when_symlinked_oracle_target_edited(self):
         d = tempfile.mkdtemp(prefix="oraclefrozen-sym-")
@@ -280,7 +280,7 @@ class TestSymlinkSurface(unittest.TestCase):
         self._retarget("tests/test_oracle.py", "weak_oracle.py")
         self.g("add", "-A")
         self.g("commit", "-m", "retarget link")
-        self.assertEqual(_run(self.d, "main", f"python3 {self.d}/tests/test_oracle.py"), 1)
+        self.assertEqual(_run(self.d, "main", f"python3 {Path(self.d).as_posix()}/tests/test_oracle.py"), 1)
 
     def test_not_frozen_multi_file_one_link_retargeted(self):
         # multi-file witness: one plain file untouched, one link retargeted → the survivors must not

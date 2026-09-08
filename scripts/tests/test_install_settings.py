@@ -73,6 +73,11 @@ class TestCleanAndRepeat(unittest.TestCase):
         # The plan's isolated-home case: no --settings; $HOME redirected to a temp dir.
         with tempfile.TemporaryDirectory() as td:
             env = dict(os.environ, HOME=td)
+            if os.name == "nt":
+                # pathlib follows USERPROFILE on Windows; HOME alone is a POSIX-only isolation knob.
+                env["USERPROFILE"] = td
+                env["HOMEDRIVE"] = Path(td).drive
+                env["HOMEPATH"] = Path(td).root.removeprefix(Path(td).drive)
             r = subprocess.run([sys.executable, str(MODULE)], capture_output=True, text=True, env=env)
             self.assertEqual(r.returncode, 0, r.stderr)
             written = Path(td) / ".claude" / "settings.json"

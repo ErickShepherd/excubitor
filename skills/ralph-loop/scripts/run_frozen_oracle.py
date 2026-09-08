@@ -52,6 +52,12 @@ sys.path shadowing from a SCRIPT's own directory (direct-script witnesses), rema
 frozen surface; a gate run as root refuses (everything is root-writable) — the safe direction. See
 KNOWN-BYPASSES.md ("the frozen-oracle gate binds authorship and bytes, not semantics").
 
+PLATFORM BOUNDARY. The legacy executable binding deliberately supports POSIX execution only: its
+trusted lookup and sanitized runtime PATH are `/usr/bin:/bin`, and its baseline-authored legacy
+witnesses name `python3` or `/bin/true`. On Windows it refuses rather than selecting `py.exe` or a
+registry-chosen interpreter. Shared anchor and oracle-freeze checks remain portable; Windows must
+observe this refusal, while POSIX runners retain the full execution suite.
+
 FAIL-DENY. Refusal (exit 10) on any binding/precheck/recheck failure or snapshot mismatch. A
 witness that executes but fails, or times out, is RED (exit 1) — never green, never a refusal
 masquerading as a pass.
@@ -420,6 +426,16 @@ def run(repo: str, base: str, anchor: str, verified_by: str, timeout: float) -> 
     if not argv:
         print("usage: empty verified-by", file=sys.stderr)
         return EXIT_USAGE
+
+    # The legacy runner's trusted executable/environment model is intentionally POSIX-only. Do not
+    # substitute py.exe or another launcher here: those select an interpreter outside the baseline
+    # binding and could forge a permit. The portable check_oracle_frozen precheck remains available
+    # on Windows; this execution gate refuses before resolving or starting any witness process.
+    if os.name == "nt":
+        print("REFUSED (platform): legacy frozen-oracle execution requires a POSIX trusted runtime "
+              "(/usr/bin:/bin); Windows never selects py.exe or a registry interpreter, and the "
+              "witness was not started (fail-deny)", file=sys.stderr)
+        return EXIT_REFUSED
 
     # 2. EXECUTABLE BINDING — resolve argv[0] against trusted state, never the caller's PATH.
     reason, resolved_exe, extra = _bind_executable(repo, toplevel, argv[0])

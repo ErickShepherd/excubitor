@@ -44,7 +44,16 @@ def _make_repo(td: str, spec: dict) -> str:
 
 
 def _sub(obj, repo: "str | None"):
-    return json.loads(json.dumps(obj).replace("{REPO}", repo)) if repo else obj
+    """Replace fixture placeholders without serializing Windows paths through JSON text."""
+    if repo is None:
+        return obj
+    if isinstance(obj, str):
+        return obj.replace("{REPO}", repo)
+    if isinstance(obj, list):
+        return [_sub(value, repo) for value in obj]
+    if isinstance(obj, dict):
+        return {key: _sub(value, repo) for key, value in obj.items()}
+    return obj
 
 
 def _base_env() -> dict:

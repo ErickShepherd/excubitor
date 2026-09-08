@@ -146,6 +146,12 @@ def _sha256_or_none(data: "bytes | None") -> "str | None":
     return None if data is None else hashlib.sha256(data).hexdigest()
 
 
+def _settings_json_bytes(data: dict, prior: "bytes | None") -> bytes:
+    """Serialize canonical settings JSON while retaining an existing file's line ending style."""
+    newline = "\r\n" if prior is not None and b"\r\n" in prior else "\n"
+    return (json.dumps(data, indent=2) + "\n").replace("\n", newline).encode("utf-8")
+
+
 # --- settings registration merge -------------------------------------------------------------------
 
 def _canonical_entry(reg: OwnedRegistration) -> dict:
@@ -378,7 +384,7 @@ def apply_install(
     pre = data.setdefault("hooks", {}).setdefault("PreToolUse", [])
     prior_regs = list(prior_receipt.registrations) if prior_receipt else []
     merge_registrations(pre, wanted, prior_regs)
-    new_settings = (json.dumps(data, indent=2) + "\n").encode("utf-8")
+    new_settings = _settings_json_bytes(data, prior_settings_bytes)
     settings_written = new_settings != (prior_settings_bytes or b"")
     transaction_time = now or _now_iso()
     receipt = Receipt(
@@ -727,7 +733,7 @@ def apply_uninstall(
     pre = data.get("hooks", {}).get("PreToolUse", []) if isinstance(data.get("hooks"), dict) else []
     reg_changed = remove_registrations(pre, list(receipt.registrations))
     delete_settings = (not receipt.settings_preexisted) and _settings_effectively_empty(data)
-    new_settings = (json.dumps(data, indent=2) + "\n").encode("utf-8")
+    new_settings = _settings_json_bytes(data, prior_settings_bytes)
     settings_changes = delete_settings or (
         prior_settings_bytes is not None and new_settings != prior_settings_bytes
     )

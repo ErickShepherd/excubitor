@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from excubitor.acceptance import Execution, OutputOracle
 from excubitor.continuation import Continuation
 from excubitor.processes import ProcessResult
-from excubitor.runs import Binding, Candidate, Contract, RunError, RunStore
+from excubitor.runs import Binding, Candidate, Conflict, Contract, RunError, RunStore
 from excubitor.supervisor import Supervisor, _exclusive
 
 
@@ -421,6 +421,184 @@ Supervisor(store, Host()).drive({run.id!r})
     assert len(observations) <= 6
     assert any(item["outcome"] == "started" for item in observations)
     assert any(item.get("elapsed_seconds") == 0.25 for item in observations)
+
+
+def _hold_windows_lock(path, ready, *, release=None, seconds=None):
+    assert (release is None) != (seconds is None)
+    wait = (
+        f"    time.sleep({seconds!r})\n"
+        if release is None
+        else (
+            f"    release = Path({str(release)!r})\n"
+            "    deadline = time.monotonic() + 5\n"
+            "    while not release.exists() and time.monotonic() < deadline:\n"
+            "        time.sleep(0.01)\n"
+        )
+    )
+    script = (
+        "import msvcrt, time\n"
+        "from pathlib import Path\n"
+        f"path = Path({str(path)!r})\n"
+        f"ready = Path({str(ready)!r})\n"
+        "with path.open('a+b') as stream:\n"
+        "    stream.seek(0)\n"
+        "    msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)\n"
+        "    ready.write_text('locked')\n"
+        + wait
+        + "    stream.seek(0)\n"
+        "    msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)\n"
+    )
+    process = subprocess.Popen([sys.executable, "-X", "utf8", "-I", "-B", "-c", script])
+    deadline = time.monotonic() + 5
+    while not ready.exists() and time.monotonic() < deadline:
+        time.sleep(0.01)
+    if not ready.exists():
+        process.kill()
+        process.communicate(timeout=5)
+        pytest.fail("lock holder did not become ready")
+    return process
+
+
+def _pending_watchdog_history(store, run):
+    directory = store.directory / "supervision"
+    directory.mkdir()
+    history = directory / (run.id + ".controller.jsonl")
+    launch = {
+        "schema": 2,
+        "event": "launched",
+        "launch": 0,
+        "contract": run.contract.digest,
+        "job": "Global\\Excubitor.Run." + "a" * 32,
+    }
+    history.write_text(json.dumps(launch) + "\n")
+    return history, launch
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows controller containment")
+def test_recovered_absent_job_waits_for_controller_lock_release(tmp_path, monkeypatch):
+    from excubitor import watchdog as module
+
+    lock, ready, release = tmp_path / "controller.lock", tmp_path / "locked", tmp_path / "release"
+    process = _hold_windows_lock(lock, ready, release=release)
+    attempted, acquired, errors = threading.Event(), threading.Event(), []
+    original = module._exclusive
+
+    def counted(path):
+        attempted.set()
+        return original(path)
+
+    def acquire():
+        try:
+            with module._exclusive_after_absent_job(lock, grace_seconds=5):
+                acquired.set()
+        except BaseException as exc:
+            errors.append(exc)
+
+    monkeypatch.setattr(module, "_exclusive", counted)
+    waiter = threading.Thread(target=acquire)
+    waiter.start()
+    try:
+        assert attempted.wait(5)
+        time.sleep(0.05)
+        assert waiter.is_alive() and not acquired.is_set()
+        release.write_text("release")
+        waiter.join(timeout=5)
+        assert not waiter.is_alive() and acquired.is_set() and not errors
+    finally:
+        if process.poll() is None:
+            release.write_text("release")
+        process.communicate(timeout=5)
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows controller containment")
+def test_absent_job_lock_timeout_preserves_recovery_history_and_run(setup, tmp_path, monkeypatch):
+    from excubitor import watchdog as module
+
+    store, run, _ = setup
+    history, launch = _pending_watchdog_history(store, run)
+    original_history, original_run = history.read_bytes(), store.get(run.id)
+
+    class StillLocked:
+        def __enter__(self):
+            raise Conflict("another supervisor owns this run")
+
+        def __exit__(self, *unused):
+            return False
+
+    used = []
+    monkeypatch.setattr(
+        module,
+        "recover_job",
+        lambda _: {"job": launch["job"], "evidence": "kernel-object-absent", "active": 0},
+    )
+    monkeypatch.setattr(module, "_exclusive_after_absent_job", lambda path: used.append(path) or StillLocked())
+    with pytest.raises(Conflict, match="another supervisor"):
+        module.ControllerWatchdog(store, lambda _: (), tmp_path).drive(run.id, run.contract.binding)
+    assert used == [store.directory / "supervision" / (run.id + ".lock")]
+    assert history.read_bytes() == original_history and store.get(run.id) == original_run
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows controller containment")
+def test_recovered_kernel_drain_does_not_use_absent_job_lock_grace(setup, tmp_path, monkeypatch):
+    from excubitor import watchdog as module
+
+    store, run, _ = setup
+    _, launch = _pending_watchdog_history(store, run)
+    monkeypatch.setattr(
+        module,
+        "recover_job",
+        lambda _: {
+            "job": launch["job"],
+            "evidence": "kernel-object-drained",
+            "active": 0,
+            "processes": 0,
+        },
+    )
+    monkeypatch.setattr(
+        module,
+        "_exclusive_after_absent_job",
+        lambda _: pytest.fail("kernel-drained recovery must not use the absence handoff"),
+    )
+    monkeypatch.setattr(
+        module.ControllerWatchdog,
+        "_after_drain",
+        lambda watchdog, directory, current, binding, receipt, cancel: watchdog.store.interrupt(current),
+    )
+    final = module.ControllerWatchdog(store, lambda _: (), tmp_path).drive(run.id, run.contract.binding)
+    assert final.state == "interrupted"
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows controller containment")
+def test_absent_job_handoff_does_not_retry_conflict_raised_inside_its_body(tmp_path, monkeypatch):
+    from excubitor import watchdog as module
+
+    original, calls = module._exclusive, []
+
+    def counted(path):
+        calls.append(path)
+        return original(path)
+
+    monkeypatch.setattr(module, "_exclusive", counted)
+    with pytest.raises(Conflict, match="body failure"):
+        with module._exclusive_after_absent_job(tmp_path / "controller.lock"):
+            raise Conflict("body failure")
+    assert calls == [tmp_path / "controller.lock"]
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows controller containment")
+def test_recovered_absent_job_refuses_still_held_controller_lock(tmp_path):
+    from excubitor import watchdog as module
+
+    lock, ready = tmp_path / "controller.lock", tmp_path / "locked"
+    process = _hold_windows_lock(lock, ready, seconds=5)
+    try:
+        with pytest.raises(Conflict, match="another supervisor"):
+            with module._exclusive_after_absent_job(lock, grace_seconds=0.05):
+                pass
+    finally:
+        if process.poll() is None:
+            process.kill()
+        process.communicate(timeout=5)
 
 
 def test_failed_repair_and_capacity_keep_original_findings(setup):

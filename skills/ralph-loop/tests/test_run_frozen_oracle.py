@@ -34,6 +34,7 @@ REFUSED = 10
 USAGE = 2
 
 ANCHOR = "PLAN.md"
+_POSIX_EXECUTION_ONLY = "legacy frozen-oracle execution binds only /usr/bin:/bin"
 
 
 def _system_true() -> str:
@@ -148,16 +149,19 @@ class _RepoCase(unittest.TestCase):
 
 
 class TestRunFrozenOracle(_RepoCase):
+    @unittest.skipIf(os.name == "nt", _POSIX_EXECUTION_ONLY)
     def test_green_when_witness_passes_and_surface_frozen(self):
         p = _run(self.d, "main", "python3 tests/witness_ok.py")
         self.assertEqual(p.returncode, GREEN, p.stderr)
         self.assertIn("GREEN", p.stdout)
 
+    @unittest.skipIf(os.name == "nt", _POSIX_EXECUTION_ONLY)
     def test_red_when_witness_fails(self):
         p = _run(self.d, "main", "python3 tests/witness_fail.py")
         self.assertEqual(p.returncode, RED)
         self.assertIn("RED", p.stderr)
 
+    @unittest.skipIf(os.name == "nt", _POSIX_EXECUTION_ONLY)
     def test_refused_on_precheck_when_oracle_edited(self):
         # the loop committed an edit to its own witness → precheck refuses before anything runs
         (Path(self.d) / "tests" / "witness_ok.py").write_text("import sys\nsys.exit(0)  # weakened\n")
@@ -167,6 +171,7 @@ class TestRunFrozenOracle(_RepoCase):
         self.assertEqual(p.returncode, REFUSED)
         self.assertIn("precheck", p.stderr)
 
+    @unittest.skipIf(os.name == "nt", _POSIX_EXECUTION_ONLY)
     def test_refused_on_precheck_uncommitted_content_weakening(self):
         # R-04 finding #1 at the permit-to-act gate: the loop weakens a regular witness IN THE
         # WORKTREE without committing (here a would-fail witness rewritten to exit 0). Pre-fix the
@@ -177,6 +182,7 @@ class TestRunFrozenOracle(_RepoCase):
         self.assertEqual(p.returncode, REFUSED, f"stdout={p.stdout} stderr={p.stderr}")
         self.assertIn("precheck", p.stderr)
 
+    @unittest.skipIf(os.name == "nt", _POSIX_EXECUTION_ONLY)
     def test_refused_on_recheck_when_witness_mutates_its_oracle(self):
         # THE RACE: precheck passes (surface pristine), the witness itself rewrites the oracle during
         # execution and exits 0 — the runner must NOT return that green. The recheck refuses: since
@@ -187,6 +193,7 @@ class TestRunFrozenOracle(_RepoCase):
         self.assertEqual(p.returncode, REFUSED, f"stdout={p.stdout} stderr={p.stderr}")
         self.assertIn("recheck", p.stderr)
 
+    @unittest.skipIf(os.name == "nt", _POSIX_EXECUTION_ONLY)
     def test_refused_on_uncommitted_retarget(self):
         # symlinked oracle repointed in the worktree (uncommitted) → precheck's state comparison refuses
         tests = Path(self.d) / "tests"
@@ -201,12 +208,14 @@ class TestRunFrozenOracle(_RepoCase):
         p = _run(self.d, "main", "python3 tests/witness_link.py")
         self.assertEqual(p.returncode, REFUSED)
 
+    @unittest.skipIf(os.name == "nt", _POSIX_EXECUTION_ONLY)
     def test_no_shell_metacharacters_stay_literal(self):
         # `$(touch pwned)` must reach the witness as literal argv, not execute: no shell, no side file
         p = _run(self.d, "main", "python3 tests/witness_ok.py $(touch pwned)")
         self.assertEqual(p.returncode, GREEN, p.stderr)
         self.assertFalse((Path(self.d) / "pwned").exists(), "command substitution must not execute")
 
+    @unittest.skipIf(os.name == "nt", _POSIX_EXECUTION_ONLY)
     def test_shell_chain_does_not_chain(self):
         # `a; b` under a shell would run b and report ITS exit code; without a shell the `;` glues
         # into a literal filename argument. Witness scripts ignore argv → still the FIRST script's
@@ -215,11 +224,13 @@ class TestRunFrozenOracle(_RepoCase):
         self.assertEqual(p.returncode, GREEN,
                          f"`;` must not chain a second command (stderr={p.stderr})")
 
+    @unittest.skipIf(os.name == "nt", _POSIX_EXECUTION_ONLY)
     def test_timeout_is_red_not_green(self):
         p = _run(self.d, "main", "python3 tests/witness_slow.py", timeout="1")
         self.assertEqual(p.returncode, RED)
         self.assertIn("timed out", p.stderr)
 
+    @unittest.skipIf(os.name == "nt", _POSIX_EXECUTION_ONLY)
     def test_unresolvable_witness_executable_is_refused(self):
         # 2026-07-16 hardening: an executable that does not resolve on the trusted PATH cannot have
         # its trust bound — REFUSED (was RED when the runner trusted any argv[0] the caller named).
@@ -239,10 +250,12 @@ class TestRunFrozenOracle(_RepoCase):
         self.assertEqual(p.returncode, REFUSED)
         self.assertIn("executable", p.stderr)
 
+    @unittest.skipIf(os.name == "nt", _POSIX_EXECUTION_ONLY)
     def test_refused_when_no_oracle_file(self):
         p = _run(self.d, "main", "echo done")
         self.assertEqual(p.returncode, REFUSED)
 
+    @unittest.skipIf(os.name == "nt", _POSIX_EXECUTION_ONLY)
     def test_witness_runs_under_sanitized_environment(self):
         # The caller's environment is an injection vector (PYTHONPATH swaps what a trusted
         # interpreter loads). The witness must see the fixed PATH and none of the inherited vars.
@@ -296,6 +309,7 @@ class TestPermitBinding(_RepoCase):
         self.assertEqual(p.returncode, REFUSED)
         self.assertIn("baseline-authored", p.stderr)
 
+    @unittest.skipIf(os.name == "nt", _POSIX_EXECUTION_ONLY)
     def test_untracked_in_repo_interpreter_refused_even_when_baseline_authored(self):
         # THE .venv TRUST PROBLEM: the command `.venv/bin/python tests/witness_ok.py` IS
         # baseline-authored in PLAN.md, but the interpreter is an untracked, agent-writable file
@@ -310,6 +324,7 @@ class TestPermitBinding(_RepoCase):
         self.assertEqual(p.returncode, REFUSED, f"stdout={p.stdout} stderr={p.stderr}")
         self.assertIn(".venv", p.stderr)
 
+    @unittest.skipIf(os.name == "nt", _POSIX_EXECUTION_ONLY)
     def test_writable_outside_repo_executable_refused(self):
         # A baseline-authored command whose executable lives in a user-writable directory outside
         # the repo is equally replaceable → REFUSED.
@@ -317,6 +332,7 @@ class TestPermitBinding(_RepoCase):
         self.assertEqual(p.returncode, REFUSED, f"stdout={p.stdout} stderr={p.stderr}")
         self.assertIn("writable", p.stderr)
 
+    @unittest.skipIf(os.name == "nt", _POSIX_EXECUTION_ONLY)
     def test_in_repo_symlink_to_external_writable_exe_refused(self):
         # Round-3 review finding 3: a TRACKED in-repo symlink resolving to a user-writable EXTERNAL
         # binary must refuse. The frozen surface binds the link's identity (its target string), but
@@ -328,6 +344,7 @@ class TestPermitBinding(_RepoCase):
         self.assertEqual(p.returncode, REFUSED, f"stdout={p.stdout} stderr={p.stderr}")
         self.assertIn("writable", p.stderr)
 
+    @unittest.skipIf(os.name == "nt", _POSIX_EXECUTION_ONLY)
     def test_tracked_in_repo_executable_is_green_then_refused_on_edit(self):
         # Positive control: a TRACKED in-repo executable witness is fine — and it is now part of
         # the frozen surface, so an uncommitted edit to it refuses.
@@ -347,6 +364,7 @@ class TestPermitBinding(_RepoCase):
         self.assertEqual(p.returncode, REFUSED, f"stdout={p.stdout} stderr={p.stderr}")
         self.assertIn("remote-tracking default", p.stderr)
 
+    @unittest.skipIf(os.name == "nt", _POSIX_EXECUTION_ONLY)
     def test_untracked_conftest_refuses(self):
         # conftest.py is auto-collected by pytest and changes verdicts without appearing in the
         # command. Present-but-untracked → cannot be bound to the baseline → REFUSED.
@@ -355,6 +373,7 @@ class TestPermitBinding(_RepoCase):
         self.assertEqual(p.returncode, REFUSED, f"stdout={p.stdout} stderr={p.stderr}")
         self.assertIn("conftest.py", p.stderr)
 
+    @unittest.skipIf(os.name == "nt", _POSIX_EXECUTION_ONLY)
     def test_module_shadow_file_refuses(self):
         # `python -m pytest` puts the repo root first on sys.path: an untracked repo-root pytest.py
         # replaces the runner wholesale → REFUSED before anything executes.
@@ -363,6 +382,7 @@ class TestPermitBinding(_RepoCase):
         self.assertEqual(p.returncode, REFUSED, f"stdout={p.stdout} stderr={p.stderr}")
         self.assertIn("pytest.py", p.stderr)
 
+    @unittest.skipIf(os.name == "nt", _POSIX_EXECUTION_ONLY)
     def test_module_shadow_package_refuses(self):
         (Path(self.d) / "pytest").mkdir()
         (Path(self.d) / "pytest" / "__init__.py").write_text("")
@@ -370,6 +390,7 @@ class TestPermitBinding(_RepoCase):
         self.assertEqual(p.returncode, REFUSED, f"stdout={p.stdout} stderr={p.stderr}")
         self.assertIn("shadow", p.stderr)
 
+    @unittest.skipIf(os.name == "nt", _POSIX_EXECUTION_ONLY)
     def test_attached_and_clustered_m_shadow_refuses(self):
         # Round-3 review finding 1: the shadow binding must catch EVERY `-m` spelling, not just the
         # spaced `python3 -m pytest`. CPython accepts `-mpytest`, `-Bmpytest`, and `-Bm pytest`, each
@@ -386,6 +407,7 @@ class TestPermitBinding(_RepoCase):
             self.assertEqual(p.returncode, REFUSED, f"{cmd!r}: stdout={p.stdout} stderr={p.stderr}")
             self.assertIn("pytest.py", p.stderr, f"{cmd!r}: attached/clustered -m shadow must refuse")
 
+    @unittest.skipIf(os.name == "nt", _POSIX_EXECUTION_ONLY)
     def test_separate_value_long_opt_before_m_shadow_refuses(self):
         # Round-4 review finding 2: a separate-value long option (`--check-hash-based-pycs always`)
         # before `-m` must not end the module scan early — its value token is consumed, not read as
@@ -396,6 +418,7 @@ class TestPermitBinding(_RepoCase):
         self.assertEqual(p.returncode, REFUSED, f"stdout={p.stdout} stderr={p.stderr}")
         self.assertIn("pytest.py", p.stderr)
 
+    @unittest.skipIf(os.name == "nt", _POSIX_EXECUTION_ONLY)
     def test_baseline_authored_bin_true_is_green_accepted_residual(self):
         # ACCEPTED residual, pinned bidirectionally: a command the BASELINE AUTHOR wrote is trusted
         # author intent — the gate binds authorship and bytes, not semantics. `/bin/true
@@ -443,6 +466,7 @@ class TestBasePinRequiresPushProtectedAnchor(unittest.TestCase):
         self.assertEqual(p.returncode, REFUSED, f"stdout={p.stdout} stderr={p.stderr}")
         self.assertIn("remote-tracking anchor", p.stderr)
 
+    @unittest.skipIf(os.name == "nt", _POSIX_EXECUTION_ONLY)
     def test_push_protected_default_is_green(self):
         # With origin/HEAD mirroring the base, --base main resolves to the remote-tracking anchor → the
         # baseline-authored vacuous oracle passes (authorship residual), proving the anchor path works.
@@ -467,6 +491,35 @@ class TestBasePinRequiresPushProtectedAnchor(unittest.TestCase):
         p = _run(self.d, "main", "/bin/true loot.py")
         self.assertEqual(p.returncode, REFUSED, f"stdout={p.stdout} stderr={p.stderr}")
         self.assertIn("remote-tracking default", p.stderr)
+
+
+@unittest.skipUnless(os.name == "nt", "Windows-specific unsupported-execution witness")
+class TestWindowsLegacyExecutionBoundary(unittest.TestCase):
+    def test_posix_bound_python_witness_refuses_without_registry_launcher_fallback(self):
+        with tempfile.TemporaryDirectory(prefix="frozenrun-windows-") as td:
+            def git(*args: str) -> str:
+                return subprocess.run(["git", "-C", td, *args], check=True, capture_output=True,
+                                      text=True).stdout.strip()
+
+            git("init", "-b", "main")
+            git("config", "user.email", "t@t.t")
+            git("config", "user.name", "t")
+            Path(td, "PLAN.md").write_text("verify: tests/witness_must_not_start.py\n")
+            Path(td, "tests").mkdir()
+            sentinel = Path(td, "witness-started")
+            Path(td, "tests", "witness_must_not_start.py").write_text(
+                f"from pathlib import Path\nPath({str(sentinel)!r}).write_text('started')\n")
+            git("add", "-A")
+            git("commit", "-m", "base")
+            base = git("rev-parse", "HEAD")
+            git("update-ref", "refs/remotes/origin/main", base)
+            git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
+            git("switch", "-c", "loop/x")
+
+            p = _run(td, "main", "tests/witness_must_not_start.py")
+            self.assertEqual(p.returncode, REFUSED, f"stdout={p.stdout} stderr={p.stderr}")
+            self.assertIn("REFUSED (platform)", p.stderr)
+            self.assertFalse(sentinel.exists(), "the unsupported witness must never start")
 
 
 if __name__ == "__main__":

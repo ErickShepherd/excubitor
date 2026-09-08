@@ -27,7 +27,9 @@ disposable marker was **not** created. Presence of a staged file is never, by it
 from __future__ import annotations
 
 import json
+import os
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -67,7 +69,34 @@ class ProbeSandbox:
     marker: Path
 
     def cleanup(self) -> None:
-        shutil.rmtree(self.root, ignore_errors=True)
+        if not self.root.exists():
+            return
+
+        root = os.path.abspath(self.root)
+
+        def retry_readonly(func, path, exc_info) -> None:
+            # Git can mark loose objects read-only on Windows. They belong exclusively to this
+            # freshly-created sandbox, so make that one path removable and retry the same operation.
+            exc = exc_info[1]
+            try:
+                owned = os.path.commonpath((root, os.path.abspath(path))) == root
+            except ValueError:
+                owned = False
+            try:
+                entry = os.lstat(path)
+                reparse = bool(getattr(entry, "st_file_attributes", 0)
+                               & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0))
+                ordinary = not stat.S_ISLNK(entry.st_mode) and not reparse
+            except OSError:
+                ordinary = False
+            if os.name == "nt" and owned and ordinary and isinstance(exc, PermissionError):
+                os.chmod(path, stat.S_IWRITE)
+                func(path)
+            else:
+                raise exc
+
+        # onerror is available on every supported Python, unlike 3.12's onexc spelling.
+        shutil.rmtree(self.root, onerror=retry_readonly)
 
     def __enter__(self) -> "ProbeSandbox":
         return self

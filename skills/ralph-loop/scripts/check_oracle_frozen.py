@@ -114,6 +114,11 @@ def _canonical_prefix(abs_candidate: str, toplevel: str) -> str:
     return norm
 
 
+def _git_relpath(path: str, toplevel: str) -> str:
+    """Return a repository-relative path in Git's slash-separated pathspec form."""
+    return os.path.normpath(os.path.relpath(path, toplevel)).replace(os.sep, "/")
+
+
 def _surface_paths(toplevel: str, abs_candidate: str) -> list[str]:
     """Every path whose retargeting would change which bytes the witness executes: the lexical
     candidate, every symlink hop along the WHOLE in-repo path — a DIRECTORY symlink in the prefix is
@@ -165,8 +170,8 @@ def _collect_surface(repo: str, base: str, toplevel: str, abs_candidate: str,
     REQUIRED path (the runner's executable/config bindings) must refuse on them instead."""
     loose: list[str] = []
     for p in _surface_paths(toplevel, abs_candidate):
-        rel = os.path.normpath(os.path.relpath(p, toplevel))
-        if rel.startswith(".."):
+        rel = _git_relpath(p, toplevel)
+        if rel == ".." or rel.startswith("../"):
             continue  # outside the work tree → cannot appear in the diff
         # A path that ISN'T a currently-tracked file/link is dropped — BUT if that same path was a
         # tracked blob at `base`, its disappearance is exactly the tamper this check exists to

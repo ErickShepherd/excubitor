@@ -16,7 +16,9 @@ import json
 import os
 import re
 import threading
+import time
 import uuid
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Callable
 
@@ -31,6 +33,38 @@ def _append(path: Path, value: dict) -> None:
         stream.write(json.dumps(value, sort_keys=True) + "\n")
         stream.flush()
         os.fsync(stream.fileno())
+
+
+@contextmanager
+def _exclusive_after_absent_job(path: Path, *, grace_seconds: float = 1.0):
+    """Wait briefly for a controller lock released by a just-destroyed Windows job.
+
+    Job-object absence means Windows has accepted termination after the previous
+    watchdog lost its final handle.  It does not make the controller's file lock
+    disappear synchronously, and it is not descendant-drainage evidence.  This
+    only prevents a replacement from mutating the run until the exact controller
+    lock is released.  An overlapping owner still fails closed after the bounded
+    handoff window.
+    """
+    deadline = time.monotonic() + grace_seconds
+    lock = None
+    while lock is None:
+        candidate = _exclusive(path)
+        try:
+            candidate.__enter__()
+        except Conflict:
+            if time.monotonic() >= deadline:
+                raise
+            time.sleep(min(0.01, max(0.0, deadline - time.monotonic())))
+        else:
+            lock = candidate
+    try:
+        yield
+    except BaseException as exc:
+        lock.__exit__(type(exc), exc, exc.__traceback__)
+        raise
+    else:
+        lock.__exit__(None, None, None)
 
 
 class ControllerWatchdog:
@@ -215,7 +249,12 @@ class ControllerWatchdog:
                             "No saved PID will be signaled."
                         )
                     proof = recover_job(receipt["job"])
-                    with _exclusive(directory / (run.id + ".lock")):
+                    run_lock = (
+                        _exclusive_after_absent_job
+                        if proof["evidence"] == "kernel-object-absent"
+                        else _exclusive
+                    )
+                    with run_lock(directory / (run.id + ".lock")):
                         run = self.store.get(run_id)
                         receipt = self._receipt(history, directory, run, receipt, proof=proof)
                 with _exclusive(directory / (run.id + ".lock")):

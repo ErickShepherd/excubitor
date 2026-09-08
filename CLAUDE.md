@@ -1,50 +1,6 @@
-# Excubitor development guidance
+# Claude Code guidance
 
-## Current product scope
+@AGENTS.md
 
-Excubitor helps explicitly started Ralph runs finish agreed work safely and unattended. Ordinary
-development remains ordinary, including fixes and roadmap work in this repository. Do not require
-Ralph activation, a loop-specific environment variable, or a one-stage loop for ad hoc development.
-
-Before changing runtime or distribution behavior, read the current
-[Ralph-only remediation plan](docs/design/vendor-agnostic-enforcement-plan.md). It records the owner's
-current scope and completion decisions and supersedes earlier always-active enforcement instructions.
-Consult the [shared-core design](docs/design/model-agnostic-runtime.md),
-[distribution design](docs/design/installable-multi-runtime-distribution.md), and
-[known bypasses](KNOWN-BYPASSES.md) for architecture and existing evidence. Their older rollout order
-or activation examples cannot override the corrected product scope.
-
-## Ordinary development
-
-Use focused, reviewable changes in an appropriate isolated worktree. Follow the configured commit
-broker and preserve unrelated changes. A checklist can organize this work without activating Ralph.
-Resolve routine implementation choices within the agreed scope; ask only when a consequential missing
-decision or additional authority is needed. Do not create a decision gate for every internal choice.
-
-The current remediation authorizes correction of the design and implementation and removal of the
-exact unwanted Codex user-scope registration through the supported transaction with rollback evidence.
-It does not authorize replacement registration, native trust changes, runtime promotion, merge, push,
-publication, or changes to unrelated host configuration. An active protection denial is a blocker to
-resolve through an authorized maintenance path, never an invitation to bypass the guard.
-
-## Explicit Ralph runs
-
-Use the [Ralph recipe](skills/ralph-loop/SKILL.md) and the appropriate anchor when the owner starts a
-Ralph workflow. Verify the host can satisfy the current activation and continuation contract before
-claiming unattended protection. Legacy environment-variable instructions are not the target activation
-mechanism; never change launch shortcuts or silently broaden registration to make a run work.
-
-Agree once on the work, acceptance checks, resource limits, and permitted completion actions. The
-default result is reviewed, verified work committed on an isolated branch, followed by a concise report
-and termination of that run's enforcement. Automatic merging requires advance authorization of its
-destination and checks; publishing and deployment need their own permissions. Existing permissions
-remain valid within their scope and do not require repeated approval between work units.
-
-Bounded workers and fresh reads of the durable plan are internal mechanics. The native workflow must
-advance through all agreed units without manual restarts. A worker completing one unit does not mean
-the whole run is done. The run cannot weaken acceptance checks, drop scope, or expand its authority to
-declare success. Preserve partial work and surface an unresolved blocker or resource limit honestly.
-
-Record useful findings in the append-only learnings log; do not treat that log or self-checked boxes as
-independent completion evidence. Never claim native trust, isolation, host support, required review,
-publication, or other external outcomes without the corresponding evidence.
+The canonical repository guidance is in [AGENTS.md](AGENTS.md). Claude Code imports it above; keep this
+file as the vendor compatibility pointer.

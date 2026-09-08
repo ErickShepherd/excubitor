@@ -147,6 +147,9 @@ scripts/demo.sh            # 60-second zero-install crash test (drives the real 
 
 ## Tests
 
+Development guidance for all coding agents lives in [AGENTS.md](AGENTS.md).
+[CLAUDE.md](CLAUDE.md) imports the same instructions for Claude Code.
+
 ```bash
 python3 -m venv .venv && .venv/bin/pip install pytest
 .venv/bin/pytest -q        # the full suite: hooks, installer, audit-telos, ralph-loop, leak-guard,
@@ -158,6 +161,11 @@ CI runs the same suite on a stock GitHub runner (`.github/workflows/ci.yml`), pl
 own telos audit — every claim in [`docs/telos/app.md`](docs/telos/app.md) must resolve
 DISCHARGED at the `witness` evidence tier, i.e. every safety claim this README makes about the
 guards is re-proven by an executed test on every CI run.
+
+The legacy frozen-oracle execution runner requires POSIX; Windows tests its shared validation
+and explicit execution refusal. FIFO-specific tests also require POSIX. The current Ralph launcher
+has separate Windows, Linux and macOS runtime and packaging checks in
+[the portable workflow](.github/workflows/ralph-portable.yml).
 
 ## The workflow these fences assume
 

@@ -15,6 +15,7 @@ differential oracle — a decision change here is a regression, not a new baseli
 """
 from __future__ import annotations
 
+import os
 import subprocess
 
 __all__ = [
@@ -60,7 +61,9 @@ def current_branch(selectors: list[str]) -> str | None:
 def repo_toplevel(selectors: list[str]) -> str | None:
     """The repository's working-tree root, or None if the selectors don't resolve to a git repo."""
     ok, out = run_git(selectors, "rev-parse", "--show-toplevel")
-    return out if ok else None
+    # Git uses forward slashes in its Windows output. Normalize at the boundary so deny reasons
+    # and later path joins use the host's canonical spelling rather than mixing separators.
+    return os.path.normpath(out) if ok else None
 
 
 def origin_head_name(selectors: list[str]) -> str | None:
