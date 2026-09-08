@@ -64,10 +64,15 @@ class TestBuiltinDetection(unittest.TestCase):
         self.assertIn("private-key-block", out)
 
     def test_detects_aws_and_github_and_url_creds(self):
+        # Construct an explicitly synthetic connection string; the scanner still
+        # receives complete URL credentials and must detect them.
+        database_url = "postgres://{}:{}@{}/{}".format(
+            "test-user", "test-password", "db.example", "test-db"
+        )
         f = _file(self.dir, "conf.txt",
                   f"key={AWS_KEY}\n"
                   "tok=ghp_" + "A" * 36 + "\n"
-                  "db=postgres://admin:s3cr3tpw@db.internal:5432/prod\n")
+                  f"db={database_url}\n")
         rc, out, _ = _run([str(f)])
         self.assertEqual(rc, 1)
         self.assertIn("aws-access-key-id", out)

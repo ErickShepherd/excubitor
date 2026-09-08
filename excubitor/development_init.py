@@ -174,7 +174,9 @@ def create_profile(args):
         ):
             raise ValueError("api-key-env must be an environment variable name, never the credential")
         selected.update(
-            endpoint=args.endpoint, api_key_env=args.api_key_env, response_format=args.response_format
+            endpoint=args.endpoint,
+            api_key_env=args.api_key_env,
+            response_format=args.response_format,
         )
     retain = command(args.retain_command) if args.retain_command else builtin_command(git, project)
     return {

@@ -29,7 +29,7 @@ pipx install /absolute/path/to/excubitor-VERSION-py3-none-any.whl
 excubitor ralph --help
 ```
 
-On Windows the wheel path can be `C:/Downloads/excubitor-VERSION-py3-none-any.whl`.
+On Windows the wheel path can be `C:\Downloads\excubitor-VERSION-py3-none-any.whl`.
 Quote any path containing spaces. Pipx keeps the package in its own environment.
 If the command directory is not already on PATH, follow pipx's setup instructions
 and reopen the terminal. This is ordinary CLI discovery, not agent-hook registration.
@@ -40,9 +40,9 @@ A virtual environment works without pipx or a global PATH change. Create it outs
 the source checkout and use its explicit commands. On Windows:
 
 ```powershell
-py -3 -m venv C:/Tools/excubitor-env
-C:/Tools/excubitor-env/Scripts/python.exe -m pip install --no-index C:/Downloads/excubitor-VERSION-py3-none-any.whl
-C:/Tools/excubitor-env/Scripts/excubitor.exe ralph --help
+py -3 -m venv C:\Tools\excubitor-env
+C:\Tools\excubitor-env\Scripts\python.exe -m pip install --no-index C:\Downloads\excubitor-VERSION-py3-none-any.whl
+C:\Tools\excubitor-env\Scripts\excubitor.exe ralph --help
 ```
 
 On Linux or macOS:

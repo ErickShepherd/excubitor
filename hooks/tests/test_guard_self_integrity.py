@@ -61,7 +61,7 @@ class TestFileToolDenials(unittest.TestCase):
         "/anywhere/at/all/guard-default-branch.py",        # guard scripts match by basename
         "/repo/hooks/guard-one-unit.py",
         "/repo/hooks/guard-self-integrity.py",             # this guard may not rewrite itself
-        "/home/u/.claude/settings.json",                   # hook registration (global)
+        "/example-home/.claude/settings.json",             # synthetic home registration
         "/repo/.claude/settings.json",                     # hook registration (project)
         "/repo/.claude/settings.local.json",
         str(PACKAGE_ROOT / "core" / "policies" / "loop_vc.py"),  # extracted decision core
@@ -118,7 +118,7 @@ class TestBashDenials(unittest.TestCase):
         "rm -f hooks/guard-loop-vc.py # with a trailing comment",  # real path BEFORE # → still caught
         "mv hooks/guard-default-branch.py /tmp/parked.py",
         "cp /dev/null hooks/guard-one-unit.py",
-        "sed -i 's/PreToolUse/Disabled/' /home/u/.claude/settings.json",
+        "sed -i 's/PreToolUse/Disabled/' /example-home/.claude/settings.json",
         "python3 -c 'open(\"x\")' /r/.claude/settings.local.json",
         "tee /repo/.claude/allow-default-branch < /dev/null",
         "chmod -x /any/hooks/guard-self-integrity.py",

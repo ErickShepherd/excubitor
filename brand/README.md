@@ -31,13 +31,15 @@ Wordmark type: **Sora SemiBold** (weight 600), SIL Open Font License 1.1.
 
 `excubitor-social-preview.png` is built by [`build_social_preview.py`](build_social_preview.py): it
 rasterises the dark lockup and typesets a tagline + fact line over the slate-navy field, so the card is
-reproducible from what is committed here rather than existing only as an upload. Unlike the lockup SVGs,
-it typesets live text, so the Sora font (`sora-600.ttf`, OFL — see [`OFL.txt`](OFL.txt)) is vendored for
-it.
+reproducible from the vector sources and a separately supplied font. Unlike the
+lockup SVGs, it typesets live text. Supply a local Sora SemiBold font with `--font`;
+the binary font is a build input and is not distributed in this repository.
+The [upstream Sora project](https://github.com/sora-xor/sora-font) supplies the font
+under the license retained in [`OFL.txt`](OFL.txt).
 
 ```bash
 # deps: pillow, cairosvg (+ its libcairo runtime)
-python3 build_social_preview.py            # -> excubitor-social-preview.png
+python3 build_social_preview.py --font /path/to/sora-600.ttf
 ```
 
 **It is a hosted repo setting, not a file GitHub reads from the tree** — committing it does not publish
@@ -55,10 +57,9 @@ wordmark and lockups are typeset from the font as outlines.
 ```bash
 # deps: vtracer, fonttools, pillow, scipy, numpy  (+ Node @resvg/resvg-js to rasterise)
 python3 three_tone.py excubitor-source.png excubitor.svg   # mark + -mono + -white
-# fetch Sora and instance to weight 600:
-#   curl -sL -o sora-var.ttf "https://raw.githubusercontent.com/google/fonts/main/ofl/sora/Sora%5Bwght%5D.ttf"
-#   python3 -c "from fontTools import ttLib; from fontTools.varLib.instancer import instantiateVariableFont as I; f=ttLib.TTFont('sora-var.ttf'); I(f,{'wght':600},inplace=True); f.save('sora-600.ttf')"
-python3 assemble.py                                        # wordmark + light/dark lockups
+# Download Sora separately from the upstream project and select SemiBold (600).
+# Keep the font outside this checkout and retain its accompanying OFL notice.
+python3 assemble.py --font /path/to/sora-600.ttf             # wordmark + light/dark lockups
 ```
 
 `three_tone.py` traces per colour (three binary passes: tile / structure / amber) — binary tracing is

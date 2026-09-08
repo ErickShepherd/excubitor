@@ -41,7 +41,7 @@ class TestTargetKillSwitch(unittest.TestCase):
         self.assertIsNotNone(si.target_kill_switch("/repo/.claude/allow-default-branch", "/x", SURFACE))
 
     def test_settings_under_control_dir_denied(self):
-        self.assertIsNotNone(si.target_kill_switch("/home/u/.claude/settings.json", "/x", SURFACE))
+        self.assertIsNotNone(si.target_kill_switch("/example-home/.claude/settings.json", "/x", SURFACE))
         self.assertIsNotNone(si.target_kill_switch("/r/.claude/settings.local.json", "/x", SURFACE))
 
     def test_settings_not_under_control_dir_allowed(self):
@@ -107,7 +107,9 @@ class TestProtectedRootContainment(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             root = os.path.realpath(os.path.join(td, "excubitor"))
             os.makedirs(root)
-            self.assertIsNotNone(si.target_kill_switch(os.path.join(root, "evil.py"), td, self._surface(root)))
+            self.assertIsNotNone(
+                si.target_kill_switch(os.path.join(root, "evil.py"), td, self._surface(root))
+            )
 
     def test_symlink_laundering_into_root_denied(self):
         with tempfile.TemporaryDirectory() as td:

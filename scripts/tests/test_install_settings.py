@@ -167,7 +167,7 @@ class TestOwnershipAndRepair(unittest.TestCase):
         # to count as "already registered", silently leaving the guard unregistered.
         user = {"matcher": "Bash",
                 "hooks": [{"type": "command",
-                           "command": "python3 /home/u/bin/xguard-loop-vc.py.bak",
+                           "command": "python3 /example-home/bin/xguard-loop-vc.py.bak",
                            "timeout": 5}]}
         data = self._merged([user])
         pre = data["hooks"]["PreToolUse"]
@@ -258,8 +258,8 @@ class TestOwnershipIsLaunchShapeNotTokenMembership(unittest.TestCase):
                                           "timeout": 5}]})
 
     def test_near_miss_basenames_survive(self):
-        for cmd in ("python3 /home/u/bin/xguard-loop-vc.py.bak",
-                    "python3 /home/u/bin/guard-loop-vc.py2",
+        for cmd in ("python3 /example-home/bin/xguard-loop-vc.py.bak",
+                    "python3 /example-home/bin/guard-loop-vc.py2",
                     "guard-loop-vc.py.orig --check"):
             with self.subTest(cmd=cmd):
                 self._assert_survives({"matcher": "Bash",

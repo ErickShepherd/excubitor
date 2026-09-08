@@ -3,13 +3,17 @@
   excubitor-wordmark.svg / -white.svg   — the word alone
   excubitor-lockup.svg / -dark.svg      — mark (left) + wordmark (right); dark = off-white word
 """
+import argparse
 import re
-from fontTools.ttLib import TTFont
-from fontTools.pens.svgPathPen import SVGPathPen
+
 from fontTools.pens.boundsPen import BoundsPen
+from fontTools.pens.svgPathPen import SVGPathPen
+from fontTools.ttLib import TTFont
 
 NAVY, OFF = "#2E3A4E", "#F4F1E8"
-f = TTFont("sora-600.ttf")
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("--font", required=True, help="Path to a local Sora SemiBold TrueType font")
+f = TTFont(parser.parse_args().font)
 upm = f["head"].unitsPerEm
 cmap = f.getBestCmap()
 gs = f.getGlyphSet()
@@ -75,7 +79,8 @@ wy = LK / 2 - (CAP / 2 + cap_top) * wscale
 def lockup_svg(word_color):
     return (f'<svg xmlns="http://www.w3.org/2000/svg" width="{LKW:.0f}" height="{LK}" '
             f'viewBox="0 0 {LKW:.0f} {LK}"><g transform="scale({mscale})">{mbody}</g>'
-            f'<g transform="translate({LK + gap},{wy:.1f}) scale({wscale})"><g fill="{word_color}">{word}</g></g></svg>\n')
+            f'<g transform="translate({LK + gap},{wy:.1f}) scale({wscale})">'
+            f'<g fill="{word_color}">{word}</g></g></svg>\n')
 
 
 open("excubitor-lockup.svg", "w").write(lockup_svg(NAVY))     # light backgrounds

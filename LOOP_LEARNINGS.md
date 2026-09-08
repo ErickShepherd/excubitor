@@ -1117,3 +1117,5 @@ existing proposal-only contract. Freeze the helper cap in the saved agreement,
 validate disjoint scopes and all child output, join drained children before parent
 consolidation, and treat unknown drainage as interruption. Preserve original
 deadlines and attempt limits; compare candidate bytes rather than normalized text.
+
+Publication checks must retain deliberate secret-detection fixtures while using portable paths and synthetic local identities. Branding regeneration accepts a separately supplied font; keeping that build input outside the public tree does not change the rendered pixels. Code-test results, binary inspection, exact content classification and publication permission remain separate evidence.
