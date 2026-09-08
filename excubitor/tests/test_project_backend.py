@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from excubitor.acceptance import Execution, OutputOracle
 from excubitor.candidates import GitCandidateReader
 from excubitor.codex_project import REVIEW_SCHEMA, CodexProjectRuntime, _capacity_failure
+from excubitor.continuation import Continuation
 from excubitor.job_setup import CheckRunner, JobPlanner, LaunchDefaults
 from excubitor.native_action import RalphAction
 from excubitor.processes import ProcessResult
@@ -515,3 +516,41 @@ def test_native_capacity_classifies_workers_and_reviewers_but_not_program_checks
     assert driver.verify(run, oracle, cancel).retryable_error is None
     records = [json.loads(path.read_text()) for path in sorted(output.glob("execution-*.json"))]
     assert [item["retryable_error"] for item in records] == ["capacity", "capacity", None]
+
+
+def test_fresh_worker_prompt_has_host_progress_budget_and_bounded_observations(project):
+    _, _, reader, store, binding, planner, retain = project
+    contract, oracles = planner(
+        binding,
+        {
+            "goal": "Implement both behaviors",
+            "units": ["first behavior", "second behavior"],
+            "checks": [{"name": "check", "runner": "program", "stdin": "", "stdout": "expected"}],
+        },
+    )
+    for oracle in oracles:
+        oracle.save(store)
+    run = store.start(contract, "fixture")
+    run = store.begin_attempt(run)
+    continuation = Continuation(store)
+    for _ in range(20):
+        continuation.note(run, "work", "failed", result=result(code=1), feedback="Repair first behavior")
+    prompts = []
+    runtime = SimpleNamespace(work=lambda run, prompt, cancel: prompts.append(prompt) or result())
+    backend = ProjectBackend(store, binding, reader, runtime, admit=lambda run: None, retain=retain)
+    backend.work(run, "first behavior", continuation.feedback(run), threading.Event())
+    prompt = prompts[0]
+    handoff = json.loads(
+        next(
+            line.removeprefix("Host handoff: ")
+            for line in prompt.splitlines()
+            if line.startswith("Host handoff: ")
+        )
+    )
+    assert handoff["checkpointed_units"] == 0 and handoff["pending_units"] == 2
+    assert handoff["remaining_attempts_after_this_one"] == contract.max_attempts - 1
+    assert 0 < handoff["seconds_remaining"] <= 300
+    assert len(handoff["recent_host_observations"]) == 6
+    assert "Repair first behavior" in prompt and "second behavior" in prompt
+    assert "all original checks and fresh review still gate completion" in prompt
+    assert "continues pending units" in prompt

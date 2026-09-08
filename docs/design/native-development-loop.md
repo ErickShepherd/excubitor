@@ -4,7 +4,7 @@ This is an opt-in development baseline for owner-selected code, named
 `native-development-v1`. It does not claim credential isolation or containment of
 hostile repositories. Existing strict runtime admission remains unchanged.
 
-`ClaudeDevelopmentRuntime` runs tools-disabled Claude with structured output.
+`DevelopmentRuntime` uses the selected structured model adapter (Claude or Codex).
 The host supplies a bounded snapshot of the editable files and applies validated
 replacement contents only to those files. A proposed literal command is routed
 through `WindowsDevelopmentExecutor`, using the already provisioned Codex
@@ -52,7 +52,7 @@ three supervisor attempts and a twelve-minute run deadline.
 ## Start, status, and stop from the CLI
 
 The existing CLI now exposes `ralph start`, `ralph status`, and `ralph stop`.
-Start is a foreground command: keep its terminal open until it returns. Another
+Start is foreground unless `--background` is selected. Another
 terminal can inspect or cancel the same run. Ctrl+C also requests cancellation;
 the supervisor records cancellation only after the active worker has drained.
 
@@ -67,7 +67,7 @@ The job is an owner-reviewed JSON object with exactly these fields:
 | Fields | Meaning |
 | --- | --- |
 | `origin`, `candidate`, `metadata`, `branch`, `git` | Existing absolute original/candidate/metadata/Git paths and the full isolated branch ref. The candidate must be clean, with external Git metadata and a separate `main` base branch. |
-| `claude`, `codex`, `codex_home`, `model` | Existing native executables/account state and the exact expected native Claude model. |
+| `llm`, `executor` | Independently selected model and command adapters. Both are saved with the agreement. Legacy flat Claude settings remain readable. |
 | `editable` | List of existing candidate-relative UTF-8 files the job may edit. |
 | `goal`, `units` | Agreed work and its ordered, unique work units. |
 | `checks` | Output oracles with `name`, literal `argv`, `stdin` (currently empty), and expected `stdout`; optional `stderr`, `exit_code`, and `timeout_seconds`. |
@@ -75,13 +75,16 @@ The job is an owner-reviewed JSON object with exactly these fields:
 | `max_attempts`, `time_limit_seconds` | Original attempt budget and elapsed-time limit, including retries. |
 | `retain_command` | Literal argv for the host's authorized committer. It receives JSON on stdin containing `candidate`, changed `paths`, and `run_id`. It must retain exactly that candidate through the appropriate broker and return zero only on success. |
 
-The host prepares the candidate and committer before starting. The CLI does not
+The prepared-job form requires a host-prepared candidate and committer. `ralph plan`
+can now prepare the candidate and job from a plain goal and reusable profile.
+The CLI does not
 enroll repositories or replace an existing broker. Its run directory must be
 fresh and outside both workspaces. It saves the original job, acceptance
 definitions, run state, and native execution receipts there. Status reports
 progress and review state without starting another worker. A process crash leaves
-interrupted work for reconciliation; this foreground entry point does not add
-automatic crash recovery or a resume command.
+interrupted work for reconciliation. The named-job watchdog now provides bounded
+controller recovery and `ralph resume` reconnects after watchdog loss. The
+[planning and recovery workflow](ralph-planning-and-recovery.md) describes those additions.
 
 A native Fable 5.1 CLI rehearsal completed median and span implementations in two
 units, then retried after a deliberately unavailable test dependency. The test
@@ -112,11 +115,26 @@ two-unit retry, cancellation from another client, and changed-check rejection.
 - Ordinary descendant shutdown was measured. No promise is made for arbitrary
   external services or brokers starting processes outside the observed job.
 - The prepared-job CLI is exercised with disposable repositories. In-window launch, packaging, installed
-  runtime promotion, other vendor adapters and automatic outward finish actions
-  remain outside this slice.
+  runtime promotion, adapters beyond Claude/Codex, and automatic outward finish
+  actions remain outside this slice.
 
 The implementation is consolidated into the existing vendor-agnostic enforcement
 worktree alongside its earlier process/job fixes. Those pre-existing edits were
 preserved byte-for-byte. The task evidence directory retains source backups,
 native receipts and the committed demo. The redundant worktree was removed after
 that preservation and verification.
+
+## Interchangeable components
+
+The planner and CLI now construct the shared runtime through host-selected adapter
+descriptors. The model adapter returns structured proposals; the shared runtime
+validates and applies edits, routes proposed commands to the executor, and requests
+a fresh review. Claude and Codex use that same implementation. The supervisor,
+agreement, frozen checks, budgets and watchdog remain shared.
+
+See the [reusable profile example](ralph-planning-and-recovery.md) for selection.
+The `codex-windows` executor still uses Codex's command API even when another
+vendor supplies the model. A separately selected `windows-process` executor now
+removes that dependency for trusted local projects. It requires the distinct
+`trusted-local-v1` baseline and makes no filesystem/network isolation claim.
+The default is never silently weakened when a sandboxed request fails.

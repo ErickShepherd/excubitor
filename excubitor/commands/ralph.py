@@ -1,4 +1,4 @@
-"""Explicit native Claude development jobs on host-prepared candidate checkouts."""
+"""Explicit native development jobs on host-prepared candidate checkouts."""
 
 from __future__ import annotations
 
@@ -6,6 +6,8 @@ import hashlib
 import json
 import os
 import signal
+import subprocess
+import sys
 import threading
 import time
 from dataclasses import asdict
@@ -13,26 +15,45 @@ from pathlib import Path
 
 from excubitor.acceptance import OutputOracle
 from excubitor.candidates import GitCandidateReader
-from excubitor.claude_development import ClaudeDevelopmentRuntime
-from excubitor.claude_project import _clean_exit
+from excubitor.development_adapters import baseline_for, make_executor, make_runtime, normalize
+from excubitor.development_runtime import BASELINE, LOCAL_BASELINE
+from excubitor.development_runtime import clean_exit as _clean_exit
 from excubitor.processes import WindowsProcessTree
 from excubitor.project_backend import ProjectBackend
 from excubitor.runs import Binding, Contract, RunError, RunStore
 from excubitor.supervisor import Supervisor
-from excubitor.windows_development import BASELINE, WindowsDevelopmentExecutor
+from excubitor.watchdog import ControllerWatchdog
 
 
 def register(subparsers):
-    parser = subparsers.add_parser("ralph", help="start, inspect, or stop an agreed native Claude job")
+    parser = subparsers.add_parser("ralph", help="start, inspect, or stop an agreed native job")
     actions = parser.add_subparsers(dest="action", required=True)
+    from excubitor.development_setup import register as register_setup
+
+    register_setup(actions)
     start = actions.add_parser("start", help="run a prepared job until completion or its agreed limit")
-    start.add_argument("--job", type=Path, required=True, help="owner-reviewed job JSON")
-    start.add_argument("--root", type=Path, required=True, help="fresh external run directory")
-    start.add_argument("--baseline", choices=[BASELINE], required=True)
+    source = start.add_mutually_exclusive_group(required=True)
+    source.add_argument("--job", type=Path, help="owner-reviewed job JSON")
+    source.add_argument("--plan", type=Path, help="reviewed planning directory")
+    start.add_argument("--root", type=Path, help="fresh external run directory; inferred for a plan")
+    start.add_argument("--baseline", choices=[BASELINE, LOCAL_BASELINE], required=True)
+    start.add_argument("--background", action="store_true", help="continue after this terminal closes")
     start.set_defaults(_handler=_start)
-    for action, handler in (("status", _status), ("stop", _stop)):
+    plan = actions.add_parser("plan", help="prepare a reviewable job from a plain-language goal")
+    plan.add_argument("--project", type=Path, required=True)
+    plan.add_argument("--profile", type=Path, required=True)
+    plan.add_argument("--root", type=Path, required=True)
+    plan.add_argument("--goal", required=True)
+    plan.set_defaults(_handler=_plan)
+    for action, handler in (
+        ("status", _status),
+        ("stop", _stop),
+        ("resume", _resume),
+    ):
         command = actions.add_parser(action)
         command.add_argument("--root", type=Path, required=True)
+        if action == "resume":
+            command.add_argument("--background", action="store_true")
         command.set_defaults(_handler=handler)
 
 
@@ -76,16 +97,15 @@ def _stop(args):
 
 
 def _prepare(job, root, baseline):
+    job = normalize(job)
     required = {
         "origin",
         "candidate",
         "metadata",
         "branch",
         "git",
-        "claude",
-        "codex",
-        "codex_home",
-        "model",
+        "llm",
+        "executor",
         "editable",
         "goal",
         "units",
@@ -97,11 +117,11 @@ def _prepare(job, root, baseline):
     }
     if not isinstance(job, dict) or set(job) != required:
         raise RunError("job must contain exactly the documented fields")
-    if baseline != BASELINE or os.name != "nt":
+    if baseline != baseline_for(job) or os.name != "nt":
         raise RunError("this entry point requires native Windows and the explicit development baseline")
     if type(job["time_limit_seconds"]) is not int or not 1 <= job["time_limit_seconds"] <= 86400:
         raise RunError("job time limit must be between one second and one day")
-    for key in ("origin", "candidate", "metadata", "git", "claude", "codex", "codex_home"):
+    for key in ("origin", "candidate", "metadata", "git"):
         path = Path(job[key])
         if not path.is_absolute() or not path.exists():
             raise RunError("job paths must be existing absolute paths: " + key)
@@ -140,7 +160,7 @@ def _prepare(job, root, baseline):
         raw = dict(raw)
         raw["argv"] = tuple(raw["argv"])
         oracle = OutputOracle(**raw)
-        if oracle.stdin:
+        if oracle.stdin and baseline != LOCAL_BASELINE:
             raise RunError("the current native executor does not support acceptance stdin")
         oracles.append(oracle)
     reader = GitCandidateReader(Path(job["git"]), candidate, Path(job["metadata"]), job["branch"])
@@ -149,35 +169,8 @@ def _prepare(job, root, baseline):
     evidence, temporary = root / "evidence", root / "temp"
     evidence.mkdir()
     temporary.mkdir()
-    env = dict(os.environ)
-    env.update(
-        TEMP=str(temporary),
-        TMP=str(temporary),
-        TMPDIR=str(temporary),
-        CLAUDE_CODE_TMPDIR=str(temporary),
-        CLAUDE_CODE_DEBUG_LOGS_DIR=str(evidence / "debug"),
-        CLAUDE_CODE_DISABLE_AUTO_MEMORY="1",
-        CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC="1",
-        CLAUDE_CODE_MAX_TURNS="4",
-        DISABLE_AUTOUPDATER="1",
-        PYTHONDONTWRITEBYTECODE="1",
-    )
-    executor = WindowsDevelopmentExecutor(
-        job["codex"], candidate, evidence, codex_home=job["codex_home"], environment=env, baseline=baseline
-    )
-    runtime = ClaudeDevelopmentRuntime(
-        job["claude"],
-        candidate,
-        evidence,
-        executor=executor,
-        environment=env,
-        editable=job["editable"],
-        model=job["model"],
-        native_model=job["model"],
-        baseline=baseline,
-    )
     store = RunStore(root / "authority", create=True)
-    binding = Binding("claude-development", str(root), str(origin))
+    binding = Binding("ralph-development", str(root), str(origin))
     contract = Contract(
         binding,
         job["goal"],
@@ -193,7 +186,47 @@ def _prepare(job, root, baseline):
     run = store.start(
         contract, "Owner explicitly invoked ralph start with this job and development baseline."
     )
-    (root / "run.json").write_text(json.dumps({"id": run.id}), encoding="utf-8")
+    (root / "run.json").write_text(
+        json.dumps(
+            {
+                "id": run.id,
+                "job_digest": hashlib.sha256((root / "job.json").read_bytes()).hexdigest(),
+                "checks_digest": hashlib.sha256((root / "check-files.json").read_bytes()).hexdigest(),
+            }
+        ),
+        encoding="utf-8",
+    )
+    try:
+        return _attach(root)
+    except Exception:
+        store.interrupt(store.get(run.id))
+        raise
+
+
+def _attach(root):
+    record = _read(root / "run.json")
+    if not {"id", "job_digest", "checks_digest"} <= record.keys():
+        raise RunError("this older run has no saved settings for recovery; preserve its original evidence")
+    for file, key in (("job.json", "job_digest"), ("check-files.json", "checks_digest")):
+        if hashlib.sha256((root / file).read_bytes()).hexdigest() != record[key]:
+            raise RunError("saved job settings changed; original run cannot resume")
+    job = normalize(_read(root / "job.json"))
+    frozen = _read(root / "check-files.json")
+    store = RunStore(root / "authority")
+    run = store.get(record["id"])
+    contract, binding = run.contract, run.contract.binding
+    candidate, evidence, temporary = Path(job["candidate"]), root / "evidence", root / "temp"
+    baseline, retain = baseline_for(job), job["retain_command"]
+    reader = GitCandidateReader(Path(job["git"]), candidate, Path(job["metadata"]), job["branch"])
+    env = dict(os.environ)
+    env.update(
+        TEMP=str(temporary),
+        TMP=str(temporary),
+        TMPDIR=str(temporary),
+        PYTHONDONTWRITEBYTECODE="1",
+    )
+    executor = make_executor(job, candidate, evidence, environment=env, baseline=baseline)
+    runtime = make_runtime(job, candidate, evidence, executor=executor, environment=env, baseline=baseline)
 
     def admit(current):
         if current.contract != contract or any(
@@ -220,21 +253,93 @@ def _prepare(job, root, baseline):
 
 
 def _start(args):
-    store, backend, run = _prepare(_read(args.job), args.root, args.baseline)
+    if getattr(args, "plan", None):
+        record = _read(args.plan / "plan.json")
+        if record["baseline"] != args.baseline:
+            raise RunError("start must use the execution baseline shown in the reviewed plan")
+        args.job = args.plan / "job.json"
+        if hashlib.sha256(args.job.read_bytes()).hexdigest() != record["job_digest"]:
+            raise RunError("the reviewed plan changed; prepare and review again")
+        if any(
+            hashlib.sha256(Path(name).read_bytes()).hexdigest() != digest
+            for name, digest in record["check_files"].items()
+        ):
+            raise RunError("the reviewed acceptance files changed; prepare and review again")
+        args.root = args.root or args.plan / "run"
+    if args.root is None:
+        raise RunError("--root is required with a prepared --job")
+    store, _, run = _prepare(_read(args.job), args.root, args.baseline)
+    if getattr(args, "background", False):
+        return _background(args.root)
+    return _drive(args.root, store, run)
+
+
+def _plan(args):
+    from excubitor.development_plan import prepare
+
+    print(prepare(_read(args.profile), args.project, args.root, args.goal))
+    return 0
+
+
+def _resume(args):
+    store, _, run = _attach(args.root)
+    if getattr(args, "background", False):
+        return _background(args.root)
+    return _drive(args.root, store, run)
+
+
+def _background(root):
+    command = (sys.executable, "-B", "-m", "excubitor.development_worker", "watch", str(root))
+    with (root / "watchdog-stdout.txt").open("ab") as out, (root / "watchdog-stderr.txt").open("ab") as err:
+        subprocess.Popen(
+            command,
+            cwd=Path(__file__).resolve().parents[2],
+            stdin=subprocess.DEVNULL,
+            stdout=out,
+            stderr=err,
+            close_fds=True,
+            creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
+        )
+    print(json.dumps({"starting_in_background": True, "root": str(root)}))
+    return 0
+
+
+def _controller(args):
+    try:
+        store, backend, run = _attach(args.root)
+        Supervisor(store, backend).drive(run.id)
+    except Exception as error:
+        # A handled refusal is not a controller crash and must not trigger retry.
+        (args.root / "controller-error.json").write_text(
+            json.dumps({"error": str(error), "type": type(error).__name__}), encoding="utf-8"
+        )
+    return 0
+
+
+def _supervise(root, store, run, cancel):
+    command = (sys.executable, "-B", "-m", "excubitor.development_worker", "controller", str(root))
+    return ControllerWatchdog(store, lambda _: command, Path(__file__).resolve().parents[2]).drive(
+        run.id, run.contract.binding, cancel=cancel
+    )
+
+
+def _drive(root, store, run):
     cancel, done = threading.Event(), threading.Event()
+    if (root / "stop-requested").exists():
+        cancel.set()
 
     def monitor():
         while not done.wait(0.1):
-            if (args.root / "stop-requested").exists():
+            if (root / "stop-requested").exists():
                 cancel.set()
                 return
 
     watcher = threading.Thread(target=monitor, daemon=True)
     previous = signal.signal(signal.SIGINT, lambda *_: cancel.set())
     watcher.start()
-    print(json.dumps({"started": True, "root": str(args.root), **_summary(run)}), flush=True)
+    print(json.dumps({"started": True, "root": str(root), **_summary(run)}), flush=True)
     try:
-        final = Supervisor(store, backend).drive(run.id, cancel=cancel)
+        final = _supervise(root, store, run, cancel)
         print(json.dumps(_summary(final)), flush=True)
         return 0 if final.state == "complete" else 1
     finally:

@@ -59,6 +59,27 @@ def test_valid_edit_and_literal_command(runtime):
     assert runtime.snapshot() == {"code.py": "fixed\n"}
 
 
+def test_malformed_work_and_review_are_retryable_but_scope_refusals_are_fatal(runtime, monkeypatch):
+    import threading
+    import time
+    from types import SimpleNamespace
+
+    from excubitor.acceptance import Execution
+    from excubitor.model_response import InvalidModelResponse
+    from excubitor.processes import ProcessResult
+
+    result = ProcessResult(Execution(0, b"", b"", .01), False, True, 1)
+    run = SimpleNamespace(contract=SimpleNamespace(deadline=time.time() + 30))
+    monkeypatch.setattr(runtime, "_call", lambda *a, **kw: (result, {"files": []}))
+    failed = runtime.work(run, "implement", threading.Event())
+    assert failed.retryable_error == "model-output" and failed.drained
+    reviewed, passed, findings = runtime.review(run, "review", threading.Event())
+    assert reviewed.retryable_error == "model-output" and not passed and findings
+    with pytest.raises(RunError) as refusal:
+        runtime.apply({"files": [{"path": "../agreement.json", "content": "bad"}], "command": []})
+    assert not isinstance(refusal.value, InvalidModelResponse)
+
+
 def test_shared_file_rejected(runtime):
     import os
 

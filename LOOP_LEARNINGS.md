@@ -1006,3 +1006,66 @@ cancellation. The focused regression set passed 101 tests. Candidate preparation
 the authorized committer, and native account provisioning remain host inputs;
 this foreground entry point does not install an app integration or recover from
 controller crashes. The consolidated source and CLI use the existing commit broker.
+
+## 2026-09-07: plain-goal preparation and recovery
+
+Native Claude can invoke the ordinary CLI to prepare a separate checkout and a
+reviewable job from a plain goal and reusable profile, then start it after review.
+The planner needs the existing test source as context; command names alone led to
+ambiguous iterator and spread wording. The owner's goal now remains verbatim.
+Executable paths are checked before planning because an app update moved the
+installed Codex executable between days.
+
+The Sonnet 5 rehearsal completed both units and independent review after its
+launching Claude command returned. Fable had reached its limit before planning;
+the alternative model was selected before any job started. A separate fault test
+killed a controller and then its watchdog. Automatic controller recovery and a
+later resume completed the same agreement without extending its limits. Existing
+named-job recovery supplied the process evidence; no new host service was needed.
+
+### Vendor-neutral model adapters, native Windows comparison
+
+The planner and launcher had embedded Claude construction even though the
+supervisor was already shared. Extracting structured model calls from edit
+application lets Claude and Codex reuse planning, work, checks and fresh review.
+Keep model and execution descriptors separate: the present Windows executor is
+still Codex-backed. CLI compatibility is not installed app integration or support
+for every LLM.
+
+A native comparison exposed over-fragmented planning: six units under an
+eight-attempt budget repeatedly ran whole-suite checks before later changes were
+ready. Preserve that blocked run. Group related changes, reserve retry capacity,
+and distinguish optional focused commands from the host's final frozen checks.
+The fresh Claude plan and Codex plan both completed; Codex stop and two-stage
+recovery also passed with original limits. These small-fixture receipts are
+evidence of this workflow, not a universal model-reliability claim.
+
+### Durable continuation and vendor-independent transport completion cycle
+
+The owner clarified that persistence across fresh contexts is the product's
+purpose, with guards supporting the workflow. Research on multi-turn reliability
+does not supply a universal coding-turn reset threshold. Keep fresh bounded model
+calls and durable host feedback; record prompt sizes, durations and outcomes for
+future calibration instead of labeling a few failures statistical degradation.
+
+Retry feedback was held only in controller memory. A transactional continuation
+sidecar now survives controller/watchdog journal rotation, while RunStore retains
+completion and budget authority. Real process-loss tests cover worker, check and
+review feedback. A generic JSON model bridge and explicit trusted local Windows
+executor completed a native model job and bounded two-stage recovery. HTTP
+support has local protocol evidence, not live service evidence on this host.
+
+Git preflight can preserve original bytes, including its index, by disabling
+optional locks and fsmonitor and removing inherited Git redirections. Profile
+templates and doctor perform no model, check or committer calls.
+
+The owner separately authorized the exact broker Python-pin repair after its
+signed installed runtime was verified. Only that pin changed; rollback bytes
+were preserved. The early combined backup/plan write was rejected by tool policy,
+then retried only after explicit owner authorization.
+
+Independent review found two persistence failures: malformed model replies were
+treated as host refusals, and a fast recovery could finish before the stop monitor
+noticed a saved request. Retry only narrowly classified response-shape failures
+with durable host feedback; preserve fatal identity and scope checks. Check a
+saved cancellation synchronously before entering the watchdog.

@@ -12,11 +12,12 @@
 *Excubitor* — Latin, "one who stands out of bed": the night watch. The Byzantine **excubitores**
 guarded the emperor's chambers precisely so that no one else had to stay awake.
 
-**Safety fences for autonomous coding agents** — mechanical guards, loop discipline, and a
-falsifiable intent-record system for letting an LLM agent work unattended without trusting it to
-bless its own work. The watcher that stays awake while the loop runs and nobody else is looking.
+**Persistent coding loops with interchangeable LLMs.** Agree on the work and its checks once;
+Excubitor breaks it into manageable steps, carries progress and feedback into fresh contexts,
+and keeps going until verification and review pass or an agreed limit or concrete blocker is reached.
+A model finishing its answer does not finish the job. Existing guards support this workflow.
 
-Stdlib-only Python hooks + [Agent Skills](https://code.claude.com/docs/en/skills)-format capability
+The legacy guard foundation is stdlib-only Python hooks + [Agent Skills](https://code.claude.com/docs/en/skills)-format capability
 packets, each mechanism pinned by executed regressions and shipped with the design rationale that
 produced it. Built for and battle-tested
 with Claude Code; **all four guards now share a model-blind policy core** (`excubitor/core/`) — the
@@ -26,18 +27,32 @@ runtime that can intercept tool calls is demonstrated, not just asserted. Claude
 available adapter and installer foundation today, but no runtime is yet claimed as verified supported
 enforcement: that label still requires a released-package, real-host denial witness.
 
-## Development branch: Ralph-only correction
+## Run an explicit Ralph job
 
 The agreed target is explicitly started, unattended Ralph runs. Ordinary development stays unaffected,
 including other tasks in the same repository. The default result is reviewed, verified work committed
 on an isolated branch; automatic merging is optional and authorized before the run starts. Publishing
 and deployment have separate permissions. Work units advance automatically without repeated approval.
 
-The development candidate has completed a real Codex CLI job from one native confirmation through
-two implementation units, ten frozen acceptance checks and a fresh review. It retained a clean isolated
-branch, drained its workers and became inactive. Ordinary native edits succeeded in another task during
-the run and in the initiating task afterward. This is a bounded Windows CLI demonstration, not a ready
-cross-vendor installer or GUI support. The unwanted user-scope registration remains removed.
+The Windows launcher supports Claude CLI, Codex CLI, a generic JSON command bridge, and compatible
+Chat Completions endpoints. Model and command execution are selected separately. The vendor-independent
+Windows process executor is an explicit option for trusted local projects; the existing Codex-backed
+executor remains available. These execution modes have different isolation guarantees.
+
+The loop saves the original agreement and acceptance checks, advances all units automatically, and
+keeps failed-check and review feedback across controller loss. Model calls start with fresh input
+built from current code and compact handoff facts. It records outcomes and timing rather than
+assuming every model degrades after the same number of turns.
+
+Native Claude and Codex workflows, cancellation and recovery have been exercised on disposable
+Windows projects. The generic model bridge and vendor-independent executor also completed a real
+Claude coding job. HTTP protocol tests use a local server fixture; arbitrary hosted/local models,
+Linux launcher integration and installed GUI shortcuts are not yet verified.
+
+Follow the [Ralph quickstart](docs/ralph-quickstart.md), or start with
+`python -B -m excubitor.cli ralph --help`. Use `profile-template` to create reusable settings,
+`doctor` to check them without calling a model, `plan` to prepare the work, and `start --background`
+to run the reviewed plan. `status`, `stop`, and `resume` address the same durable run.
 
 The legacy `install` command now refuses new registrations because its hooks also affect ordinary tasks.
 Read-only `install --dry-run`, diagnostics and uninstall remain available for existing installations.

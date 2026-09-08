@@ -27,9 +27,9 @@ class ProcessResult:
     drained: bool
     processes: int
     observed_pids: tuple[int, ...] = ()
-    # Set only by a trusted native transport from its service event envelope.
+    # Set only by trusted transport/runtime code from service or format evidence.
     # Candidate stdout and reviewer findings cannot set this classification.
-    retryable_error: Literal["capacity"] | None = None
+    retryable_error: Literal["capacity", "model-output"] | None = None
 
 
 class WindowsProcessTree:

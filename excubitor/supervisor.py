@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Protocol
 
 from excubitor.acceptance import OutputOracle, record_output
+from excubitor.continuation import Continuation
 from excubitor.processes import ProcessResult
 from excubitor.runs import Candidate, Conflict, NotReady, Run, RunError, RunStore
 
@@ -130,7 +131,8 @@ class Supervisor:
                 if result.cancelled or cancel.is_set():
                     raise _CancelledAfterDrain("owner cancelled the run")
 
-            feedback = ""
+            continuation = Continuation(self.store)
+            feedback = continuation.feedback(run)
             capacity_failures = 0
 
             def wait_for_capacity(phase):
@@ -171,18 +173,40 @@ class Supervisor:
                         else None
                     )
                     record("work_started", unit=unit)
+                    continuation.note(run, "work", "started")
                     work = self.backend.work(run, unit, feedback, cancel)
+                    execution = work.execution
+                    failed = execution.exit_code != 0 or execution.timed_out or execution.output_limited
+                    if failed and work.retryable_error != "capacity":
+                        failure = (
+                            "The worker failed or exceeded its execution limits. Repair the current unit."
+                        )
+                        if work.retryable_error == "model-output":
+                            failure = "The model response was malformed. " + execution.stderr[:1024].decode(
+                                "utf-8", errors="replace"
+                            )
+                        # Keep actionable check/review findings through a failed
+                        # repair worker as well as through capacity failures.
+                        if failure not in feedback:
+                            feedback = (feedback + "\n" + failure).strip()
+                    continuation.note(
+                        run,
+                        "work",
+                        "capacity"
+                        if work.retryable_error == "capacity"
+                        else "failed"
+                        if failed
+                        else "returned",
+                        result=work,
+                        feedback=feedback,
+                    )
                     drained(work)
                     if work.retryable_error == "capacity":
                         wait_for_capacity("work")
                         # Preserve any existing check/review feedback. Service
                         # availability is not evidence that code needs repair.
                         continue
-                    execution = work.execution
-                    if execution.exit_code != 0 or execution.timed_out or execution.output_limited:
-                        feedback = (
-                            "The worker failed or exceeded its execution limits. Repair the current unit."
-                        )
+                    if failed:
                         continue
                     # Unit checkpoints record progress, not semantic acceptance. All
                     # frozen acceptance checks and independent review gate the finish.
@@ -190,6 +214,9 @@ class Supervisor:
                     if not candidate.clean or not candidate.isolated:
                         raise RunError("checkpoint is not a clean committed isolated candidate")
                     run = self.store.checkpoint(run, candidate, unit=unit)
+                    continuation.note(
+                        run, "checkpoint", "retained", feedback="" if unit is not None else None
+                    )
                     if run.completed_units < len(run.contract.units):
                         feedback = ""
                         continue
@@ -199,12 +226,14 @@ class Supervisor:
                         if self.backend.current(run) != candidate:
                             raise Conflict("candidate changed before verification")
                         record("verification_started", check=check.name)
+                        continuation.note(run, "verification", "started", check=check.name)
                         result = self.backend.verify(run, oracle, cancel)
                         drained(result)
                         if self.backend.current(run) != candidate:
                             raise Conflict("candidate changed during verification")
                         run = record_output(self.store, run, candidate, check, result.execution)
-                        if not dict(run.check_results)[check.name]:
+                        check_passed = dict(run.check_results)[check.name]
+                        if not check_passed:
                             failures.append(
                                 {
                                     "check": check.name,
@@ -214,6 +243,16 @@ class Supervisor:
                                     "actual_stderr": repr(result.execution.stderr[:1024]),
                                 }
                             )
+                        continuation.note(
+                            run,
+                            "verification",
+                            "passed" if check_passed else "failed",
+                            result=result,
+                            check=check.name,
+                            feedback="Original acceptance checks failed: " + json.dumps(failures)
+                            if failures
+                            else None,
+                        )
                     if failures:
                         feedback = "Original acceptance checks failed: " + json.dumps(failures)
                         record("checks_failed", checks=failures)
@@ -227,12 +266,14 @@ class Supervisor:
                         if self.backend.current(run) != candidate:
                             raise Conflict("candidate changed before independent review")
                         record("review_started", candidate=candidate.digest)
+                        continuation.note(run, "review", "started")
                         result, passed, explanation = self.backend.review(run, cancel)
                         drained(result)
                         if self.backend.current(run) != candidate:
                             raise Conflict("candidate changed during independent review")
                         if result.retryable_error != "capacity":
                             break
+                        continuation.note(run, "review", "capacity", result=result)
                         wait_for_capacity("review")
                         run = self.store.retry_review(run, candidate)
                         if run.state != "running":
@@ -244,9 +285,16 @@ class Supervisor:
                         and not result.execution.timed_out
                         and not result.execution.output_limited
                     )
+                    feedback = "" if passed else "Independent review requires repair: " + explanation[:4096]
+                    continuation.note(
+                        run,
+                        "review",
+                        "passed" if passed else "failed",
+                        result=result,
+                        feedback=feedback,
+                    )
                     run = self.store.record_review(run, candidate, passed=passed)
                     if not passed:
-                        feedback = "Independent review requires repair: " + explanation[:4096]
                         continue
                     run = self.store.finish(run, self.backend.current(run), workers_idle=True)
                     record("complete", candidate=candidate.digest)

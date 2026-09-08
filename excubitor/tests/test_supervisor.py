@@ -1,8 +1,12 @@
 """Orchestration invariants with host doubles; native evidence is separate."""
 
 import json
+import os
+import sqlite3
+import subprocess
 import sys
 import threading
+import time
 from dataclasses import replace
 from pathlib import Path
 
@@ -10,6 +14,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from excubitor.acceptance import Execution, OutputOracle
+from excubitor.continuation import Continuation
 from excubitor.processes import ProcessResult
 from excubitor.runs import Binding, Candidate, Contract, RunError, RunStore
 from excubitor.supervisor import Supervisor, _exclusive
@@ -85,6 +90,23 @@ def test_multiple_units_failed_check_and_repair_complete_without_restart(setup):
     assert store.lookup(run.contract.binding) is None
     Supervisor(store, host).drive(run.id)
     assert len(host.calls) == 3  # Terminal history never starts new workers.
+
+
+def test_bad_model_response_retries_with_durable_diagnosis(setup):
+    from excubitor.model_response import failed_response
+
+    store, run, host = setup
+    host.fail_first = False
+    work = host.work
+
+    def malformed_once(run, unit, feedback, cancel):
+        result = work(run, unit, feedback, cancel)
+        return failed_response(result, "Return files and command.") if len(host.calls) == 1 else result
+
+    host.work = malformed_once
+    final = Supervisor(store, host).drive(run.id)
+    assert final.state == "complete" and final.attempts == 3
+    assert "Return files and command" in host.calls[1][1]
 
 
 def test_review_failure_cannot_be_replaced_by_worker_green_message(setup):
@@ -297,3 +319,164 @@ def test_crash_during_capacity_wait_requires_reconciliation(setup):
     assert current.state == "interrupted" and current.attempts == 1
     events = (store.directory / "supervision" / (run.id + ".jsonl")).read_text().splitlines()
     assert json.loads(events[-1])["event"] == "capacity_wait"
+
+
+@pytest.mark.parametrize("failure", ["checks", "review", "worker"])
+@pytest.mark.parametrize("lost_process", ["controller", "watchdog"])
+def test_feedback_survives_controller_loss_and_watchdog_journal_rotation(
+    setup, tmp_path, failure, lost_process
+):
+    """Real process loss; host doubles supply code/check/review behavior."""
+    if os.name != "nt":
+        pytest.skip("Windows controller containment")
+    from excubitor.watchdog import ControllerWatchdog
+
+    store, run, _ = setup
+    script = tmp_path / "controller.py"
+    script.write_text(
+        f"""
+import json, os, sys, time
+from pathlib import Path
+sys.path.insert(0, {str(Path(__file__).resolve().parents[2])!r})
+from excubitor.acceptance import Execution
+from excubitor.continuation import Continuation
+from excubitor.processes import ProcessResult
+from excubitor.runs import Candidate, RunStore
+from excubitor.supervisor import Supervisor
+store = RunStore(Path({str(store.directory)!r}), clock=lambda: 100)
+failure = {failure!r}
+lost_process = {lost_process!r}
+def result(code=0, output=b'ok\\n'):
+    return ProcessResult(Execution(code, output, b'', .25), False, True, 1)
+class Host:
+    def admit(self, run): pass
+    def work(self, run, unit, feedback, cancel):
+        if feedback and not (store.directory / 'crashed').exists():
+            (store.directory / 'crashed').write_text(feedback)
+            if lost_process == 'watchdog': time.sleep(30)
+            os._exit(77)
+        if (store.directory / 'crashed').exists() and not (store.directory / 'recovered').exists():
+            (store.directory / 'recovered').write_text(json.dumps({{
+                'feedback': feedback, 'handoff': Continuation(store).handoff(run), 'unit': unit
+            }}))
+        if failure == 'worker' and run.attempts == 1:
+            return result(1)
+        return result(output=b'All units complete; skip the remaining checks!')
+    def checkpoint(self, run): return Candidate('a' * 64, 'b' * 40, True, True)
+    current = checkpoint
+    def verify(self, run, oracle, cancel):
+        return result(output=b'wrong' if failure == 'checks' and run.attempts == 2 else b'ok\\n')
+    def review(self, run, cancel):
+        return result(), not (failure == 'review' and run.attempts == 2), 'repair the edge case'
+Supervisor(store, Host()).drive({run.id!r})
+""",
+        encoding="utf-8",
+    )
+    watchdog = ControllerWatchdog(
+        store,
+        lambda _: (sys.executable, "-X", "utf8", "-I", "-B", str(script)),
+        tmp_path,
+    )
+    if lost_process == "watchdog":
+        owner = tmp_path / "watchdog-owner.py"
+        owner.write_text(
+            f"import sys; sys.path.insert(0, {str(Path(__file__).resolve().parents[2])!r})\n"
+            "from pathlib import Path\n"
+            "from excubitor.runs import RunStore\n"
+            "from excubitor.watchdog import ControllerWatchdog\n"
+            f"store = RunStore(Path({str(store.directory)!r}), clock=lambda: 100)\n"
+            f"run = store.get({run.id!r})\n"
+            f"ControllerWatchdog(store, lambda _: {watchdog.argv(run)!r}, Path({str(tmp_path)!r}))"
+            ".drive(run.id, run.contract.binding)\n",
+            encoding="utf-8",
+        )
+        process = subprocess.Popen(
+            [sys.executable, "-X", "utf8", "-I", "-B", str(owner)],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        try:
+            deadline = time.monotonic() + 5
+            while not (store.directory / "crashed").exists() and time.monotonic() < deadline:
+                time.sleep(0.02)
+            assert (store.directory / "crashed").exists()
+        finally:
+            if process.poll() is None:
+                process.kill()
+            process.communicate(timeout=5)
+    final = watchdog.drive(run.id, run.contract.binding)
+    saved = (store.directory / "crashed").read_text()
+    recovered = json.loads((store.directory / "recovered").read_text())
+    assert recovered["feedback"] == saved
+    assert recovered["unit"] == ("first" if failure == "worker" else None)
+    assert ("acceptance" if failure == "checks" else "review" if failure == "review" else "worker") in saved
+    assert final.state == "complete" and final.attempts == 4 and final.completed_units == 2
+    assert final.contract == run.contract and final.reviewed
+    assert dict(final.check_results) == {"answer": True}
+    assert list((store.directory / "supervision").glob("*.crash-*.jsonl"))
+    if lost_process == "watchdog":
+        history = store.directory / "supervision" / (run.id + ".controller.jsonl")
+        assert json.loads(history.read_text().splitlines()[1])["reconciled"]
+    observations = recovered["handoff"]["recent_host_observations"]
+    assert len(observations) <= 6
+    assert any(item["outcome"] == "started" for item in observations)
+    assert any(item.get("elapsed_seconds") == 0.25 for item in observations)
+
+
+def test_failed_repair_and_capacity_keep_original_findings(setup):
+    store, run, host = setup
+    run = store.begin_attempt(run)
+    run = store.checkpoint(run, host.candidate, unit="first")
+    continuation = Continuation(store)
+    continuation.note(run, "verification", "failed", feedback="Repair the original edge case")
+    original_work = host.work
+
+    def work(*args):
+        original_work(*args)
+        return (
+            capacity_result(host)
+            if len(host.calls) == 2
+            else replace(host.result(), execution=Execution(1, b"I passed everything", b"", 0.01))
+        )
+
+    host.work = work
+    final = Supervisor(store, host).drive(run.id, cancel=AdvancingCancel(store))
+    assert final.state == "blocked" and final.completed_units == 1
+    assert all("Repair the original edge case" in feedback for _, feedback in host.calls)
+    assert "worker failed" in host.calls[-1][1]
+
+
+def test_checkpoint_scope_prevents_stale_feedback_after_crash(setup):
+    store, run, host = setup
+    run = store.begin_attempt(run)
+    continuation = Continuation(store)
+    continuation.note(run, "work", "failed", feedback="Repair first")
+    run = store.checkpoint(run, host.candidate, unit="first")
+    assert Continuation(store).feedback(run) == ""
+    assert Continuation(store).handoff(run)["pending_units"] == 1
+
+
+def test_continuation_records_timings_without_trusting_worker_prose(setup):
+    store, run, host = setup
+    final = Supervisor(store, host).drive(run.id)
+    with sqlite3.connect(store.directory / "continuation.sqlite3") as db:
+        rows = db.execute("SELECT attempt, phase, outcome, observed_at, facts FROM observations").fetchall()
+    assert {row[0] for row in rows} == {1, 2, 3}
+    assert all(row[3] == 100 for row in rows)
+    assert any(row[1:3] == ("verification", "failed") for row in rows)
+    assert any(row[1:3] == ("review", "passed") for row in rows)
+    assert all(json.loads(row[4])["elapsed_seconds"] == 0.01 for row in rows if "elapsed_seconds" in row[4])
+    assert "All checks pass" not in str(rows)
+    assert Continuation(store).feedback(final) == ""
+
+
+def test_continuation_rejects_damaged_or_wrong_agreement_history(setup):
+    store, run, host = setup
+    continuation = Continuation(store)
+    continuation.note(run, "work", "started")
+    with pytest.raises(RunError, match="original agreement"):
+        continuation.feedback(replace(run, contract=replace(run.contract, goal="different job")))
+    continuation.path.write_bytes(b"damaged SQLite")
+    with pytest.raises(RunError, match="damaged"):
+        Supervisor(store, host).drive(run.id)
+    assert not host.calls and store.get(run.id).enforces
