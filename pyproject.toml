@@ -18,7 +18,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "excubitor"
 dynamic = ["version"]
-description = "Installable, model-blind safety policy for coding-agent runtimes: mechanical version-control guards, loop discipline, and a falsifiable intent-record system."
+description = "Persistent coding loops with interchangeable models, shared verification and review, and explicit local execution."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
@@ -36,6 +36,7 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
+    "Operating System :: Microsoft :: Windows",
     "Operating System :: POSIX",
     "Operating System :: POSIX :: Linux",
     "Operating System :: MacOS",

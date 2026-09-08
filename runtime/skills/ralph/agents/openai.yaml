@@ -1,0 +1,5 @@
+interface:
+  display_name: "Ralph"
+  short_description: "Start or resume an explicitly requested Ralph job"
+policy:
+  allow_implicit_invocation: false

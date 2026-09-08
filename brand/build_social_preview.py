@@ -16,8 +16,8 @@ Steps:
 
 Deps: pillow, cairosvg (+ its libcairo runtime). Run from this directory (inputs resolve
 relative to the CWD):
-  build_social_preview.py                      # writes excubitor-social-preview.png
-  build_social_preview.py -o /tmp/card.png
+  build_social_preview.py --font /path/to/sora-600.ttf
+  build_social_preview.py --font /path/to/sora-600.ttf -o /tmp/card.png
 """
 import argparse
 import io
@@ -27,7 +27,6 @@ from PIL import Image, ImageDraw, ImageFont
 
 # ---- inputs / palette (match brand/README.md) -------------------------------------------------
 LOCKUP = "excubitor-lockup-dark.svg"  # arched-gateway mark + off-white wordmark, for dark backgrounds
-FONT = "sora-600.ttf"                 # Sora SemiBold (weight 600), SIL Open Font License 1.1
 FIELD = (46, 58, 78)                  # #2E3A4E slate-navy (field / primary ink)
 STRUCTURE = (244, 241, 232)           # #F4F1E8 warm off-white (structure)
 AMBER = (224, 169, 74)                # #E0A94A muted amber (lantern glow + keystone accent)
@@ -51,7 +50,7 @@ def _rasterise_svg(path: str, width: int) -> Image.Image:
     return Image.open(io.BytesIO(png_bytes)).convert("RGBA")
 
 
-def build(output: str) -> None:
+def build(output: str, font_path: str) -> None:
     """Renders the social-preview card and writes it to ``output``."""
     lockup = _rasterise_svg(LOCKUP, LOCKUP_W)
 
@@ -59,8 +58,8 @@ def build(output: str) -> None:
     card.paste(lockup, ((CARD_W - lockup.width) // 2, LOCKUP_Y), lockup)
 
     draw = ImageDraw.Draw(card)
-    tag_font = ImageFont.truetype(FONT, TAGLINE_SIZE)
-    fact_font = ImageFont.truetype(FONT, FACTS_SIZE)
+    tag_font = ImageFont.truetype(font_path, TAGLINE_SIZE)
+    fact_font = ImageFont.truetype(font_path, FACTS_SIZE)
 
     def centre(text: str, font: ImageFont.FreeTypeFont, y: int,
                fill: tuple[int, int, int]) -> None:
@@ -82,4 +81,6 @@ def build(output: str) -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Build the excubitor GitHub social-preview card.")
     parser.add_argument("-o", "--output", default="excubitor-social-preview.png")
-    build(parser.parse_args().output)
+    parser.add_argument("--font", required=True, help="Path to a local Sora SemiBold TrueType font")
+    args = parser.parse_args()
+    build(args.output, args.font)

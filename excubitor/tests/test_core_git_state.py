@@ -11,11 +11,13 @@ Stdlib unittest only. Run:
 """
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 _HERE = Path(__file__).resolve()
 _REPO_ROOT = _HERE.parents[2]
@@ -154,7 +156,13 @@ class TestDefaultBranch(unittest.TestCase):
     def test_both_ambiguous_without_config_is_none(self):
         with tempfile.TemporaryDirectory() as td:
             _init_repo(td, branch="main", extra_branches=("master",))
-            self.assertIsNone(git_state.default_branch(_sel(td)))
+            # This case is about no configured choice. Isolate it from a runner's user/global
+            # init.defaultBranch, which is otherwise intentionally consulted by the product.
+            global_config = Path(td, "empty-global.gitconfig")
+            global_config.write_text("")
+            with patch.dict(os.environ, {"GIT_CONFIG_GLOBAL": str(global_config),
+                                        "GIT_CONFIG_NOSYSTEM": "1"}):
+                self.assertIsNone(git_state.default_branch(_sel(td)))
 
     def test_both_disambiguated_by_init_default(self):
         with tempfile.TemporaryDirectory() as td:

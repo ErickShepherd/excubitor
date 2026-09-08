@@ -36,7 +36,7 @@ def test_discovery_is_deterministic_and_reads_only(tmp_path: Path) -> None:
     before = _snapshot(tmp_path)
     first = rt.discover(home=home, scope=rt.Scope.USER)
     second = rt.discover(home=home, scope=rt.Scope.USER)
-    assert [t.runtime for t in first] == [t.runtime for t in second] == ["claude-code"]
+    assert [t.runtime for t in first] == [t.runtime for t in second] == ["claude-code", "codex"]
     assert all(not t.detected for t in first)  # nothing there yet
     assert _snapshot(tmp_path) == before  # discovery created nothing
 
@@ -63,7 +63,7 @@ def test_detection_flips_when_control_dir_exists(tmp_path: Path) -> None:
 
 def test_unsupported_runtime_is_refused_not_faked() -> None:
     with pytest.raises(KeyError):
-        rt.profile_for("codex")
+        rt.profile_for("antigravity")
 
 
 # --- artifacts and registrations -------------------------------------------------------------------
@@ -141,20 +141,27 @@ def test_cli_install_dry_run_writes_nothing(tmp_path: Path, capsys) -> None:
     assert _snapshot(tmp_path) == before
 
 
-def test_cli_install_apply_creates_files_and_reports_unprotected(
-    tmp_path: Path, capsys, monkeypatch
+@pytest.mark.parametrize("runtime", ["auto", "claude-code", "codex"])
+@pytest.mark.parametrize("scope", [None, "user", "project"])
+def test_cli_legacy_install_cannot_reintroduce_enforcement_on_ordinary_tasks(
+    tmp_path: Path, capsys, monkeypatch, runtime, scope
 ) -> None:
     home = tmp_path / "home"
     home.mkdir()
+    project = tmp_path / "project"
+    project.mkdir()
+    (home / ".codex").mkdir()
+    (home / ".codex" / "hooks.json").write_bytes(b'{"unrelated":"preserve"}\n')
     monkeypatch.setenv("EXCUBITOR_STATE_HOME", str(tmp_path / "state"))
-    code = cli_main(["install", "--runtime", "claude-code", "--home", str(home)])
-    out = capsys.readouterr().out
-    assert code == 0
-    assert "installed claude-code/user" in out
-    assert "NOT protected" in out  # never claims protection without a real host probe
-    assert "no real-host witness" in out
-    assert (home / ".claude" / "hooks" / "guard-loop-vc.py").exists()
-    assert (home / ".claude" / "settings.json").exists()
+    before = _snapshot(tmp_path)
+    paths = set(tmp_path.rglob("*"))
+    argv = ["install", "--runtime", runtime, "--home", str(home), "--project-root", str(project)]
+    if scope is not None:
+        argv += ["--scope", scope]
+    code = cli_main(argv)
+    assert code == 2 and "ordinary tasks" in capsys.readouterr().err
+    assert _snapshot(tmp_path) == before and set(tmp_path.rglob("*")) == paths
+    assert not (tmp_path / "state").exists()
 
 
 def test_cli_install_auto_reports_no_runtime_when_absent(tmp_path: Path, capsys) -> None:
@@ -175,7 +182,7 @@ def test_cli_malformed_policy_writes_nothing(tmp_path: Path, capsys, monkeypatch
     state = tmp_path / "state"
     monkeypatch.setenv("EXCUBITOR_STATE_HOME", str(state))
     before = _snapshot(tmp_path)
-    code = cli_main(["install", "--runtime", "claude-code", "--home", str(home)])
+    code = cli_main(["install", "--runtime", "claude-code", "--home", str(home), "--dry-run"])
     assert code == 2
     assert "policy error" in capsys.readouterr().err
     assert _snapshot(tmp_path) == before

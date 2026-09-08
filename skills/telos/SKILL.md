@@ -6,7 +6,7 @@ description: >-
   purpose claim, to bootstrap an intent record for a repo that has none, to forward-spec a greenfield
   repo's intended invariants before the code exists (telos-first, with TODO discharge pointers), to AMEND a claim whose stated
   purpose went out of date (the remediation amend-fork), to retire/supersede a claim, to promote a
-  checkable CLAUDE.md boundary into a claim, or to turn an audit-telos orphan finding into a claim. Every
+  checkable AGENTS.md or CLAUDE.md boundary into a claim, or to turn an audit-telos orphan finding into a claim. Every
   claim is grill-gated to a decidable one-line contract before it is written, and every mutation is a
   reviewable commit. This is the ONLY skill that writes the record; audit-telos can only read it.
 argument-hint: "<repo> [new <intent> | amend <TELOS-NNN> | retire <TELOS-NNN> | bootstrap | promote | from-orphan <target>]"
@@ -39,7 +39,8 @@ Two gates, both required (orthogonal):
 - **Amend** a claim after `audit-telos` flagged DRIFTED *and the code is right, the purpose was outdated*
   (the `audit-remediate` amend-fork routes here).
 - **Retire/supersede** a claim (a real rename/replacement — IDs are immutable, so this mints a new one).
-- **Promote** a checkable CLAUDE.md hard boundary into a claim.
+- **Promote** a checkable AGENTS.md or CLAUDE.md hard boundary into a claim. AGENTS.md is canonical
+  when present; retain CLAUDE.md provenance for existing claims and compatibility pointers.
 - **from-orphan**: turn an `audit-telos` `[telos-orphan]` "should-be-claimed" finding into a claim.
 
 ## The claim block
@@ -51,7 +52,7 @@ Two gates, both required (orthogonal):
 - discharged-by: <path::symbol>   # a SINGLE function/class/method qualname (or `none`/`TODO` if unbuilt)
 - contract: <the one-line falsifiable assertion the audit judges fulfilment against>
 - verified-by: <test-id-or-command>   # optional executable witness; exit!=0 ⇒ DRIFTED, trusted over the LLM
-- source: CLAUDE.md#<anchor>   # optional provenance (e.g. a promoted boundary)
+- source: AGENTS.md#<anchor>   # optional provenance (CLAUDE.md#<anchor> remains valid for existing claims)
 - last-grilled: <YYYY-MM-DD>
 - anchor: none                 # or an opt-in content-hash for a high-stakes stable contract
 - superseded-by: TELOS-NNN     # set ONLY when retiring; the audit then skips it (history preserved)
@@ -95,8 +96,10 @@ Let `R` = the repo; `SKILL_DIR` = this skill's dir; `CHECK` = `$SKILL_DIR/../aud
 - **Retire/supersede** (`retire <ID>`): set `superseded-by: <new-ID>` on the old claim (the audit skips it,
   history preserved) and author the replacement as a new claim. Do **not** delete the old block — that's
   what loses the history the opaque-ID design exists to protect.
-- **Promote** (`promote`): find a CLAUDE.md hard boundary that is *checkable against code*; author a claim
-  carrying `source: CLAUDE.md#<anchor>`. Leave the human sentence in CLAUDE.md — link, don't move.
+- **Promote** (`promote`): find a checkable hard boundary in canonical `AGENTS.md` (or a legacy
+  `CLAUDE.md` when no canonical file exists); author a claim carrying the matching `source:` anchor.
+  Leave the human sentence in its guidance file and link to it; do not move it. Existing
+  `source: CLAUDE.md#<anchor>` claims remain valid.
 - **from-orphan** (`from-orphan <target>`): an `audit-telos` candidate the LLM judged "should be claimed".
   Grill it into a real claim with `discharged-by:` = that symbol.
 

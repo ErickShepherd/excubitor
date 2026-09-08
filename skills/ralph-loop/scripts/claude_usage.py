@@ -45,12 +45,17 @@ def get_usage(creds_path: str = DEFAULT_CREDS, *, timeout: float = 20.0) -> dict
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
             return json.loads(r.read().decode("utf-8"))
+    except TimeoutError:
+        # ssl/socket reads can raise bare TimeoutError rather than urllib.error.URLError.
+        # Do not retain a cause: a lower layer may have rendered request data in its text.
+        raise RuntimeError("usage request timed out") from None
     except urllib.error.HTTPError as e:
         if e.code in (401, 403):
             raise RuntimeError("Claude token expired/unauthorized — re-auth the CLI") from e
         raise RuntimeError(f"usage endpoint returned HTTP {e.code}") from e
-    except urllib.error.URLError as e:
-        raise RuntimeError(f"could not reach usage endpoint ({e.reason})") from e
+    except urllib.error.URLError:
+        # e.reason is untrusted transport text and could include request data, including the token.
+        raise RuntimeError("could not reach usage endpoint") from None
 
 
 def _reset_str(iso: "str | None") -> str:

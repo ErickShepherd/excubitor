@@ -48,6 +48,9 @@ def _candidate_dirs(cwd: str, logical_target: str) -> "list[str] | None":
     so the caller fails OPEN — never wedge the editor on a crafted-but-broken path.
     """
     try:
+        if not isinstance(cwd, str) or not isinstance(logical_target, str) \
+                or "\0" in cwd or "\0" in logical_target:
+            return None
         abs_target = os.path.abspath(os.path.join(cwd, logical_target))
         dirs = [_nearest_existing_dir(abs_target, cwd)]
         real_target = os.path.realpath(abs_target)

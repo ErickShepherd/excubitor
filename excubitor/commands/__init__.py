@@ -14,6 +14,7 @@ import argparse
 from excubitor.commands import doctor as _doctor
 from excubitor.commands import install as _install
 from excubitor.commands import print_config as _print_config
+from excubitor.commands import ralph as _ralph
 from excubitor.commands import status as _status
 from excubitor.commands import uninstall as _uninstall
 
@@ -27,3 +28,4 @@ def register_all(subparsers: "argparse._SubParsersAction") -> None:
     _status.register(subparsers)
     _print_config.register(subparsers)
     _doctor.register(subparsers)
+    _ralph.register(subparsers)

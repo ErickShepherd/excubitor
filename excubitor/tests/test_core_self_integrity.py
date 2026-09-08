@@ -41,7 +41,7 @@ class TestTargetKillSwitch(unittest.TestCase):
         self.assertIsNotNone(si.target_kill_switch("/repo/.claude/allow-default-branch", "/x", SURFACE))
 
     def test_settings_under_control_dir_denied(self):
-        self.assertIsNotNone(si.target_kill_switch("/home/u/.claude/settings.json", "/x", SURFACE))
+        self.assertIsNotNone(si.target_kill_switch("/example-home/.claude/settings.json", "/x", SURFACE))
         self.assertIsNotNone(si.target_kill_switch("/r/.claude/settings.local.json", "/x", SURFACE))
 
     def test_settings_not_under_control_dir_allowed(self):
@@ -107,7 +107,9 @@ class TestProtectedRootContainment(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             root = os.path.realpath(os.path.join(td, "excubitor"))
             os.makedirs(root)
-            self.assertIsNotNone(si.target_kill_switch(os.path.join(root, "evil.py"), td, self._surface(root)))
+            self.assertIsNotNone(
+                si.target_kill_switch(os.path.join(root, "evil.py"), td, self._surface(root))
+            )
 
     def test_symlink_laundering_into_root_denied(self):
         with tempfile.TemporaryDirectory() as td:
@@ -159,7 +161,19 @@ class TestProtectedRootContainment(unittest.TestCase):
             os.makedirs(os.path.join(root, "adapters"))
             f = os.path.join(root, "adapters", "claude_code.py")
             open(f, "w").close()
-            self.assertIsNotNone(si.bash_kill_switch(f"rm {f}", td, self._surface(root)))
+            # Bash uses slash-form paths even on Windows; native backslashes are escape characters
+            # in the Bash command language and do not name the target file.
+            bash_path = f.replace(os.sep, "/")
+            self.assertIsNotNone(si.bash_kill_switch(f"rm '{bash_path}'", td, self._surface(root)))
+
+    def test_bash_escaped_space_and_comment_keep_posix_meaning(self):
+        with tempfile.TemporaryDirectory(prefix="core space ") as td:
+            root = os.path.realpath(os.path.join(td, "excubitor"))
+            os.makedirs(root)
+            target = os.path.join(root, "guard-loop-vc.py").replace(os.sep, "/")
+            escaped = target.replace(" ", "\\ ")
+            self.assertIsNotNone(si.bash_kill_switch(f"rm {escaped}", td, self._surface(root)))
+            self.assertIsNone(si.bash_kill_switch(f"echo safe # rm '{target}'", td, self._surface(root)))
 
     def test_no_roots_is_backward_compatible(self):
         # A surface without protected_roots (the default) fences only basenames — unchanged behavior.

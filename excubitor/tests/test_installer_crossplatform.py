@@ -92,6 +92,18 @@ def test_uninstall_roundtrip_is_byte_for_byte(env) -> None:
     assert settings_path.read_bytes() == before
 
 
+def test_uninstall_preserves_existing_crlf_settings_bytes(env) -> None:
+    """Existing CRLF configuration must round-trip identically on every host."""
+    home, _state, target = env
+    settings_path = home / ".claude" / "settings.json"
+    settings_path.parent.mkdir(parents=True)
+    original = b'{\r\n  "model": "opus",\r\n  "hooks": {\r\n    "PreToolUse": []\r\n  }\r\n}\r\n'
+    settings_path.write_bytes(original)
+    _install(target)
+    _uninstall(target)
+    assert settings_path.read_bytes() == original
+
+
 # --- upgrade / downgrade across path shapes --------------------------------------------------------
 
 def test_upgrade_over_older_receipt_succeeds(env) -> None:

@@ -7,4 +7,4 @@ shape, control paths); the neutrality invariant applies to the core, not here.
 """
 from __future__ import annotations
 
-__all__ = ["claude_code"]
+__all__ = ["claude_code", "codex"]

@@ -7,7 +7,6 @@ offline install smoke test (fresh venv, `--no-index` install, run the installed 
 from __future__ import annotations
 
 import hashlib
-import json
 import os
 import subprocess
 import sys
@@ -121,7 +120,7 @@ def test_sdist_contains_sources_and_pyproject(tmp_path: Path) -> None:
 
 
 @pytest.mark.slow
-def test_isolated_wheel_installer_lifecycle(tmp_path: Path) -> None:
+def test_installed_wheel_preserves_legacy_registration_refusal(tmp_path: Path) -> None:
     wheel = builder.build_wheel(tmp_path / "dist")
     venv_dir = tmp_path / "venv"
     subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=True, timeout=120)
@@ -142,26 +141,12 @@ def test_isolated_wheel_installer_lifecycle(tmp_path: Path) -> None:
         [str(exe), "install", "--runtime", "claude-code", "--home", str(home)],
         env=env, capture_output=True, text=True, timeout=60,
     )
-    assert install.returncode == 0, install.stderr
-    settings = json.loads((home / ".claude" / "settings.json").read_text())
-    registered = settings["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
-    exact = subprocess.run(
-        registered, shell=True, input="{}\n", text=True, capture_output=True, timeout=30
-    )
-    assert exact.returncode == 0, exact.stderr
-    doctor = subprocess.run(
-        [str(exe), "doctor", "--runtime", "claude-code", "--scope", "user", "--probe", "--json"],
-        env=env, capture_output=True, text=True, timeout=60,
-    )
-    assert doctor.returncode == 0, doctor.stderr
-    assert json.loads(doctor.stdout)["protection"] == "needs-probe"
-    remove = subprocess.run(
-        [str(exe), "uninstall", "--runtime", "claude-code", "--scope", "user", "--home", str(home)],
-        env=env, capture_output=True, text=True, timeout=60,
-    )
-    assert remove.returncode == 0, remove.stderr
+    # The current product deliberately refuses broad hook registration. Package
+    # installation must not re-enable the retired ordinary-task behavior.
+    assert install.returncode == 2, install.stderr
+    assert "new registrations are disabled" in install.stderr
+    assert not (home / ".claude").exists()
     assert not (state / "receipts" / "claude-code-user.json").exists()
-    assert not (home / ".claude" / "settings.json").exists()
 
 
 @pytest.mark.slow
@@ -178,7 +163,7 @@ def test_offline_install_smoke(tmp_path: Path) -> None:
         subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=True,
                        capture_output=True, timeout=120)
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:  # pragma: no cover
-        pytest.skip(f"could not create a venv in this environment: {exc}")
+        pytest.fail(f"required isolated installation environment could not be created: {exc}")
 
     bindir = venv_dir / ("Scripts" if sys.platform == "win32" else "bin")
     pip = bindir / ("pip.exe" if sys.platform == "win32" else "pip")
@@ -193,3 +178,35 @@ def test_offline_install_smoke(tmp_path: Path) -> None:
     result = subprocess.run([str(exe), "--version"], capture_output=True, text=True, timeout=60)
     assert result.returncode == 0
     assert VERSION in result.stdout
+
+    # Exercise the installed launcher outside the source tree and remove import
+    # redirects so an editable checkout cannot accidentally satisfy the smoke.
+    environment = {k: v for k, v in os.environ.items()
+                   if k.upper() not in ("PYTHONPATH", "PYTHONHOME")}
+    environment["PYTHONDONTWRITEBYTECODE"] = "1"
+    for command in (("ralph", "--help"), ("ralph", "init", "--help"),
+                    ("ralph", "resume", "--help")):
+        launched = subprocess.run([str(exe), *command], cwd=tmp_path,
+                                  env=environment, capture_output=True, text=True, timeout=60)
+        assert launched.returncode == 0, launched.stderr
+    installed_python = bindir / ("python.exe" if sys.platform == "win32" else "python")
+    imported = subprocess.run(
+        [str(installed_python), "-I", "-B", "-c",
+         "import excubitor; print(excubitor.__file__)"], cwd=tmp_path,
+        env=environment, capture_output=True, text=True, timeout=60)
+    assert imported.returncode == 0, imported.stderr
+    assert Path(imported.stdout.strip()).is_relative_to(venv_dir)
+    replaced = subprocess.run(
+        [str(pip), "install", "--no-index", "--no-deps", "--upgrade", "--force-reinstall", str(wheel)],
+        cwd=tmp_path, env=environment, capture_output=True, text=True, timeout=180)
+    assert replaced.returncode == 0, replaced.stderr
+    relaunched = subprocess.run([str(exe), "ralph", "--help"], cwd=tmp_path,
+                               env=environment, capture_output=True, text=True, timeout=60)
+    assert relaunched.returncode == 0, relaunched.stderr
+    removed = subprocess.run([str(pip), "uninstall", "-y", "excubitor"], cwd=tmp_path,
+                             env=environment, capture_output=True, text=True, timeout=180)
+    assert removed.returncode == 0, removed.stderr
+    assert not exe.exists(), "uninstall left the console entry point installed"
+    absent = subprocess.run([str(installed_python), "-I", "-B", "-c", "import excubitor"],
+                            cwd=tmp_path, env=environment, capture_output=True, text=True, timeout=60)
+    assert absent.returncode != 0, "uninstall left an importable package"

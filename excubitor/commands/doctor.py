@@ -1,9 +1,9 @@
 """``excubitor doctor`` — diagnose an install and (with ``--probe``) run a harmless-denial probe.
 
-Reports versions, file integrity, and registration presence; ``--probe`` additionally runs the probe
-framework. Because the CLI cannot drive the real runtime to dispatch the hook, ``--probe`` reports
-``needs-probe`` (never ``protected``) and prints the manual verification command — the honest verdict
-when no real host witness exists.
+Reports versions, file integrity, registration presence, and any current receipt-bound host witness;
+``--probe`` additionally runs the hook-level probe framework. Because the CLI cannot itself drive the
+real runtime to dispatch the hook, an installation without a native witness reports ``needs-probe``
+and prints the manual verification command.
 """
 from __future__ import annotations
 
@@ -59,6 +59,10 @@ def run(args: argparse.Namespace) -> int:
     print(f"  registrations: {regs['expected']} expected"
           + (f", {len(regs['missing'])} MISSING from settings" if regs["missing"] else ", all present"))
     print(f"  protection: {report['protection']}")
+    if report.get("trust", {}).get("handoff"):
+        print("  trust review required:")
+        for index, step in enumerate(report["trust"]["handoff"], 1):
+            print(f"    {index}. {step}")
     if "probe" in report and report["probe"].get("detail"):
         print(f"    probe: {report['probe']['detail']}")
     if "manual_verification" in report:

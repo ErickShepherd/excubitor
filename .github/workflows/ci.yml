@@ -1,12 +1,6 @@
-# CI floor: the full test suite on stock runners — the portability proof that the harness runs outside
-# the machine it was extracted on. Dormant until the repo has a remote.
-#
-# The OS matrix (Linux/macOS/Windows) produces the cross-platform installer evidence the Campaign-2
-# transaction tests need (spaces, non-ASCII paths, rollback, recovery, …). Linux and macOS are
-# supported and gate the build. Windows is EXPERIMENTAL: it runs on every push for signal but is
-# non-blocking (continue-on-error below) — the suite still has Windows-specific path-portability gaps
-# (backslash/drive-letter/non-ASCII-home/file-locking) tracked in KNOWN-ISSUES.md. The package
-# classifiers advertise POSIX/Linux+macOS accordingly, not OS-Independent.
+# Broad legacy regression matrix. The dedicated portable-ralph workflow gates
+# launcher, lifecycle and installation on every target OS. Hosted results must
+# be observed before claiming evidence for a development candidate.
 name: ci
 
 on:

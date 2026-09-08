@@ -406,7 +406,7 @@ class TestGuardYoloMode(unittest.TestCase):
     # --- the one thing YOLO loosens: --no-ff merge into a non-default branch ---
     def test_allows_no_ff_merge_into_nondefault(self):
         d = self._repo(branches=("feature",), checkout="feature")
-        self.assertTrue(self._deferred(f"git -C {d} merge --no-ff topic"))
+        self.assertTrue(self._deferred(f"git -C {Path(d).as_posix()} merge --no-ff topic"))
 
     # --- everything else stays denied ---
     def test_denies_fast_forward_merge(self):
@@ -430,7 +430,7 @@ class TestGuardYoloMode(unittest.TestCase):
     def test_disambiguates_default_via_config_then_allows(self):
         # both exist, init.defaultBranch=main; on a feature branch → main is default, feature != main → allow
         d = self._repo(branches=("master", "feature"), checkout="feature", default_config="main")
-        self.assertTrue(self._deferred(f"git -C {d} merge --no-ff topic"))
+        self.assertTrue(self._deferred(f"git -C {Path(d).as_posix()} merge --no-ff topic"))
 
     def test_denies_merge_while_on_protected_name(self):
         # default resolves to main, but master is a protected name → merging on master is still denied
@@ -638,7 +638,8 @@ class TestGuardYoloRepoSelector(unittest.TestCase):
         # sits on main (a plain merge HERE would be denied); the selectors target a feature-branch
         # repo, so the merge is a legitimate YOLO integration and must defer.
         cwd, target = self._protected(), self._innocent()
-        cmd = f"git --git-dir={target}/.git --work-tree={target} merge --no-ff topic"
+        target_bash = Path(target).as_posix()
+        cmd = f"git --git-dir={target_bash}/.git --work-tree={target_bash} merge --no-ff topic"
         self.assertTrue(self._deferred(cmd, cwd),
                         "selector-targeted NON-default merge must still be allowed (no blanket deny)")
 

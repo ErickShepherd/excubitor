@@ -58,12 +58,12 @@ class Capability(str, Enum):
 
 
 class LoopMode(str, Enum):
-    """The neutral arming signal an adapter derives from its host's loop-guard environment.
+    """The host-neutral policy posture carried by a normalized event.
 
-    Maps the host's arming marker onto host-agnostic modes (a conservative marker → `CONSERVATIVE`,
-    a verifiable-autonomy marker → `VERIFIABLE`); the adapter owns the host-specific env-var/marker
-    names. The unarmed/"null" state is represented as Python ``None`` — the absence of a mode — not
-    an enum member, matching the shipped guards' "inactive unless armed" posture.
+    A loaded native hook supplies ``CONSERVATIVE`` as the always-on baseline. ``VERIFIABLE`` remains
+    representable for protocol compatibility, but deprecated environment inputs cannot select it;
+    elevated autonomy requires a separately controlled grant authority. ``None`` remains available
+    for malformed, unsupported, or legacy protocol events whose trusted posture was not established.
     """
 
     CONSERVATIVE = "conservative"
@@ -141,7 +141,8 @@ class PreToolEvent:
     * ``targets``       — EVERY file the tool may mutate (a patch can touch several); never just the
       first path. Held as a tuple so the event stays immutable.
     * ``session_id``    — optional telemetry join key.
-    * ``loop_mode``     — the neutral arming signal (:class:`LoopMode`), or ``None`` when unarmed.
+    * ``loop_mode``     — the neutral policy posture (:class:`LoopMode`), or ``None`` when a trusted
+      posture was not established.
     * ``control_paths`` — host registration/config paths whose mutation could disarm enforcement
       (e.g. a settings file or an active hook registration).
     * ``schema``        — the versioned compatibility marker; defaults to :data:`SCHEMA`.

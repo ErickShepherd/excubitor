@@ -22,3 +22,13 @@ enabled = true
 # Extra protected-root paths (relative to the repo) to fence beyond the built-ins, so an armed loop
 # cannot rewrite them. The Excubitor policy package is always fenced; this only adds to it.
 protected_roots = []
+
+# Exact Codex MCP tools can be declared as write-capable mutations. Each value lists every
+# path-bearing argument as a JSON Pointer; `*` walks every member of an input array. A selected value
+# may be one path string or an array of path strings. Missing, empty, or non-string targets deny the
+# configured call. Unlisted MCP tools remain Codex's responsibility and receive no Excubitor opinion.
+#
+# [codex.mcp_mutation_profiles]
+# "mcp__filesystem__write_file" = ["/path"]
+# "mcp__filesystem__move_file" = ["/source", "/destination"]
+# "mcp__batch__write_files" = ["/operations/*/path"]

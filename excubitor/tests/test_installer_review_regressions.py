@@ -33,7 +33,8 @@ def uninstall(target, **kwargs):
 
 
 def tree_bytes(root: Path) -> dict[str, bytes]:
-    return {str(path.relative_to(root)): path.read_bytes() for path in root.rglob("*") if path.is_file()}
+    return {path.relative_to(root).as_posix(): path.read_bytes()
+            for path in root.rglob("*") if path.is_file()}
 
 
 def test_fresh_unowned_collision_refuses_before_any_mutation(env) -> None:

@@ -180,11 +180,14 @@ class TestLogPathShapes(unittest.TestCase):
         old_env = os.environ.get("EXCUBITOR_DENIAL_LOG")
         os.chdir(workdir)
         os.environ["EXCUBITOR_DENIAL_LOG"] = log_value
-        self.addCleanup(os.chdir, old_cwd)
-        self.addCleanup(lambda: (os.environ.__setitem__("EXCUBITOR_DENIAL_LOG", old_env)
-                                 if old_env is not None
-                                 else os.environ.pop("EXCUBITOR_DENIAL_LOG", None)))
-        ok = _load_module().record("guard-test", "reason", dict(self.PAYLOAD))
+        try:
+            ok = _load_module().record("guard-test", "reason", dict(self.PAYLOAD))
+        finally:
+            os.chdir(old_cwd)
+            if old_env is None:
+                os.environ.pop("EXCUBITOR_DENIAL_LOG", None)
+            else:
+                os.environ["EXCUBITOR_DENIAL_LOG"] = old_env
         resolved = Path(workdir) / log_value if not os.path.isabs(log_value) else Path(log_value)
         return ok, resolved
 
@@ -216,6 +219,7 @@ class TestLogPathShapes(unittest.TestCase):
             ok, log = self._record_with(os.path.join(td, "deep", "er", "denials.jsonl"), td)
             self._assert_one_event(ok, log)
 
+    @unittest.skipIf(os.name == "nt", "POSIX FIFO timing witness")
     def test_relative_blocked_write_times_out_promptly(self):
         # timeout case for the RELATIVE shape: a FIFO with no reader blocks open(); record() must
         # abandon the writer on the 1s join and report False — the R-08 fix must not have moved the
@@ -308,6 +312,7 @@ class TestGuardsLogDenials(unittest.TestCase):
                     self.assertIsNotNone(_denied(p.stdout))
                     self.assertEqual(p.stderr, "")  # fault swallowed, no traceback
 
+    @unittest.skipIf(os.name == "nt", "POSIX FIFO timing witness")
     def test_blocked_log_write_still_denies_promptly(self):
         # THE hung-write case (a fast-failing fault is easy; a write that BLOCKS is the one that
         # would hold the guard past the 10s hook timeout, where the harness fails OPEN and runs
@@ -382,6 +387,7 @@ class TestModuleLoadIsBounded(unittest.TestCase):
         from excubitor.adapters import claude_code
         return claude_code
 
+    @unittest.skipIf(os.name == "nt", "POSIX FIFO timing witness")
     def test_blocked_module_load_returns_promptly(self):
         claude_code = self._adapter()
         with tempfile.TemporaryDirectory() as td:

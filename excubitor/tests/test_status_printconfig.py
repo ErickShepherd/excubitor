@@ -63,11 +63,16 @@ def test_drift_and_missing_reported(installed) -> None:
 
 def test_compatibility_split_is_honest() -> None:
     data = status_mod.gather_status()
-    assert data["supported_runtimes"] == []
-    assert data["available_adapters"] == ["claude-code"]
-    assert "codex" in data["designed_not_supported"]
+    assert data["schema"] == "excubitor.status.v2"
+    assert data["supported_runtimes"] == ["codex"]
+    assert data["available_adapters"] == ["claude-code", "codex"]
+    assert "codex" not in data["designed_not_supported"]
     assert "claude-code" not in data["designed_not_supported"]
     assert data["core_protocol"] == "excubitor.pre_tool.v1"
+    coverage = data["enforcement_coverage"]["codex"]
+    assert coverage["verified_tools"] == ["Bash", "apply_patch"]
+    assert "MCP mutation tools" in coverage["unverified_tools"]
+    assert "codex exec" in coverage["unverified_host_surfaces"]
 
 
 def test_no_installations_is_clean(tmp_path: Path, monkeypatch) -> None:
@@ -85,7 +90,7 @@ def test_status_json_is_stable_and_schema_tagged(installed, capsys) -> None:
     second = capsys.readouterr().out
     assert first == second  # deterministic
     parsed = json.loads(first)
-    assert parsed["schema"] == "excubitor.status.v1"
+    assert parsed["schema"] == "excubitor.status.v2"
     assert parsed["installations"][0]["protection"] == "needs-probe"
 
 
@@ -95,31 +100,39 @@ def test_status_text_reports_needs_probe(installed, capsys) -> None:
     assert "claude-code/user" in out
     assert "needs-probe" in out
     assert "verified enforcement:" in out
+    assert "verified tools: Bash, apply_patch" in out
+    assert "MCP mutation tools" in out
     assert "adapter foundations:" in out
 
 
 # --- print-config ----------------------------------------------------------------------------------
 
-def test_print_config_json_shows_provenance(tmp_path: Path, monkeypatch, capsys) -> None:
-    monkeypatch.setenv("EXCUBITOR_LOOP_GUARD", "conservative")
+def test_print_config_json_shows_native_hook_baseline(tmp_path: Path, monkeypatch, capsys) -> None:
+    monkeypatch.delenv("EXCUBITOR_LOOP_GUARD", raising=False)
+    monkeypatch.delenv("CLAUDE_LOOP_GUARD", raising=False)
     monkeypatch.chdir(tmp_path)
     assert cli_main(["print-config", "--json"]) == 0
     data = json.loads(capsys.readouterr().out)
     assert data["schema"] == "excubitor.effective-config.v1"
     assert data["settings"]["loop_mode"]["value"] == "conservative"
-    assert data["settings"]["loop_mode"]["source"] == "env:EXCUBITOR_LOOP_GUARD"
+    assert data["settings"]["loop_mode"]["source"] == "native-hook-baseline"
     assert data["settings"]["opt_out_marker"]["source"] == "default"
+    assert data["settings"]["codex_mcp_mutation_profiles"] == {
+        "source": "default",
+        "value": {},
+    }
 
 
-def test_print_config_surfaces_legacy_warning(tmp_path: Path, monkeypatch, capsys) -> None:
-    monkeypatch.delenv("EXCUBITOR_LOOP_GUARD", raising=False)
-    monkeypatch.setenv("CLAUDE_LOOP_GUARD", "1")
+def test_print_config_surfaces_all_deprecated_guard_inputs(tmp_path: Path, monkeypatch, capsys) -> None:
+    monkeypatch.setenv("EXCUBITOR_LOOP_GUARD", "verifiable")
+    monkeypatch.setenv("CLAUDE_LOOP_GUARD", "yolo")
     monkeypatch.chdir(tmp_path)
     assert cli_main(["print-config", "--json"]) == 0
     data = json.loads(capsys.readouterr().out)
     assert data["settings"]["loop_mode"]["value"] == "conservative"
-    assert "(legacy)" in data["settings"]["loop_mode"]["source"]
-    assert any("legacy" in w for w in data["warnings"])
+    assert data["settings"]["loop_mode"]["source"] == "native-hook-baseline"
+    assert len(data["warnings"]) == 2
+    assert all("deprecated" in warning and "ignored" in warning for warning in data["warnings"])
 
 
 def test_print_config_text(tmp_path: Path, monkeypatch, capsys) -> None:

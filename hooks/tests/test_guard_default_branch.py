@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -260,13 +261,19 @@ class TestR06RegistrationBoundary(unittest.TestCase):
     def test_bash_mutation_bypasses_the_guard_end_to_end(self):
         # The residual side, pinned honestly: a shell mutation on the default branch is dispatched
         # under tool_name=Bash, the matcher misses, the hook is never invoked, the mutation lands.
+        bash = shutil.which("bash")
+        self.assertIsNotNone(bash, "Bash must be available for the Bash dispatch witness")
         with tempfile.TemporaryDirectory() as td:
             repo = _repo(td)  # checked out on main — maximally protected state
             dispatched_to_guard = re.fullmatch(self._registered_matcher(), "Bash") is not None
             self.assertFalse(dispatched_to_guard)
             # host dispatch semantics: matcher missed → the command runs unguarded
             target = Path(repo, "seed.txt")
-            subprocess.run(["bash", "-c", f"echo mutated >> '{target}'"], check=True)
+            # The residual is a Bash dispatch boundary. Use Bash's portable slash-form path rather
+            # than a native Windows backslash string, whose backslashes Bash consumes as escapes.
+            # Pass the resolved executable: on Windows, subprocess's bare-name lookup can prefer
+            # the System32 WSL launcher even when Git Bash is first on PATH.
+            subprocess.run([bash, "-c", f"echo mutated >> '{target.as_posix()}'"], check=True)
             self.assertIn("mutated", target.read_text(),
                           "the documented R-06 residual: Bash mutates the default branch unimpeded")
 

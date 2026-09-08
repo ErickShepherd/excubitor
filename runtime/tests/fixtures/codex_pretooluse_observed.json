@@ -1,0 +1,73 @@
+{
+  "schema": "excubitor.codex-host-witness.v1",
+  "recorded_on": "2026-09-02",
+  "host": {
+    "runtime": "codex",
+    "version": "0.152.0",
+    "mode": "TUI",
+    "operating_system": "Windows",
+    "registration_scope": "user",
+    "registration_event": "PreToolUse",
+    "registration_matcher": "Bash|apply_patch",
+    "registration_command_field": "commandWindows",
+    "trust": "reviewed for the exact installed definition in /hooks"
+  },
+  "probes": [
+    {
+      "name": "harmless shell allow",
+      "payload": {
+        "cwd": "{PROBE_REPO}",
+        "hook_event_name": "PreToolUse",
+        "model": "gpt-5.6-luna",
+        "permission_mode": "bypassPermissions",
+        "session_id": "{SESSION_ID}",
+        "tool_input": {
+          "command": "git status --short"
+        },
+        "tool_name": "Bash",
+        "tool_use_id": "{TOOL_USE_ID}",
+        "transcript_path": "{CODEX_HOME}\\sessions\\{DATE}\\rollout-{SESSION_ID}.jsonl",
+        "turn_id": "{TURN_ID}"
+      },
+      "observation": {
+        "hook_dispatched": true,
+        "hook_blocked": false,
+        "tool_executed": true,
+        "agent_result": "ALLOWED"
+      }
+    },
+    {
+      "name": "harmless default-branch patch denial",
+      "payload": {
+        "cwd": "{PROBE_REPO}",
+        "hook_event_name": "PreToolUse",
+        "model": "gpt-5.6-luna",
+        "permission_mode": "bypassPermissions",
+        "session_id": "{SESSION_ID}",
+        "tool_input": {
+          "command": "*** Begin Patch\n*** Add File: probe-marker-denied.txt\n+EXCUBITOR_PROBE\n*** End Patch"
+        },
+        "tool_name": "apply_patch",
+        "tool_use_id": "{TOOL_USE_ID}",
+        "transcript_path": "{CODEX_HOME}\\sessions\\{DATE}\\rollout-{SESSION_ID}.jsonl",
+        "turn_id": "{TURN_ID}"
+      },
+      "observation": {
+        "hook_dispatched": true,
+        "hook_blocked": true,
+        "tool_executed": false,
+        "marker_created": false,
+        "agent_result": "BLOCKED"
+      }
+    }
+  ],
+  "verified_tools": [
+    "Bash",
+    "apply_patch"
+  ],
+  "limitations": [
+    "Codex TUI only; codex exec did not dispatch the configured hook in this environment and is not claimed protected.",
+    "MCP mutation tools and other specialized tools were not probed.",
+    "The live witness covers a Windows user-scope registration, not project-scope or non-Windows registrations."
+  ]
+}

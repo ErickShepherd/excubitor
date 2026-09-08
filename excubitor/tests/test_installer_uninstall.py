@@ -69,7 +69,7 @@ def test_uninstall_on_non_object_settings_root_fails_cleanly(env) -> None:
         _uninstall(target)
 
 
-def test_roundtrip_preserves_unrelated_config_byte_for_byte(env) -> None:
+def test_roundtrip_preserves_canonical_unrelated_config_byte_for_byte(env) -> None:
     home, _state, target = env
     settings_path = home / ".claude" / "settings.json"
     settings_path.parent.mkdir(parents=True)
@@ -83,7 +83,9 @@ def test_roundtrip_preserves_unrelated_config_byte_for_byte(env) -> None:
         },
         "otherKey": {"nested": [1, 2, 3]},
     }
-    settings_path.write_text(json.dumps(original, indent=2) + "\n")
+    # The transaction promises byte equality for canonical JSON. Avoid Windows
+    # text-mode CRLF conversion when constructing that canonical fixture.
+    settings_path.write_bytes((json.dumps(original, indent=2) + "\n").encode("utf-8"))
     before = settings_path.read_bytes()
 
     _install(target)

@@ -52,7 +52,7 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/excubitor-demo.XXXXXX")"
 cleanup() { rm -rf "$WORK"; }
 trap cleanup EXIT
 git -C "$WORK" init -q -b main
-git -C "$WORK" config user.email demo@example.com
+git -C "$WORK" config user.email demo@localhost
 git -C "$WORK" config user.name demo
 git -C "$WORK" commit -q --allow-empty -m "initial"
 # The precious thing: work that is NOT committed and has NO reflog — `git clean` is unrecoverable.

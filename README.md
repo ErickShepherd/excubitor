@@ -12,19 +12,39 @@
 *Excubitor* — Latin, "one who stands out of bed": the night watch. The Byzantine **excubitores**
 guarded the emperor's chambers precisely so that no one else had to stay awake.
 
-**Safety fences for autonomous coding agents** — mechanical guards, loop discipline, and a
-falsifiable intent-record system for letting an LLM agent work unattended without trusting it to
-bless its own work. The watcher that stays awake while the loop runs and nobody else is looking.
+**Persistent coding loops with interchangeable LLMs.** Agree on the work and its checks once;
+Excubitor breaks it into manageable steps, carries progress and feedback into fresh contexts,
+and keeps going until verification and review pass or an agreed limit or concrete blocker is reached.
+A model finishing its answer does not finish the job. Existing guards support this workflow.
 
-Stdlib-only Python hooks + [Agent Skills](https://code.claude.com/docs/en/skills)-format capability
-packets, each mechanism pinned by executed regressions and shipped with the design rationale that
-produced it. Built for and battle-tested
-with Claude Code; **all four guards now share a model-blind policy core** (`excubitor/core/`) — the
-shipped hooks are thin Claude Code adapters over it, and a second, non-Claude-Code adapter drives the
-*same* core with an equivalence test to prove it ([`SPEC.md`](SPEC.md)), so its portability to any
-runtime that can intercept tool calls is demonstrated, not just asserted. Claude Code has the only
-available adapter and installer foundation today, but no runtime is yet claimed as verified supported
-enforcement: that label still requires a released-package, real-host denial witness.
+## Install and start
+
+Excubitor requires Python 3.11+ and Git. Install the reviewed wheel into an isolated
+CLI environment with `pipx install /path/to/excubitor-VERSION-py3-none-any.whl`, or
+use the [virtual-environment instructions](docs/install.md). This development
+workflow has not been published as a new release; a package with the same name
+from an index is not evidence that it contains these changes.
+
+The [ralph-loop skill](skills/ralph-loop/SKILL.md) lets a coding assistant prepare,
+launch and monitor the same job through terminal tools. It reuses agreed scope and
+limits, and asks for any missing authorization before launch.
+
+Use the [Ralph quickstart](docs/ralph-quickstart.md) to create project settings,
+check them without a model call, prepare a plan, then start it once. Source-file
+selection, acceptance checks, resource limits and the permitted committer are
+reviewable before work begins. The result stays on a separate candidate branch.
+Completion does not merge, push, publish or delete either checkout.
+
+Claude CLI, Codex CLI, a generic JSON command bridge and compatible Chat Completions
+endpoints share the same loop. Model transport and command execution are selected
+separately. The trusted-local executor is intended for trusted projects; it has no
+filesystem, network or credential sandbox. Native execution and recovery evidence
+is recorded separately for each operating system in the quickstart.
+
+Installing this CLI does not register hooks, edit model-client settings or activate
+a run. Ordinary development remains ordinary. The older hooks and skills remain
+available as a [separate legacy integration](docs/legacy-guard-installation.md),
+with different scope and limitations; they are not prerequisites for the launcher.
 
 ## 60-second crash test
 
@@ -125,43 +145,10 @@ scripts/install_settings.py # tested exact-tuple settings.json registration (use
 scripts/demo.sh            # 60-second zero-install crash test (drives the real guard)
 ```
 
-## Install
-
-Requires Python 3.11+ and `git`. For Claude Code:
-
-```bash
-git clone https://github.com/ErickShepherd/excubitor.git && cd excubitor
-scripts/install.sh          # symlinks skills/* and hooks/* into ~/.claude, and idempotently
-                            # registers the four guards in ~/.claude/settings.json
-```
-
-Or register the hooks by hand in `~/.claude/settings.json`:
-
-```json
-{
-  "hooks": {
-    "PreToolUse": [
-      {"matcher": "Edit|Write|NotebookEdit",
-       "hooks": [{"type": "command", "command": "python3 ~/.claude/hooks/guard-default-branch.py", "timeout": 10}]},
-      {"matcher": "Bash",
-       "hooks": [{"type": "command", "command": "python3 ~/.claude/hooks/guard-loop-vc.py", "timeout": 10}]},
-      {"matcher": "*",
-       "hooks": [{"type": "command", "command": "python3 ~/.claude/hooks/guard-one-unit.py", "timeout": 10}]},
-      {"matcher": "Bash|Edit|Write|NotebookEdit",
-       "hooks": [{"type": "command", "command": "python3 ~/.claude/hooks/guard-self-integrity.py", "timeout": 10}]}
-    ]
-  }
-}
-```
-
-All four guards are **opt-in or inert by default**: `guard-loop-vc.py` and
-`guard-self-integrity.py` do nothing unless `CLAUDE_LOOP_GUARD` is set in the loop's environment;
-`guard-one-unit.py` does nothing unless a loop driver arms `ONE_UNIT_CAP_SCOPE` +
-`ONE_UNIT_CAP_BASELINE`; `guard-default-branch.py` can be disabled per-repo with a
-`.claude/allow-default-branch` marker file or globally with `CLAUDE_ALLOW_DEFAULT_BRANCH=1`.
-Interactive work is unaffected until you explicitly say "I'm looping."
-
 ## Tests
+
+Development guidance for all coding agents lives in [AGENTS.md](AGENTS.md).
+[CLAUDE.md](CLAUDE.md) imports the same instructions for Claude Code.
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install pytest
@@ -174,6 +161,11 @@ CI runs the same suite on a stock GitHub runner (`.github/workflows/ci.yml`), pl
 own telos audit — every claim in [`docs/telos/app.md`](docs/telos/app.md) must resolve
 DISCHARGED at the `witness` evidence tier, i.e. every safety claim this README makes about the
 guards is re-proven by an executed test on every CI run.
+
+The legacy frozen-oracle execution runner requires POSIX; Windows tests its shared validation
+and explicit execution refusal. FIFO-specific tests also require POSIX. The current Ralph launcher
+has separate Windows, Linux and macOS runtime and packaging checks in
+[the portable workflow](.github/workflows/ralph-portable.yml).
 
 ## The workflow these fences assume
 

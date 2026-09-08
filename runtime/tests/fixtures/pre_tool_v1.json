@@ -36,7 +36,7 @@
     {
       "name": "one-file: deny settings under the control dir (self-integrity)",
       "use_surface": true,
-      "event": {"capability": "file.mutate", "targets": ["/home/u/.claude/settings.json"], "cwd": "/x", "loop_mode": "conservative"},
+      "event": {"capability": "file.mutate", "targets": ["/example-home/.claude/settings.json"], "cwd": "/x", "loop_mode": "conservative"},
       "expect": {"deny": true, "policy": "self-integrity", "reason_contains": "hook registration in .claude/settings.json"}
     },
     {

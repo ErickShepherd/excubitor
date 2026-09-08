@@ -2,10 +2,10 @@
 
 A receipt records *exactly* what one installation owns: each staged file by absolute path **and**
 SHA-256, and each settings registration by its full exact tuple (event, matcher-set, handler type,
-command, timeout). Upgrade and uninstall consult the receipt and touch **only** what it records — never
-a path that merely contains a guard's name, never a registration matched by substring. This is the
-mechanism behind the invariant "rollback and uninstall may remove only receipt-owned bytes and
-entries".
+command, Windows command override, timeout). Upgrade and uninstall consult the receipt and touch
+**only** what it records — never a path that merely contains a guard's name, never a registration
+matched by substring. This is the mechanism behind the invariant "rollback and uninstall may remove
+only receipt-owned bytes and entries".
 
 Ownership is deliberately strict:
 
@@ -39,7 +39,8 @@ __all__ = [
 ]
 
 #: The receipt file's schema/version marker.
-RECEIPT_SCHEMA = "excubitor.receipt.v1"
+RECEIPT_SCHEMA = "excubitor.receipt.v2"
+_LEGACY_RECEIPT_SCHEMA = "excubitor.receipt.v1"
 _SHA256_HEX_LENGTH = 64
 
 
@@ -87,6 +88,7 @@ class OwnedRegistration:
     matcher: str
     command: str
     timeout: int
+    command_windows: "str | None" = None
     handler_type: str = "command"
     event: str = "PreToolUse"
 
@@ -96,16 +98,26 @@ class OwnedRegistration:
             "matcher": self.matcher,
             "type": self.handler_type,
             "command": self.command,
+            "command_windows": self.command_windows,
             "timeout": self.timeout,
         }
 
     @classmethod
     def from_dict(cls, d: dict) -> "OwnedRegistration":
-        if not isinstance(d, dict) or set(d) != {"event", "matcher", "type", "command", "timeout"}:
+        if not isinstance(d, dict):
+            raise ValueError("receipt registration entry has an invalid field set")
+        v1_fields = {"event", "matcher", "type", "command", "timeout"}
+        v2_fields = v1_fields | {"command_windows"}
+        if frozenset(d) not in {frozenset(v1_fields), frozenset(v2_fields)}:
             raise ValueError("receipt registration entry has an invalid field set")
         for name in ("event", "matcher", "type", "command"):
             if not isinstance(d[name], str) or not d[name]:
                 raise ValueError(f"receipt registration field {name} is not a non-empty string")
+        command_windows = d.get("command_windows")
+        if command_windows is not None and (
+            not isinstance(command_windows, str) or not command_windows
+        ):
+            raise ValueError("receipt registration field command_windows is not null or a non-empty string")
         if isinstance(d["timeout"], bool) or not isinstance(d["timeout"], int) or d["timeout"] <= 0:
             raise ValueError("receipt registration timeout is not a positive integer")
         return cls(
@@ -113,15 +125,25 @@ class OwnedRegistration:
             matcher=d["matcher"],
             handler_type=d["type"],
             command=d["command"],
+            command_windows=command_windows,
             timeout=d["timeout"],
         )
 
-    def matches(self, event: str, matcher: str, command: str, timeout: object, handler_type: str) -> bool:
+    def matches(
+        self,
+        event: str,
+        matcher: str,
+        command: str,
+        timeout: object,
+        handler_type: str,
+        command_windows: object = None,
+    ) -> bool:
         """Exact-tuple ownership: same event/type/command/timeout and the same matcher *set*."""
         return (
             self.event == event
             and self.handler_type == handler_type
             and self.command == command
+            and self.command_windows == command_windows
             and self.timeout == timeout
             and matcher_key(self.matcher) == matcher_key(matcher)
         )
@@ -164,7 +186,7 @@ class Receipt:
     def from_dict(cls, d: dict) -> "Receipt":
         if not isinstance(d, dict):
             raise ValueError("receipt root is not an object")
-        if d.get("schema") != RECEIPT_SCHEMA:
+        if d.get("schema") not in {RECEIPT_SCHEMA, _LEGACY_RECEIPT_SCHEMA}:
             raise ValueError(f"unrecognized receipt schema {d.get('schema')!r}")
         required = {
             "schema", "runtime", "scope", "settings_path", "excubitor_version", "installed_at",
@@ -179,12 +201,27 @@ class Receipt:
             raise ValueError("receipt field settings_preexisted is not a boolean")
         if not isinstance(d["files"], list) or not isinstance(d["registrations"], list):
             raise ValueError("receipt files and registrations must be lists")
+        registration_fields = {"event", "matcher", "type", "command", "timeout"}
+        if d["schema"] == RECEIPT_SCHEMA:
+            registration_fields.add("command_windows")
+        if any(not isinstance(reg, dict) or set(reg) != registration_fields
+               for reg in d["registrations"]):
+            raise ValueError(
+                f"{d['schema']} receipt registration entry has an invalid field set"
+            )
         files = tuple(OwnedFile.from_dict(f) for f in d["files"])
         registrations = tuple(OwnedRegistration.from_dict(r) for r in d["registrations"])
         if len({f.path for f in files}) != len(files):
             raise ValueError("receipt contains duplicate owned-file paths")
         registration_keys = {
-            (r.event, matcher_key(r.matcher), r.handler_type, r.command, r.timeout)
+            (
+                r.event,
+                matcher_key(r.matcher),
+                r.handler_type,
+                r.command,
+                r.command_windows,
+                r.timeout,
+            )
             for r in registrations
         }
         if len(registration_keys) != len(registrations):
@@ -198,7 +235,7 @@ class Receipt:
             files=files,
             registrations=registrations,
             settings_preexisted=d["settings_preexisted"],
-            schema=d["schema"],
+            schema=RECEIPT_SCHEMA,
         )
 
     @classmethod
@@ -219,10 +256,19 @@ class Receipt:
         return any(f.path == path for f in self.files)
 
     def owns_registration(
-        self, event: str, matcher: str, command: str, timeout: object, handler_type: str = "command"
+        self,
+        event: str,
+        matcher: str,
+        command: str,
+        timeout: object,
+        handler_type: str = "command",
+        command_windows: object = None,
     ) -> bool:
         """True iff some recorded registration matches this exact tuple (matcher as a set)."""
-        return any(r.matches(event, matcher, command, timeout, handler_type) for r in self.registrations)
+        return any(
+            r.matches(event, matcher, command, timeout, handler_type, command_windows)
+            for r in self.registrations
+        )
 
     @staticmethod
     def hash_file(path: "str | os.PathLike[str]") -> str:

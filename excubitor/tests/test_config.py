@@ -1,7 +1,6 @@
 """Tests for the neutral policy configuration layer (`excubitor.config`).
 
-Covers the C2.2 surface: `EXCUBITOR_*` precedence over the legacy `CLAUDE_*` aliases (with a
-deprecation warning), the runtime-only arming rule (no `policy.toml` key can arm the loop),
+Covers the always-on conservative baseline, ignored/deprecated provider-era loop-guard inputs,
 `.excubitor/policy.toml` discovery and value resolution, honest provenance, and fail-soft handling of
 a missing/malformed policy file.
 """
@@ -17,41 +16,49 @@ from excubitor.core.events import LoopMode
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
-# --- loop-mode arming (env only) -------------------------------------------------------------------
+# --- always-on conservative baseline ---------------------------------------------------------------
 
-def test_neutral_loop_guard_arms_conservative() -> None:
-    mode, source, warnings = config.resolve_loop_mode({"EXCUBITOR_LOOP_GUARD": "conservative"})
+def test_empty_environment_selects_conservative_baseline() -> None:
+    mode, source, warnings = config.resolve_loop_mode({})
     assert mode is LoopMode.CONSERVATIVE
-    assert source == "env:EXCUBITOR_LOOP_GUARD"
+    assert source == "native-hook-baseline"
     assert warnings == ()
 
 
-def test_neutral_accepts_legacy_raw_values() -> None:
-    assert config.resolve_loop_mode({"EXCUBITOR_LOOP_GUARD": "1"})[0] is LoopMode.CONSERVATIVE
-    assert config.resolve_loop_mode({"EXCUBITOR_LOOP_GUARD": "yolo"})[0] is LoopMode.VERIFIABLE
-    assert config.resolve_loop_mode({"EXCUBITOR_LOOP_GUARD": "verifiable"})[0] is LoopMode.VERIFIABLE
+@pytest.mark.parametrize(
+    ("name", "value"),
+    (
+        ("EXCUBITOR_LOOP_GUARD", "conservative"),
+        ("EXCUBITOR_LOOP_GUARD", "verifiable"),
+        ("EXCUBITOR_LOOP_GUARD", "yolo"),
+        ("EXCUBITOR_LOOP_GUARD", "banana"),
+        ("EXCUBITOR_LOOP_GUARD", ""),
+        ("CLAUDE_LOOP_GUARD", "1"),
+        ("CLAUDE_LOOP_GUARD", "verifiable"),
+        ("CLAUDE_LOOP_GUARD", "yolo"),
+    ),
+)
+def test_deprecated_loop_guard_inputs_cannot_change_or_elevate_baseline(
+    name: str, value: str
+) -> None:
+    mode, source, warnings = config.resolve_loop_mode({name: value})
+    assert mode is LoopMode.CONSERVATIVE
+    assert source == "native-hook-baseline"
+    assert len(warnings) == 1
+    assert name in warnings[0]
+    assert "deprecated" in warnings[0]
+    assert "ignored" in warnings[0]
 
 
-def test_legacy_loop_guard_honored_with_warning() -> None:
-    mode, source, warnings = config.resolve_loop_mode({"CLAUDE_LOOP_GUARD": "yolo"})
-    assert mode is LoopMode.VERIFIABLE
-    assert source == "env:CLAUDE_LOOP_GUARD (legacy)"
-    assert warnings and "legacy" in warnings[0]
-
-
-def test_neutral_wins_over_legacy_and_suppresses_warning() -> None:
+def test_all_deprecated_loop_guard_inputs_are_reported() -> None:
     mode, source, warnings = config.resolve_loop_mode(
-        {"EXCUBITOR_LOOP_GUARD": "conservative", "CLAUDE_LOOP_GUARD": "yolo"}
+        {"EXCUBITOR_LOOP_GUARD": "verifiable", "CLAUDE_LOOP_GUARD": "yolo"}
     )
     assert mode is LoopMode.CONSERVATIVE
-    assert source == "env:EXCUBITOR_LOOP_GUARD"
-    assert warnings == ()  # neutral present → legacy is not consulted, no deprecation noise
-
-
-def test_unset_and_empty_and_unknown_are_unarmed() -> None:
-    assert config.resolve_loop_mode({})[0] is None
-    assert config.resolve_loop_mode({"EXCUBITOR_LOOP_GUARD": ""})[0] is None  # empty does not arm
-    assert config.resolve_loop_mode({"EXCUBITOR_LOOP_GUARD": "banana"})[0] is None
+    assert source == "native-hook-baseline"
+    assert len(warnings) == 2
+    assert "EXCUBITOR_LOOP_GUARD" in warnings[0]
+    assert "CLAUDE_LOOP_GUARD" in warnings[1]
 
 
 # --- allow-default-branch off-switch ---------------------------------------------------------------
@@ -96,6 +103,8 @@ def test_defaults_when_no_policy_file(tmp_path: Path) -> None:
     assert cfg.opt_out_marker.source == "default"
     assert cfg.one_unit_enabled.value is True
     assert cfg.protected_roots.value == ()
+    assert cfg.codex_mcp_mutation_profiles.value == {}
+    assert cfg.codex_mcp_mutation_profiles.source == "default"
 
 
 def test_one_unit_and_protected_roots_from_policy(tmp_path: Path) -> None:
@@ -107,6 +116,21 @@ def test_one_unit_and_protected_roots_from_policy(tmp_path: Path) -> None:
     assert cfg.one_unit_enabled.value is False
     assert cfg.one_unit_enabled.source == "policy.toml"
     assert cfg.protected_roots.value == ("scripts/ci", "x.py")
+
+
+def test_codex_mcp_mutation_profiles_from_policy(tmp_path: Path) -> None:
+    _write_policy(
+        tmp_path,
+        "[codex.mcp_mutation_profiles]\n"
+        "'mcp__filesystem__write_file' = ['/path']\n"
+        "'mcp__filesystem__move_file' = ['/source', '/destination']\n",
+    )
+    cfg = config.resolve_config(tmp_path, {})
+    assert cfg.codex_mcp_mutation_profiles.value == {
+        "mcp__filesystem__write_file": ["/path"],
+        "mcp__filesystem__move_file": ["/source", "/destination"],
+    }
+    assert cfg.codex_mcp_mutation_profiles.source == "policy.toml"
 
 
 def test_malformed_policy_file_degrades_to_defaults(tmp_path: Path) -> None:

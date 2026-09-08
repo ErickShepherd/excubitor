@@ -1,12 +1,11 @@
-"""Neutral policy configuration: `.excubitor/policy.toml` loading + `EXCUBITOR_*` env precedence.
+"""Neutral policy configuration and compatibility diagnostics.
 
 This is the host-facing configuration layer the CLI and installer read — deliberately **outside**
 `excubitor.core` because it does host I/O (reads environment variables and files), which the pure core
-never does. It resolves the *neutral* policy a repo commits and the *runtime* arming a loop driver
-supplies, with a documented precedence and honest provenance for every value (so `print-config` can
-show where each setting came from).
+never does. It resolves the neutral policy a repo commits plus the trusted native-hook baseline, with
+honest provenance for every value (so `print-config` can show where each setting came from).
 
-Precedence, highest first:
+For settings that remain configurable, precedence is highest first:
 
 1. `EXCUBITOR_*` environment variable — the neutral primary.
 2. `CLAUDE_*` environment variable — the **legacy** alias, honored during the transition and recorded
@@ -14,10 +13,11 @@ Precedence, highest first:
 3. `.excubitor/policy.toml` — the committed, reviewable neutral policy (static knobs only).
 4. A built-in default.
 
-**Arming is runtime-only, never committed.** `loop_mode` (conservative / verifiable) is resolved from
-the environment alone — there is deliberately no `policy.toml` key for it, so a repo cannot arm
-verifiable autonomy by checking a file into version control. `policy.toml` carries only the static,
-reviewable knobs (the opt-out-marker relpath, the one-unit toggle, extra protected roots).
+**The conservative baseline is always active once this resolver is reached through a loaded native
+hook.** `EXCUBITOR_LOOP_GUARD` and `CLAUDE_LOOP_GUARD` are ignored deprecated inputs: neither their
+presence, absence, nor value can disable the baseline or select verifiable autonomy. There is also no
+`policy.toml` key for loop mode. Elevated autonomy remains unsupported until a separately controlled
+grant authority exists.
 
 Legacy compatibility is *recognition*, not *behavior change*: the shipped Claude Code guards still read
 `CLAUDE_LOOP_GUARD` / `CLAUDE_ALLOW_DEFAULT_BRANCH` and the `.claude/allow-default-branch` marker
@@ -55,15 +55,7 @@ LEGACY_OPT_OUT_MARKER = ".claude/allow-default-branch"
 #: Both allow-default-branch marker relpaths, neutral first — surfaced by the CLI/installer.
 ALLOW_DEFAULT_BRANCH_MARKERS = (DEFAULT_OPT_OUT_MARKER, LEGACY_OPT_OUT_MARKER)
 
-# Values accepted for the loop-guard signal on EITHER the neutral or the legacy variable, mapped to the
-# neutral LoopMode. The neutral names and the legacy raw markers both resolve, so an older
-# `EXCUBITOR_LOOP_GUARD=1` or a `CLAUDE_LOOP_GUARD=yolo` each arm correctly.
-_LOOP_MODE_VALUES = {
-    "conservative": LoopMode.CONSERVATIVE,
-    "1": LoopMode.CONSERVATIVE,
-    "verifiable": LoopMode.VERIFIABLE,
-    "yolo": LoopMode.VERIFIABLE,
-}
+_DEPRECATED_LOOP_GUARD_VARIABLES = ("EXCUBITOR_LOOP_GUARD", "CLAUDE_LOOP_GUARD")
 
 _POLICY_RELPATH = os.path.join(".excubitor", "policy.toml")
 _MAX_SEARCH_DEPTH = 64  # backstop against a pathological directory chain
@@ -73,8 +65,8 @@ _MAX_SEARCH_DEPTH = 64  # backstop against a pathological directory chain
 class Resolved:
     """One resolved setting plus the honest provenance of where its value came from.
 
-    ``source`` is a short, stable token the CLI prints verbatim: ``env:EXCUBITOR_LOOP_GUARD``,
-    ``env:CLAUDE_LOOP_GUARD (legacy)``, ``policy.toml``, or ``default``.
+    ``source`` is a short, stable token the CLI prints verbatim, such as
+    ``native-hook-baseline``, ``policy.toml``, or ``default``.
     """
 
     value: object
@@ -89,12 +81,13 @@ class Config:
     than this module writing to stderr, so a hook that later consumes it never emits stray output.
     """
 
-    loop_mode: Resolved  # value: LoopMode | None
+    loop_mode: Resolved  # value: LoopMode (conservative for every loaded native hook)
     allow_default_branch: Resolved  # value: bool
     state_home: Resolved  # value: str | None
     opt_out_marker: Resolved  # value: str
     one_unit_enabled: Resolved  # value: bool
     protected_roots: Resolved  # value: tuple[str, ...]
+    codex_mcp_mutation_profiles: Resolved  # value: dict[str, object]
     policy_path: "str | None"
     warnings: "tuple[str, ...]" = field(default=())
 
@@ -104,7 +97,7 @@ class PolicyFileError(ValueError):
 
 
 def _env(environ: "dict[str, str]", name: str) -> "str | None":
-    """A present, non-empty environment value, else None (an empty string does not arm anything)."""
+    """Return a present, non-empty environment value, else None."""
     raw = environ.get(name)
     return raw if raw else None
 
@@ -133,24 +126,21 @@ def load_policy_file(
     return {}, None
 
 
-def resolve_loop_mode(environ: "dict[str, str]") -> "tuple[LoopMode | None, str, tuple[str, ...]]":
-    """Resolve the loop-guard arming from the environment alone (never from a committed file).
+def resolve_loop_mode(environ: "dict[str, str]") -> "tuple[LoopMode, str, tuple[str, ...]]":
+    """Select the always-on conservative baseline and report ignored activation-era inputs.
 
-    Returns ``(loop_mode, source, warnings)``. ``EXCUBITOR_LOOP_GUARD`` wins; a bare
-    ``CLAUDE_LOOP_GUARD`` is honored as a legacy alias and adds a deprecation warning. An unset or
-    unrecognized value resolves to ``None`` (unarmed).
+    Reaching this function means a native Excubitor hook is loaded and dispatching. Environment
+    variables are therefore diagnostics only: even a former elevated value such as ``yolo`` cannot
+    weaken the conservative baseline. Presence is reported even for an empty value so a stale host
+    configuration never disappears silently from ``print-config``.
     """
-    neutral = _env(environ, "EXCUBITOR_LOOP_GUARD")
-    if neutral is not None:
-        return _LOOP_MODE_VALUES.get(neutral.strip().lower()), "env:EXCUBITOR_LOOP_GUARD", ()
-    legacy = _env(environ, "CLAUDE_LOOP_GUARD")
-    if legacy is not None:
-        warning = (
-            "CLAUDE_LOOP_GUARD is a legacy alias; set EXCUBITOR_LOOP_GUARD "
-            "(conservative|verifiable) instead."
-        )
-        return _LOOP_MODE_VALUES.get(legacy.strip().lower()), "env:CLAUDE_LOOP_GUARD (legacy)", (warning,)
-    return None, "default", ()
+    warnings = tuple(
+        f"{name} is deprecated and ignored; native Excubitor hooks always use the conservative "
+        "baseline, and environment variables cannot enable elevated autonomy."
+        for name in _DEPRECATED_LOOP_GUARD_VARIABLES
+        if name in environ
+    )
+    return LoopMode.CONSERVATIVE, "native-hook-baseline", warnings
 
 
 def _resolve_flag(environ: "dict[str, str]", neutral: str, legacy: str) -> "tuple[bool, str, tuple]":
@@ -209,6 +199,11 @@ def resolve_config(
     roots = tuple(r for r in roots_raw if isinstance(r, str)) if isinstance(roots_raw, list) else ()
     protected = Resolved(roots, "policy.toml" if roots else "default")
 
+    codex_table = policy.get("codex") if isinstance(policy.get("codex"), dict) else {}
+    profiles_raw = codex_table.get("mcp_mutation_profiles")
+    profiles = dict(profiles_raw) if isinstance(profiles_raw, dict) else {}
+    profile_source = "policy.toml" if isinstance(profiles_raw, dict) else "default"
+
     return Config(
         loop_mode=Resolved(loop_mode, loop_source),
         allow_default_branch=Resolved(allow, allow_source),
@@ -216,6 +211,7 @@ def resolve_config(
         opt_out_marker=opt_out,
         one_unit_enabled=one_unit,
         protected_roots=protected,
+        codex_mcp_mutation_profiles=Resolved(profiles, profile_source),
         policy_path=policy_path,
         warnings=tuple(warnings),
     )

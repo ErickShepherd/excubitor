@@ -33,13 +33,22 @@ def test_non_object_root_is_a_problem() -> None:
 
 def test_malformed_nesting_is_located_precisely() -> None:
     data = {"hooks": {"PreToolUse": [
-        {"matcher": 123, "hooks": [{"type": "command", "command": "x", "timeout": "slow"}]},
+        {
+            "matcher": 123,
+            "hooks": [{
+                "type": "command",
+                "command": "x",
+                "commandWindows": ["pwsh"],
+                "timeout": "slow",
+            }],
+        },
         "not-an-object",
     ]}}
     result = validate.validate_settings(data)
     assert not result.ok
     joined = " ".join(result.problems)
     assert "hooks.PreToolUse[0].matcher" in joined
+    assert "hooks.PreToolUse[0].hooks[0].commandWindows" in joined
     assert "hooks.PreToolUse[0].hooks[0].timeout" in joined
     assert "hooks.PreToolUse[1]" in joined
 
@@ -82,16 +91,50 @@ def test_unknown_policy_fields_are_rejected_as_likely_misspellings() -> None:
     assert "one_unit.enable" in " ".join(result.problems)
 
 
+def test_codex_mcp_mutation_profiles_validate_exact_tools_and_selectors() -> None:
+    assert validate.validate_policy(
+        {
+            "codex": {
+                "mcp_mutation_profiles": {
+                    "mcp__filesystem__write_file": ["/path"],
+                    "mcp__filesystem__move_file": ["/source", "/destination"],
+                    "mcp__batch__write_files": ["/operations/*/path"],
+                }
+            }
+        }
+    ).ok
+
+    result = validate.validate_policy(
+        {
+            "codex": {
+                "mcp_mutation_profiles": {
+                    "write_file": ["/path"],
+                    "mcp__filesystem__empty": [],
+                    "mcp__filesystem__bad": ["path"],
+                    "mcp__filesystem__escape": ["/bad~2escape"],
+                    "mcp__filesystem__duplicate": ["/path", "/path"],
+                }
+            }
+        }
+    )
+    assert not result.ok
+    joined = " ".join(result.problems)
+    assert "canonical" in joined
+    assert "non-empty" in joined
+    assert "JSON pointer" in joined
+    assert "duplicate" in joined
+
+
 # --- receipts: exact, hash-bound ownership ---------------------------------------------------------
 
 def _sample_receipt() -> Receipt:
     return Receipt(
         runtime="claude-code",
         scope="user",
-        settings_path="/home/u/.claude/settings.json",
+        settings_path="/srv/excubitor-fixture/.claude/settings.json",
         excubitor_version="0.1.0",
         installed_at="2026-07-21T00:00:00Z",
-        files=(OwnedFile("/home/u/.claude/hooks/guard-loop-vc.py", "a" * 64),),
+        files=(OwnedFile("/srv/excubitor-fixture/.claude/hooks/guard-loop-vc.py", "a" * 64),),
         registrations=(OwnedRegistration(matcher="Bash", command="python3 /h/guard-loop-vc.py",
                                          timeout=10),),
     )
@@ -106,13 +149,13 @@ def test_receipt_roundtrips_through_json() -> None:
 def test_file_ownership_is_hash_bound() -> None:
     receipt = _sample_receipt()
     # Same path + same hash = ours.
-    assert receipt.owns_file_bytes("/home/u/.claude/hooks/guard-loop-vc.py", "a" * 64)
+    assert receipt.owns_file_bytes("/srv/excubitor-fixture/.claude/hooks/guard-loop-vc.py", "a" * 64)
     # Same path, DIFFERENT hash = drifted, not ours to remove.
-    assert not receipt.owns_file_bytes("/home/u/.claude/hooks/guard-loop-vc.py", "deadbeef")
-    assert receipt.records_path("/home/u/.claude/hooks/guard-loop-vc.py")  # but recorded → drift, not alien
+    assert not receipt.owns_file_bytes("/srv/excubitor-fixture/.claude/hooks/guard-loop-vc.py", "deadbeef")
+    assert receipt.records_path("/srv/excubitor-fixture/.claude/hooks/guard-loop-vc.py")
     # A path we never recorded is never ours, whatever its hash.
-    assert not receipt.owns_file_bytes("/home/u/.claude/hooks/user-thing.py", "a" * 64)
-    assert not receipt.records_path("/home/u/.claude/hooks/user-thing.py")
+    assert not receipt.owns_file_bytes("/srv/excubitor-fixture/.claude/hooks/user-thing.py", "a" * 64)
+    assert not receipt.records_path("/srv/excubitor-fixture/.claude/hooks/user-thing.py")
 
 
 def test_registration_ownership_is_exact_tuple_not_substring() -> None:
@@ -127,6 +170,55 @@ def test_registration_ownership_is_exact_tuple_not_substring() -> None:
     assert not receipt.owns_registration("PreToolUse", "Bash", "python3 /h/guard-loop-vc.py", 15)
     assert not receipt.owns_registration("PreToolUse", "Bash", "echo guard-loop-vc.py", 10)
     assert not receipt.owns_registration("PreToolUse", "Edit", "python3 /h/guard-loop-vc.py", 10)
+    windows = Receipt(
+        runtime="codex",
+        scope="user",
+        settings_path="hooks.json",
+        excubitor_version="0.2.0",
+        installed_at="t",
+        registrations=(
+            OwnedRegistration(
+                matcher="Bash",
+                command="python adapter.py",
+                command_windows="& 'python.exe' 'adapter.py'",
+                timeout=10,
+            ),
+        ),
+    )
+    assert windows.owns_registration(
+        "PreToolUse", "Bash", "python adapter.py", 10,
+        command_windows="& 'python.exe' 'adapter.py'",
+    )
+    assert not windows.owns_registration(
+        "PreToolUse", "Bash", "python adapter.py", 10,
+        command_windows="& 'python.exe' 'different.py'",
+    )
+
+
+def test_v1_receipt_loads_as_v2_with_no_windows_override() -> None:
+    legacy = _sample_receipt().to_dict()
+    legacy["schema"] = "excubitor.receipt.v1"
+    for registration in legacy["registrations"]:
+        registration.pop("command_windows")
+
+    restored = Receipt.from_dict(legacy)
+
+    assert restored.schema == receipts.RECEIPT_SCHEMA
+    assert restored.registrations[0].command_windows is None
+
+
+def test_receipt_registration_fields_are_strict_for_the_declared_schema() -> None:
+    import pytest
+
+    legacy_with_v2_field = _sample_receipt().to_dict()
+    legacy_with_v2_field["schema"] = "excubitor.receipt.v1"
+    with pytest.raises(ValueError, match="invalid field set"):
+        Receipt.from_dict(legacy_with_v2_field)
+
+    v2_without_windows_field = _sample_receipt().to_dict()
+    v2_without_windows_field["registrations"][0].pop("command_windows")
+    with pytest.raises(ValueError, match="invalid field set"):
+        Receipt.from_dict(v2_without_windows_field)
 
 
 def test_unrecognized_receipt_schema_is_rejected() -> None:
@@ -152,6 +244,7 @@ def test_malformed_receipt_entries_are_rejected_without_coercion() -> None:
         {**base["registrations"][0], "timeout": "10"},
         {**base["registrations"][0], "timeout": True},
         {**base["registrations"][0], "command": ["python"]},
+        {**base["registrations"][0], "command_windows": []},
     ):
         malformed.append({**base, "registrations": [bad_registration]})
     malformed.append({**base, "files": [base["files"][0], base["files"][0]]})
