@@ -93,7 +93,8 @@ class TestDenyReason(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             _repo(td, "main")
             reason = db.deny_reason(td, os.path.join(td, "f.py"), _MARKER)
-            self.assertIn(os.path.join(td, _MARKER), reason)
+            # Git expands Windows short directory names and resolves platform temp aliases.
+            self.assertIn(os.path.join(os.path.realpath(td), _MARKER), reason)
 
 
 class TestPurity(unittest.TestCase):
